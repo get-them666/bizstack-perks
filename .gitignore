@@ -1,0 +1,18 @@
+# Ignore local database states
+bizstack.db
+bizstack.db-journal
+
+# Ignore background automated data storage vaults
+storage_vault/
+backups/
+
+# Ignore local python virtual environments and cache layers
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore text editor state files
+untitled text*
+.DS_Store
+.env

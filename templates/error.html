@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Error Node</title>
+    <style>
+        :root {
+            --bg-deep: #050708;
+            --bg-card: #0d1114;
+            --error-neon: #ff3333;
+            --border-color: #1e262c;
+            --text-primary: #ffffff;
+            --text-secondary: #8a99a6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .error-container {
+            width: 100%;
+            max-width: 480px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-top: 3px solid var(--error-neon);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+
+        .error-code {
+            color: var(--error-neon);
+            font-family: monospace;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+
+        .action-btn {
+            display: inline-block;
+            background: transparent;
+            color: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            border-color: #ffffff;
+            background: rgba(255, 255, 255, 0.02);
+        }
+    </style>
+</head>
+<body>
+
+<div class="error-container">
+    <h1>⚠️ PIPELINE INTERRUPTED</h1>
+    <div class="error-code">Status Code: {{ status_code }}</div>
+    <p>{{ detail if detail else "An unhandled operational data matrix mapping fault occurred within the local runtime environment." }}</p>
+    <a href="/" class="action-btn">← Return to Gateway</a>
+</div>
+
+</body>
+</html>

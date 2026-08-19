@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BizStack Security Gate</title>
+    <style>
+        :root {
+            --bg-deep: #050708;
+            --bg-card: #0d1114;
+            --accent-neon: #00E676;
+            --accent-glow: rgba(0, 230, 118, 0.15);
+            --border-color: #1e262c;
+            --text-primary: #ffffff;
+            --text-secondary: #8a99a6;
+            --error-red: #ff3333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-matrix {
+            width: 100%;
+            max-width: 420px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            transition: border-color 0.3s ease;
+        }
+
+        .login-matrix:hover {
+            border-color: rgba(0, 230, 118, 0.5);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .brand-trigger {
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .brand-trigger span {
+            color: var(--accent-neon);
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        input {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 14px 16px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        input:focus {
+            border-color: var(--accent-neon);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 10px rgba(0, 230, 118, 0.1);
+        }
+
+        .error-message {
+            color: var(--error-red);
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            text-align: center;
+            display: none; /* Toggled via backend logic later */
+        }
+
+        button {
+            background: var(--accent-neon);
+            color: #000000;
+            padding: 16px;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .footer-note {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .footer-note a {
+            color: var(--accent-neon);
+            text-decoration: none;
+        }
+        
+        .footer-note a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-matrix">
+    <header>
+        <div class="brand-trigger">⚡ BIZSTACK <span>GATE</span></div>
+        <p>Secure Portal Authentication</p>
+    </header>
+
+    <!-- Placeholder for error messages -->
+    {% if error %}
+    <div class="error-message" style="display: block;">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form action="/login" method="POST">
+        <div class="form-group">
+            <label>Operator Identifier</label>
+            <input type="text" name="username" placeholder="e.g. admin" required>
+        </div>
+        <div class="form-group">
+            <label>Security Keyphrase</label>
+            <input type="password" name="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit">Verify Credentials & Initialize</button>
+    </form>
+
+    <div class="footer-note">
+        Authorized access points only. <a href="/">Return home</a>
+    </div>
+</div>
+
+</body>
+</html>
