@@ -612,3 +612,49 @@ def verify_and_build_production_schema():
     conn.commit()
     conn.close()
     log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
+
+#====================================================
+# 🤖 7. BOT INGESTION TRIGGERS (Live API Integration Node)
+#====================================================
+import requests
+
+def run_scraper_bot_worker():
+    """
+    Connects to external financial streams via REST request-response handshakes.
+    Extracts live company metadata parameters and stores them into the profile table.
+    """
+    log_system_message("🤖 [API Integration Node] Launching background market stream validation...")
+    
+    target_tickers = ["AAPL", "MSFT", "GOOGL"]
+    API_TOKEN = os.getenv("FINNHUB_DATA_KEY", "sandbox_c8m0fhaad3i9p792a0g0")
+    
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        records_added = 0
+        
+        for ticker in target_tickers:
+            url = f"https://finnhub.io{ticker}&token={API_TOKEN}"
+            response = requests.get(url, timeout=8)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data and "name" in data:
+                    company_name = data.get("name")
+                    industry = data.get("finnhubIndustry", "General Commercial")
+                    market_cap = float(data.get("marketCapitalization", 0.0)) * 1000000.0
+                    
+                    try:
+                        cursor.execute(
+                            "INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
+                            (company_name, f"Live: {industry}", market_cap)
+                        )
+                        records_added += 1
+                    except sqlite3.IntegrityError:
+                        pass
+                        
+        conn.commit()
+        conn.close()
+        log_system_message(f"✅ [API Node] Sync finalized cleanly. Ingested {records_added} data structures.")
+    except Exception as network_exception:
+        log_system_message(f"❌ [API Node] Connection drop fault: {str(network_exception)}", "ERROR")
