@@ -336,8 +336,7 @@ async def trigger_bot_data_ingestion(background_tasks: BackgroundTasks):
 # 💾 8. CROSS-ENVIRONMENT PERSISTENCE ROUTING
 #====================================================
 
-# Targets the secure cloud volume mount if present, otherwise drops back to the local root file
-DATABASE_PATH = "/app/data/bizstack.db" if os.path.exists("/app/data") else "bizstack.db"
+DATABASE_PATH = "bizstack.db"
 
 def get_production_db():
 	"""
