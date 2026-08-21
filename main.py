@@ -584,3 +584,32 @@ async def process_telephony_status_callback(request: Request):
 	
 	log_system_message(log_summary, "INFO")
 	return Response(content="Telemetry Logged", media_type="text/plain")
+
+#====================================================
+# ⚡ AUTOMATED PRODUCTION SCHEMA INITIALIZER
+#====================================================
+@app.on_event("startup")
+def verify_and_build_production_schema():
+    """Validates and generates the required database structure on boot."""
+    import sqlite3
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_name TEXT UNIQUE NOT NULL,
+        credit_risk_rating TEXT,
+        annual_revenue REAL
+    );
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_name TEXT,
+        amount REAL,
+        status TEXT
+    );
+    """)
+    conn.commit()
+    conn.close()
+    log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
