@@ -9,6 +9,17 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from twilio.rest import Client
 from twilio.twiml.voice_response import Gather, VoiceResponse
+from contextlib import asynccontextmanager
+
+app = FastAPI()
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int, q: str | None = None):
+    return {"item_id": item_id, "q": q}
 
 app = FastAPI(title="BizStack Perks Production Node")
 
@@ -587,8 +598,8 @@ async def process_telephony_status_callback(request: Request):
 #====================================================
 # ⚡ AUTOMATED PRODUCTION SCHEMA INITIALIZER
 #====================================================
-@app.on_event("startup")
-def verify_and_build_production_schema():
+
+def verify_and_build_production_schema_startup():
     """Validates and generates the required database structure on boot."""
     import sqlite3
     conn = sqlite3.connect(DATABASE_PATH)
@@ -612,6 +623,23 @@ def verify_and_build_production_schema():
     conn.commit()
     conn.close()
     log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
+    
+    return("startup")
+
+startup = {}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+	startup["startup"] = verify_and_build_production_schema_startup
+	yeild
+	startup.clear
+	
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/predict")
+async def predict():
+    result = startup["startup"](x)
+    return {"result": result}
 
 #====================================================
 # 🤖 7. BOT INGESTION TRIGGERS (Live API Integration Node)
@@ -690,3 +718,25 @@ def force_production_ingestion_sync():
     conn.commit()
     conn.close()
     return {"status": "success", "message": f"Successfully injected {records_added} production matrix profiles."}
+
+#====================================================
+# ⚙️ PRODUCTION OVERRIDE INTERCEPT ROUTE
+#====================================================
+@app.post("/api/profile")
+def handle_profile_ingestion(background_tasks: BackgroundTasks):
+    """
+    Intercepts standard manual form submissions.
+    Bypasses text boxes to execute data matrices when the Railway flag is true.
+    """
+    import os
+    if os.getenv("AUTO_INGEST_OVERRIDE") == "true":
+        log_system_message("🚀 [Production Toggle Intercept] Automatically executing background scraper pipeline...")
+        
+        # Trigger your clean data function
+        force_production_ingestion_sync()
+        
+        # Safely bounce back to the main dashboard
+        return RedirectResponse(url="/dashboard", status_code=303)
+        
+    # Standard manual path fallback
+    return RedirectResponse(url="/dashboard?error=MissingManualFields", status_code=303)
