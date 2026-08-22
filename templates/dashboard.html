@@ -4,17 +4,23 @@
         <div class="form-grid">
             <div class="input-wrapper">
                 <label>Commercial Entity Name</label>
-                <input type="text" name="company_name" placeholder="Automated API Feed Mode" disabled>
+                <input type="text" name="company_name" placeholder="Enter company name" required>
             </div>
             <div class="input-wrapper">
                 <label>Gross Annual Revenue (USD)</label>
-                <input type="text" name="annual_revenue" placeholder="Automated API Feed Mode" disabled>
+                <input type="number" name="annual_revenue" placeholder="Enter revenue" step="0.01" required>
             </div>
             <div class="input-wrapper">
                 <label>Credit Risk Rating</label>
-                <input type="text" name="credit_risk" placeholder="Automated API Feed Mode" disabled>
+                <select name="credit_risk" required>
+                    <option value="">Select risk level</option>
+                    <option value="Low Risk">Low Risk</option>
+                    <option value="Medium Risk">Medium Risk</option>
+                    <option value="High Risk">High Risk</option>
+                </select>
             </div>
         </div>
         <button type="submit">Execute Secure Pipeline Load</button>
     </form>
 </div>
+

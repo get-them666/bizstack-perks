@@ -154,6 +154,30 @@ async def register_profile(
 	return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/api/profile/cleanup")
+
+@app.post("/api/pipeline-load-trigger")
+async def pipeline_load_trigger(
+	company_name: str = Form(...),
+	annual_revenue: float = Form(...),
+	credit_risk: str = Form(...),
+	conn=Depends(get_db)
+):
+	"""Endpoint to load and trigger pipeline data ingestion."""
+	cursor = conn.cursor()
+	try:
+		cursor.execute(
+			"INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
+			(company_name, credit_risk, annual_revenue)
+		)
+		conn.commit()
+	except sqlite3.IntegrityError as duplicate_error:
+		log_database_fault("Pipeline Load - Duplicate Entity Name", str(duplicate_error))
+	except sqlite3.Error as sqlite_system_bug:
+		log_database_fault("Pipeline Load - Core Engine Error", str(sqlite_system_bug))
+	except Exception as general_system_fault:
+		log_database_fault("Pipeline Load - Critical Pipeline Crash", str(general_system_fault))
+	
+	return RedirectResponse(url="/dashboard", status_code=303)
 async def clear_profile_ledger(request: Request, conn=Depends(get_db)):
 	"""Wipes the profiles database matrix and refreshes the terminal screen."""
 	# Production Safety Check: Verify cryptographic tracking cookie status
