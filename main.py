@@ -81,9 +81,9 @@ async def process_login(
 		response.set_cookie(
 			key="session_token", 
 			value=SESSION_SECRET, 
-			httponly=True,		 # Mitigates XSS injection credential access scripts
-			secure=True,		 # Restricts cookie handshakes strictly to HTTPS tunnels
-			samesite="lax"		 # Guardrail defense shielding against Cross-Site Request Forgeries (CSRF)
+			httponly=True,	 # Mitigates XSS injection credential access scripts
+			secure=True,	 # Restricts cookie handshakes strictly to HTTPS tunnels
+			samesite="lax"	 # Guardrail defense shielding against Cross-Site Request Forgeries (CSRF)
 		)
 		return response
 	
@@ -198,7 +198,7 @@ async def export_profile_ledger(request: Request, conn=Depends(get_db)):
 	session = request.cookies.get("session_token")
 	if not session or session != SESSION_SECRET:
 		return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
-		
+	
 	cursor = conn.cursor()
 	cursor.execute("SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles")
 	profiles_data = cursor.fetchall()
@@ -267,7 +267,7 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 		response.say("Perfect. Please hold while we confirm your commercial profile ledger.")
 		
 		# Log voice-initiated transaction event directly to database
-		conn = sqlite3.connect("bizstack.db", check_same_thread=False)
+		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
 		cursor = conn.cursor()
 		cursor.execute(
 			"INSERT INTO transactions (entity_name, amount, status) VALUES (?, ?, ?)",
@@ -285,6 +285,8 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 		response.redirect("/twilio/inbound")
 		return Response(content=str(response), media_type="application/xml")
 		
+	return Response(content=str(response), media_type="application/xml")
+
 #====================================================
 #6. OUTBOUND BROADCAST PIPELINE (Trigger via API)
 #====================================================
@@ -325,7 +327,7 @@ def run_scraper_bot_worker():
 	]
 	
 	try:
-		conn = sqlite3.connect("bizstack.db", check_same_thread=False)
+		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
 		cursor = conn.cursor()
 		records_added = 0
 		
@@ -360,7 +362,7 @@ async def trigger_bot_data_ingestion(background_tasks: BackgroundTasks):
 # 💾 8. CROSS-ENVIRONMENT PERSISTENCE ROUTING
 #====================================================
 
-DATABASE_PATH = "bizstack.db"
+DATABASE_PATH = "/app/data/bizstack.db"
 
 def get_production_db():
 	"""
@@ -498,9 +500,7 @@ async def stream_raw_database_binary(request: Request):
 		return Response(content="Unauthorized Access Block", status_code=401)
 		
 	# Determine the path dynamically based on your volume configurations
-	active_db_target = "bizstack.db"
-	if os.path.exists("/app/data/bizstack.db"):
-		active_db_target = "/app/data/bizstack.db"
+	active_db_target = "/app/data/bizstack.db"
 		
 	if os.path.exists(active_db_target):
 		return FileResponse(
@@ -583,38 +583,19 @@ async def process_telephony_status_callback(request: Request):
 	return Response(content="Telemetry Logged", media_type="text/plain")
 
 #====================================================
-# 📞 16. TWILIO TELEPHONY CALLBACK STATUS LOGGER
-#====================================================
-
-@app.post("/twilio/status-callback")
-async def process_telephony_status_callback(request: Request):
-	"""
-	Intercepts real-time connection state events from Twilio webhooks.
-	Extracts duration metrics and records them directly into api_server.log.
-	"""
-	form_payload = await request.form()
-	call_sid = form_payload.get("CallSid", "Unknown-SID")
-	call_status = form_payload.get("CallStatus", "unknown")
-	duration = form_payload.get("CallDuration", "0")
-	from_number = form_payload.get("From", "Unknown")
-	to_number = form_payload.get("To", "Unknown")
-	recording_url = form_payload.get("RecordingUrl", "No recording allocated")
-	log_summary = (
-		f"Telephony Event -> SID: {call_sid} | Status: {call_status} | "
-		f"From: {from_number} -> To: {to_number} | Duration: {duration}s | "
-		f"Asset Link: {recording_url}"
-	)
-	
-	log_system_message(log_summary, "INFO")
-	return Response(content="Telemetry Logged", media_type="text/plain")
-
-#====================================================
 # ⚡ AUTOMATED PRODUCTION SCHEMA INITIALIZER
 #====================================================
 @app.on_event("startup")
 def verify_and_build_production_schema():
     """Validates and generates the required database structure on boot."""
     import sqlite3
+    import os
+    
+    # Ensure the data directory exists
+    data_dir = os.path.dirname(DATABASE_PATH)
+    if data_dir and not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+    
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -655,62 +636,4 @@ def run_scraper_bot_worker():
     try:
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
-        records_added = 0
-        
-        for ticker in target_tickers:
-            url = f"https://finnhub.io{ticker}&token={API_TOKEN}"
-            response = requests.get(url, timeout=8)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data and "name" in data:
-                    company_name = data.get("name")
-                    industry = data.get("finnhubIndustry", "General Commercial")
-                    market_cap = float(data.get("marketCapitalization", 0.0)) * 1000000.0
-                    
-                    try:
-                        cursor.execute(
-                            "INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
-                            (company_name, f"Live: {industry}", market_cap)
-                        )
-                        records_added += 1
-                    except sqlite3.IntegrityError:
-                        pass
-                        
-        conn.commit()
-        conn.close()
-        log_system_message(f"✅ [API Node] Sync finalized cleanly. Ingested {records_added} data structures.")
-    except Exception as network_exception:
-        log_system_message(f"❌ [API Node] Connection drop fault: {str(network_exception)}", "ERROR")
 
-#====================================================
-# 🚀 DYNAMIC DATA LEDGER RE-ROUTE OVERRIDE
-#====================================================
-@app.get("/api/bot/scrape")
-def force_production_ingestion_sync():
-    """Bypasses API key checks to ingest live corporate tracking metadata straight to SQLite."""
-    import sqlite3
-    conn = sqlite3.connect("bizstack.db")
-    cursor = conn.cursor()
-    
-    # Live data indicators matching your exact database schema parameters
-    live_ingested_data = [
-        ("Apple Inc. Ledger Node", "Live: Technology", 328000000000.00),
-        ("Microsoft Cloud Core", "Live: Software", 245000000000.00),
-        ("Alphabet Infrastructure", "Live: Infrastructure", 175000000000.00)
-    ]
-    
-    records_added = 0
-    for company, risk, revenue in live_ingested_data:
-        try:
-            cursor.execute(
-                "INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
-                (company, risk, revenue)
-            )
-            records_added += 1
-        except sqlite3.IntegrityError:
-            pass
-            
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": f"Successfully injected {records_added} production matrix profiles."}
