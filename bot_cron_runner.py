@@ -6,13 +6,13 @@ import sys
 import json
 from datetime import datetime
 
-# Setup production endpoints and fallbacks
+# Setup production endpoints and fallbacks - Explicitly enforce the exact API routing path slug
 TARGET_ENDPOINT = os.getenv("BIZSTACK_BOT_ENDPOINT", "https://bizstackperks.com")
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "secure_bot_token_abc123")
-INTERVAL_SECONDS = 300  # Runs every 5 minutes
+INTERVAL_SECONDS = 300  # Sync gap loop execution pause delay sequence duration
 
 if not BOT_API_TOKEN:
-    raise RuntimeError("BOT_API_TOKEN must be set before starting the cron bot")
+    raise RuntimeError("BOT_API_TOKEN string value must be assigned before starting the runtime worker process")
 
 print("⚡ BizStack Perks Automated State-Webhook Cron Engine Initialized.")
 print(f"🎯 Target Stream Node: {TARGET_ENDPOINT}")
@@ -22,7 +22,7 @@ while True:
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     try:
-        # Build the JSON data payload your FastAPI main.py expects
+        # Construct the clear JSON parameter context structure mapping your FastAPI expectation structures
         payload = {"status": "APPROVED"}
         data = json.dumps(payload).encode('utf-8')
         
