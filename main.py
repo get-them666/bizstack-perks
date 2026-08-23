@@ -110,6 +110,17 @@ def verify_and_build_production_schema_startup():
 		status TEXT
 	);
 	""")
+	cursor.execute("""
+	CREATE TABLE IF NOT EXISTS bot_runs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		source TEXT NOT NULL,
+		status TEXT NOT NULL,
+		started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		completed_at DATETIME,
+		records_added INTEGER NOT NULL DEFAULT 0,
+		message TEXT
+	);
+	""")
 	conn.commit()
 	conn.close()
 	log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
@@ -259,6 +270,11 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 	# 2. Compute dynamic operational metrics
 	total_nodes = len(profiles_data)
 	total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
+	cursor.execute("""
+		SELECT source, status, started_at, completed_at, records_added, message
+		FROM bot_runs ORDER BY id DESC LIMIT 1
+	""")
+	last_bot_run = cursor.fetchone()
 
 	return templates.TemplateResponse(
 		"dashboard.html",
@@ -266,7 +282,8 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 			"request": request,
 			"profiles": profiles_data,
 			"total_nodes": total_nodes,
-			"total_revenue": total_revenue
+			"total_revenue": total_revenue,
+			"last_bot_run": last_bot_run,
 		}
 	)
 
@@ -454,42 +471,69 @@ async def trigger_outbound_call(request: Request, to_number: str = Form(...), cu
 
 
 #====================================================
-# 🤖 7. BOT INGESTION TRIGGERS (Pure Backend Pipeline)
+# 🤖 7. BOT INGESTION TRIGGERS (Finnhub Market Data)
 #====================================================
 
-def run_scraper_bot_worker():
-	"""
-	Executes data aggregation operations out-of-process.
-	Populates profile matrices automatically without disrupting threads.
-	"""
-	log_system_message("🤖 [Scraper Node] Initializing scheduled external market network scan...")
+FINNHUB_PROFILE_URL = "https://finnhub.io/api/v1/stock/profile2"
 
-	mock_scraped_records = [
-		("Alpha Matrix Logistics", "Low Risk", 18450000.00),
-		("Omega Yield Investments", "Medium Risk", 9200000.50),
-		("Zeta Structural Crypton", "High Risk", 1400000.00)
-	]
+
+def configured_tickers():
+	"""Return a short, configurable ticker list for Finnhub profile syncing."""
+	return [ticker.strip().upper() for ticker in os.getenv("FINNHUB_TICKERS", "AAPL,MSFT,GOOGL").split(",") if ticker.strip()]
+
+
+def run_finnhub_sync():
+	"""Fetch company profiles from Finnhub and retain an auditable run record."""
+	api_token = os.getenv("FINNHUB_DATA_KEY")
+	tickers = configured_tickers()
+	conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+	cursor = conn.cursor()
+	cursor.execute("INSERT INTO bot_runs (source, status, message) VALUES (?, ?, ?)", (
+		"Finnhub Stock Profile 2", "running", f"Tickers: {', '.join(tickers)}"
+	))
+	run_id = cursor.lastrowid
+	conn.commit()
+	records_added = 0
 
 	try:
-		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
-		cursor = conn.cursor()
-		records_added = 0
+		if not api_token:
+			raise RuntimeError("FINNHUB_DATA_KEY is not configured")
+		if not tickers:
+			raise RuntimeError("FINNHUB_TICKERS must include at least one ticker")
 
-		for company, risk, revenue in mock_scraped_records:
+		for ticker in tickers:
+			response = requests.get(FINNHUB_PROFILE_URL, params={"symbol": ticker, "token": api_token}, timeout=10)
+			response.raise_for_status()
+			data = response.json()
+			company_name = data.get("name")
+			if not company_name:
+				continue
+			industry = data.get("finnhubIndustry") or "General Commercial"
+			market_cap = float(data.get("marketCapitalization") or 0) * 1_000_000
 			try:
 				cursor.execute(
 					"INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
-					(company, risk, revenue)
+					(company_name, f"Finnhub: {industry}", market_cap),
 				)
 				records_added += 1
 			except sqlite3.IntegrityError:
 				pass
 
+		message = f"Synced {len(tickers)} ticker(s): {', '.join(tickers)}"
+		cursor.execute("""
+			UPDATE bot_runs SET status = ?, completed_at = CURRENT_TIMESTAMP, records_added = ?, message = ? WHERE id = ?
+		""", ("success", records_added, message, run_id))
 		conn.commit()
+		log_system_message(f"[Finnhub] {message}; added {records_added} profile(s).")
+	except Exception as exc:
+		message = str(exc)[:500]
+		cursor.execute("""
+			UPDATE bot_runs SET status = ?, completed_at = CURRENT_TIMESTAMP, records_added = ?, message = ? WHERE id = ?
+		""", ("failed", records_added, message, run_id))
+		conn.commit()
+		log_system_message(f"[Finnhub] Sync failed: {message}", "ERROR")
+	finally:
 		conn.close()
-		log_system_message(f"✅ [Scraper Node] Execution run completed. Ingested {records_added} company milestones.")
-	except Exception as e:
-		log_system_message(f"❌ [Scraper Node] Processing Exception Error: {str(e)}", "ERROR")
 
 @app.post("/api/bot/scrape")
 async def trigger_bot_data_ingestion(request: Request, background_tasks: BackgroundTasks):
@@ -498,8 +542,21 @@ async def trigger_bot_data_ingestion(request: Request, background_tasks: Backgro
 	Keeps the dashboard system active without locking client HTTP streams.
 	"""
 	require_bot_token(request)
-	background_tasks.add_task(run_scraper_bot_worker)
-	return {"status": "scraper_launched"}
+	background_tasks.add_task(run_finnhub_sync)
+	return {"status": "finnhub_sync_launched", "source": "Finnhub Stock Profile 2", "tickers": configured_tickers()}
+
+
+@app.get("/api/bot/status")
+def bot_status(request: Request, conn=Depends(get_db)):
+	"""Return the latest real-data sync outcome for the authenticated dashboard."""
+	require_admin(request)
+	row = conn.execute("""
+		SELECT source, status, started_at, completed_at, records_added, message
+		FROM bot_runs ORDER BY id DESC LIMIT 1
+	""").fetchone()
+	if not row:
+		return {"status": "never_run", "source": "Finnhub Stock Profile 2", "tickers": configured_tickers()}
+	return dict(zip(("source", "status", "started_at", "completed_at", "records_added", "message"), row))
 
 #====================================================
 # 💾 8. CROSS-ENVIRONMENT PERSISTENCE ROUTING

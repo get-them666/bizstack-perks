@@ -219,6 +219,37 @@
             font-weight: 700;
             color: var(--accent-neon);
         }
+
+        .sync-status {
+            margin-bottom: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .sync-status__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .status-badge {
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            background: rgba(0, 230, 118, 0.12);
+            color: var(--accent-neon);
+        }
+
+        .status-badge--failed { background: rgba(255, 51, 51, 0.12); color: #ff6b6b; }
+        .status-badge--running { background: rgba(255, 193, 7, 0.12); color: #ffc107; }
+        .sync-status p { color: var(--text-secondary); line-height: 1.5; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -244,6 +275,26 @@
             <div class="metric-value">${{ "{:,.2f}".format(total_revenue) }}</div>
         </div>
     </div>
+
+    <section class="sync-status" aria-labelledby="sync-status-title">
+        <div class="sync-status__header">
+            <div>
+                <div class="metric-label" id="sync-status-title">Market data source</div>
+                <strong>{{ last_bot_run[0] if last_bot_run else "Finnhub Stock Profile 2" }}</strong>
+            </div>
+            {% if last_bot_run %}
+            <span class="status-badge {% if last_bot_run[1] == 'failed' %}status-badge--failed{% elif last_bot_run[1] == 'running' %}status-badge--running{% endif %}">{{ last_bot_run[1] }}</span>
+            {% else %}
+            <span class="status-badge status-badge--running">not run</span>
+            {% endif %}
+        </div>
+        {% if last_bot_run %}
+        <p>Last run: {{ last_bot_run[2] }}{% if last_bot_run[3] %} · Completed: {{ last_bot_run[3] }}{% endif %} · New profiles: {{ last_bot_run[4] }}</p>
+        <p>{{ last_bot_run[5] }}</p>
+        {% else %}
+        <p>Set <code>FINNHUB_DATA_KEY</code>, then start the bot to sync the configured tickers.</p>
+        {% endif %}
+    </section>
 
     <div class="ingestion-terminal" id="terminal">
         <h2>⚡ Secure Gateway Data Matrix</h2>

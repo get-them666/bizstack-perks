@@ -49,6 +49,9 @@ export TWILIO_ACCOUNT_SID="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export TWILIO_AUTH_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export TWILIO_NUMBER="+15550000000"
 export BOT_API_TOKEN="use-a-long-random-value"
+export FINNHUB_DATA_KEY="your-finnhub-api-key"
+# Optional: defaults to AAPL,MSFT,GOOGL
+export FINNHUB_TICKERS="AAPL,MSFT,GOOGL"
 ```
 
 ### 3. Initialize the Database Registry Matrix
@@ -78,6 +81,10 @@ Access the application endpoint terminal via your browser at `http://127.0.0.1:8
 2.  **Railway Deploy:** Link your repository. In the **Variables** settings panel, map your custom production environment keys (`TWILIO_ACCOUNT_SID`, `BIZSTACK_ADMIN_PASS`, etc.).
 3.  **Data Volume Mount:** Create a Railway persistent disk storage **Volume** component. Mount it at `/app/data` (not `/app/data/bizstack.db`) so SQLite can create the database file and preserve it across redeploys.
 4.  **Cloudflare DNS Routing:** Map a `CNAME` record pointing your custom domain (`bizstackperks.com`) straight to your Railway platform domain with proxy active (orange cloud) to enable automated SSL protection layers.
+
+### Market-data bot
+
+The scheduled bot calls the authenticated `/api/bot/scrape` endpoint and syncs company profiles from Finnhub's Stock Profile 2 API. Set `FINNHUB_DATA_KEY` on the web service and set the same `BOT_API_TOKEN` plus `BIZSTACK_BOT_ENDPOINT=https://bizstackperks.com/api/bot/scrape` wherever `bot_cron_runner.py` runs. The dashboard displays the source, ticker set, latest run, and any error.
 
 ---
 © 2026 BizStack Perks LLC. Safe local ledger infrastructure operational.
