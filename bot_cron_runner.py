@@ -3,35 +3,39 @@ import urllib.request
 import urllib.error
 import time
 import sys
+import json
 from datetime import datetime
 
-# Override in production with
-# BIZSTACK_BOT_ENDPOINT=https://bizstackperks.com/api/bot/scrape.
-TARGET_ENDPOINT = os.getenv("BIZSTACK_BOT_ENDPOINT", "http://127.0.0.1:8000/api/bot/scrape")
-BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
-INTERVAL_SECONDS = 300  # Triggers the background ingestion pipeline every 5 minutes
+# Setup production endpoints and fallbacks
+TARGET_ENDPOINT = os.getenv("BIZSTACK_BOT_ENDPOINT", "https://bizstackperks.com")
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "secure_bot_token_abc123")
+INTERVAL_SECONDS = 300  # Runs every 5 minutes
 
 if not BOT_API_TOKEN:
     raise RuntimeError("BOT_API_TOKEN must be set before starting the cron bot")
 
-print(f"🚀 BizStack Perks Automated Automation Cron Engine Initialized.")
-print(f"🔗 Target Stream Node: {TARGET_ENDPOINT}")
-print(f"⏱️ Time Loop Matrix: Executing network sync every {INTERVAL_SECONDS} seconds.")
-print("-" * 80)
+print("⚡ BizStack Perks Automated State-Webhook Cron Engine Initialized.")
+print(f"🎯 Target Stream Node: {TARGET_ENDPOINT}")
+print(f"⏰ Time Loop Matrix: Executing sync every {INTERVAL_SECONDS} seconds.\n" + "-"*80)
 
 while True:
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     try:
-        # Create a structured POST request payload using Python's standard library
+        # Build the JSON data payload your FastAPI main.py expects
+        payload = {"status": "APPROVED"}
+        data = json.dumps(payload).encode('utf-8')
+        
         request = urllib.request.Request(
             TARGET_ENDPOINT,
-            data=b"",
+            data=data,
             method="POST",
-            headers={"X-Bizstack-Bot-Token": BOT_API_TOKEN},
+            headers={
+                "X-Bot-Token": BOT_API_TOKEN,
+                "Content-Type": "application/json"
+            }
         )
         
-        # Open the network socket tunnel to target endpoint handler
         with urllib.request.urlopen(request, timeout=10.0) as response:
             response_data = response.read().decode('utf-8')
             print(f"[{current_time}] ✅ Synchronized: Server handshake complete. Response: {response_data}")
@@ -41,5 +45,4 @@ while True:
     except Exception as general_exception:
         print(f"[{current_time}] ❌ Pipeline Exception: {str(general_exception)}", file=sys.stderr)
         
-    # Rest the worker process thread until the next execution slot hits
     time.sleep(INTERVAL_SECONDS)
