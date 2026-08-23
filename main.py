@@ -31,7 +31,9 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "ACxxxx")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "xxxxxx")
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER", "+15550000000")
 
-DATABASE_PATH = "bizstack.db"
+# Single source of truth for the database path — points at the Railway
+# persistent volume mount so data survives redeploys.
+DATABASE_PATH = os.getenv("DATABASE_PATH", "/app/data/bizstack.db")
 
 # Configure root system log routing to capture internal telemetry
 logging.basicConfig(
@@ -84,6 +86,11 @@ def log_database_fault(operation_name: str, error_message: str):
 
 def verify_and_build_production_schema_startup():
 	"""Validates and generates the required database structure on boot."""
+	# Ensure the volume's data directory exists before connecting
+	data_dir = os.path.dirname(DATABASE_PATH)
+	if data_dir and not os.path.exists(data_dir):
+		os.makedirs(data_dir, exist_ok=True)
+
 	conn = sqlite3.connect(DATABASE_PATH)
 	cursor = conn.cursor()
 	cursor.execute("""
@@ -115,6 +122,7 @@ startup = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 	startup["startup"] = verify_and_build_production_schema_startup
+	verify_and_build_production_schema_startup()
 	yield
 	startup.clear()
 
@@ -133,7 +141,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Database structural generator loop
 def get_db():
-	conn = sqlite3.connect("bizstack.db", check_same_thread=False)
+	conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
 	try:
 		yield conn
 	finally:
@@ -272,6 +280,30 @@ async def clear_profile_ledger(request: Request, conn=Depends(get_db)):
 
 	return RedirectResponse(url="/dashboard", status_code=303)
 
+@app.post("/api/pipeline-load-trigger")
+async def pipeline_load_trigger(
+	company_name: str = Form(...),
+	annual_revenue: float = Form(...),
+	credit_risk: str = Form(...),
+	conn=Depends(get_db)
+):
+	"""Endpoint to load and trigger pipeline data ingestion."""
+	cursor = conn.cursor()
+	try:
+		cursor.execute(
+			"INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
+			(company_name, credit_risk, annual_revenue)
+		)
+		conn.commit()
+	except sqlite3.IntegrityError as duplicate_error:
+		log_database_fault("Pipeline Load - Duplicate Entity Name", str(duplicate_error))
+	except sqlite3.Error as sqlite_system_bug:
+		log_database_fault("Pipeline Load - Core Engine Error", str(sqlite_system_bug))
+	except Exception as general_system_fault:
+		log_database_fault("Pipeline Load - Critical Pipeline Crash", str(general_system_fault))
+
+	return RedirectResponse(url="/dashboard", status_code=303)
+
 @app.get("/api/profile/export")
 async def export_profile_ledger(request: Request, conn=Depends(get_db)):
 	"""Streams a dynamically generated CSV backup from active database tables."""
@@ -348,7 +380,7 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 		response.say("Perfect. Please hold while we confirm your commercial profile ledger.")
 
 		# Log voice-initiated transaction event directly to database
-		conn = sqlite3.connect("bizstack.db", check_same_thread=False)
+		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
 		cursor = conn.cursor()
 		cursor.execute(
 			"INSERT INTO transactions (entity_name, amount, status) VALUES (?, ?, ?)",
@@ -407,7 +439,7 @@ def run_scraper_bot_worker():
 	]
 
 	try:
-		conn = sqlite3.connect("bizstack.db", check_same_thread=False)
+		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
 		cursor = conn.cursor()
 		records_added = 0
 
@@ -545,9 +577,7 @@ async def stream_raw_database_binary(request: Request):
 	if not session or session != SESSION_SECRET:
 		return Response(content="Unauthorized Access Block", status_code=401)
 
-	active_db_target = "bizstack.db"
-	if os.path.exists("/app/data/bizstack.db"):
-		active_db_target = "/app/data/bizstack.db"
+	active_db_target = DATABASE_PATH
 
 	if os.path.exists(active_db_target):
 		return FileResponse(
@@ -638,7 +668,7 @@ def run_live_finnhub_sync():
 @app.get("/api/bot/scrape-live")
 def force_production_ingestion_sync():
 	"""Ingests a static set of sample corporate tracking metadata straight to SQLite."""
-	conn = sqlite3.connect("bizstack.db")
+	conn = sqlite3.connect(DATABASE_PATH)
 	cursor = conn.cursor()
 
 	live_ingested_data = [
