@@ -294,6 +294,9 @@
         {% else %}
         <p>Set <code>FINNHUB_DATA_KEY</code>, then start the bot to sync the configured tickers.</p>
         {% endif %}
+        <form action="/api/bot/run" method="POST" style="margin-top: 18px;">
+            <button type="submit">Run market-data sync now</button>
+        </form>
     </section>
 
     <div class="ingestion-terminal" id="terminal">
@@ -349,6 +352,37 @@
         </div>
     </div>
     {% endif %}
+
+    <div style="margin-top: 40px;">
+        <h2 style="margin-bottom: 8px; font-size: 1.25rem;">Consented B2B inquiries</h2>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Only use these records to respond to the voluntary request shown below. Do not add consumer application data.</p>
+        {% if inquiries %}
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--border-color);">
+                        <th style="padding: 12px; text-align: left; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Contact</th>
+                        <th style="padding: 12px; text-align: left; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Company</th>
+                        <th style="padding: 12px; text-align: left; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Interest</th>
+                        <th style="padding: 12px; text-align: left; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Received</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inquiry in inquiries %}
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 12px; font-size: 0.9rem;">{{ inquiry[0] }}<br><span style="color: var(--text-secondary);">{{ inquiry[2] }}{% if inquiry[3] %} · {{ inquiry[3] }}{% endif %}</span></td>
+                        <td style="padding: 12px; font-size: 0.9rem;">{{ inquiry[1] }}</td>
+                        <td style="padding: 12px; font-size: 0.9rem;">{{ inquiry[4] }}</td>
+                        <td style="padding: 12px; font-size: 0.9rem; color: var(--text-secondary);">{{ inquiry[5] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary);">No B2B inquiries yet.</p>
+        {% endif %}
+    </div>
 </div>
 
 <footer>

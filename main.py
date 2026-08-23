@@ -121,6 +121,18 @@ def verify_and_build_production_schema_startup():
 		message TEXT
 	);
 	""")
+	cursor.execute("""
+	CREATE TABLE IF NOT EXISTS business_inquiries (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		full_name TEXT NOT NULL,
+		company_name TEXT NOT NULL,
+		work_email TEXT NOT NULL,
+		phone TEXT,
+		interest TEXT NOT NULL,
+		marketing_consent INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	""")
 	conn.commit()
 	conn.close()
 	log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
@@ -188,9 +200,34 @@ def read_agent_file(filename: str) -> str:
 # ====================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def home_terminal(request: Request):
-	"""Serves the cool carbon-black layout home page."""
-	return templates.TemplateResponse("index.html", {"request": request})
+async def home_terminal(request: Request, submitted: bool = False):
+	"""Serves the public B2B site and consented inquiry form."""
+	return templates.TemplateResponse("index.html", {"request": request, "submitted": submitted})
+
+
+@app.post("/contact")
+async def create_business_inquiry(
+	full_name: str = Form(...),
+	company_name: str = Form(...),
+	work_email: str = Form(...),
+	interest: str = Form(...),
+	marketing_consent: bool = Form(False),
+	phone: str = Form(""),
+	conn=Depends(get_db),
+):
+	"""Store a voluntary B2B inquiry; it never collects credit application data."""
+	if not marketing_consent:
+		raise HTTPException(status_code=422, detail="Marketing consent is required to submit this form")
+	if "@" not in work_email or len(work_email) > 254:
+		raise HTTPException(status_code=422, detail="Enter a valid work email")
+	if any(len(value.strip()) < 2 or len(value) > 160 for value in (full_name, company_name, interest)):
+		raise HTTPException(status_code=422, detail="Please complete all required fields")
+	conn.execute("""
+		INSERT INTO business_inquiries (full_name, company_name, work_email, phone, interest, marketing_consent)
+		VALUES (?, ?, ?, ?, ?, ?)
+	""", (full_name.strip(), company_name.strip(), work_email.strip().lower(), phone.strip()[:40], interest.strip(), 1))
+	conn.commit()
+	return RedirectResponse(url="/?submitted=true", status_code=303)
 
 
 @app.get("/health")
@@ -275,6 +312,11 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 		FROM bot_runs ORDER BY id DESC LIMIT 1
 	""")
 	last_bot_run = cursor.fetchone()
+	cursor.execute("""
+		SELECT full_name, company_name, work_email, phone, interest, created_at
+		FROM business_inquiries ORDER BY id DESC LIMIT 25
+	""")
+	inquiries = cursor.fetchall()
 
 	return templates.TemplateResponse(
 		"dashboard.html",
@@ -284,6 +326,7 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 			"total_nodes": total_nodes,
 			"total_revenue": total_revenue,
 			"last_bot_run": last_bot_run,
+			"inquiries": inquiries,
 		}
 	)
 
@@ -557,6 +600,14 @@ def bot_status(request: Request, conn=Depends(get_db)):
 	if not row:
 		return {"status": "never_run", "source": "Finnhub Stock Profile 2", "tickers": configured_tickers()}
 	return dict(zip(("source", "status", "started_at", "completed_at", "records_added", "message"), row))
+
+
+@app.post("/api/bot/run")
+async def run_bot_now(request: Request, background_tasks: BackgroundTasks):
+	"""Allow an authenticated operator to launch a real-data sync on demand."""
+	require_admin(request)
+	background_tasks.add_task(run_finnhub_sync)
+	return RedirectResponse(url="/dashboard", status_code=303)
 
 #====================================================
 # 💾 8. CROSS-ENVIRONMENT PERSISTENCE ROUTING

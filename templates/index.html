@@ -3,17 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BizStack Perks Terminal</title>
-    <!-- Vercel Web Analytics -->
-    <script>
-        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
-    <!-- Vercel Speed Insights -->
-    <script>
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <title>BizStack Perks | Financial institution intelligence</title>
     <style>
         /* Base Dark Matrix Theme */
         :root {
@@ -200,6 +190,19 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
+        .consent {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            line-height: 1.45;
+            margin-bottom: 20px;
+        }
+
+        .consent input { width: auto; margin-top: 2px; }
+        .notice { color: var(--accent-neon); margin: 0 0 20px; font-size: 0.9rem; }
+
         /* Cyberpunk Button Implementation */
         .action-link, button {
             display: inline-flex;
@@ -254,7 +257,7 @@
         <div class="header-wrapper">
             <div>
                 <div class="brand-trigger">⚡ BIZSTACK <span>PERKS</span></div>
-                <p>Operational Infrastructure Pipeline</p>
+                <p>Financial institution intelligence for B2B teams</p>
             </div>
             <!-- Dynamic JavaScript Matrix Clock -->
             <div class="telemetry-node">
@@ -267,54 +270,60 @@
     <div class="perks-grid">
         <div class="matrix-card">
             <div>
-                <div class="card-meta">01 / CAPITAL INTAKE</div>
-                <h3>Strategic Ingestion</h3>
-                <p>Submit structural pipeline metrics, annual milestone logs, and core ledger risks directly to database matrix units.</p>
+                <div class="card-meta">01 / B2B INTELLIGENCE</div>
+                <h3>Market signal monitoring</h3>
+                <p>Track public company and market signals for financial-institution research. No consumer credit applications or consumer-report data are collected.</p>
             </div>
             <a href="#terminal" class="action-link">Open Gateway Terminal →</a>
         </div>
 
         <div class="matrix-card">
             <div>
-                <div class="card-meta">02 / YIELD OPTIMIZATION</div>
-                <h3>Corporate Advising</h3>
-                <p>Evaluate enterprise spending models, plug hidden balance margin leaks, and engineer organizational yield stacks.</p>
+                <div class="card-meta">02 / PARTNER WORKFLOWS</div>
+                <h3>Institutional programs</h3>
+                <p>Organize consented B2B inquiries and lender-partner workflows for reviewed, compliant service programs.</p>
             </div>
             <a href="/dashboard" class="action-link">Request Consult Matrix →</a>
         </div>
 
         <div class="matrix-card">
             <div>
-                <div class="card-meta">03 / LOGISTICS ROUTING</div>
-                <h3>Automated Pipeline</h3>
-                <p>Deploy persistent, high-efficiency system workers and real-time backend data caching matrices directly onto servers.</p>
+                <div class="card-meta">03 / AUDITABLE OPERATIONS</div>
+                <h3>Transparent automation</h3>
+                <p>See the source, timing, and outcome of every market-data sync from the operator dashboard.</p>
             </div>
             <a href="/dashboard" class="action-link">View Connected Node →</a>
         </div>
     </div>
 
-    <!-- Data Entry Form Block with Input Guards -->
     <div class="ingestion-terminal" id="terminal">
-        <h2>⚡ Secure Gateway Data Matrix</h2>
-        <form action="/api/pipeline-load-trigger" method="POST">
+        <h2>⚡ Request a B2B consultation</h2>
+        {% if submitted %}<p class="notice">Thanks—your request was received. Our team will follow up using the details you provided.</p>{% endif %}
+        <form action="/contact" method="POST">
             <div class="form-grid">
                 <div class="input-wrapper">
-                    <label>Commercial Entity Name</label>
-                    <input type="text" name="company_name" placeholder="e.g. Acme Corp" 
-                           minlength="2" maxlength="50" required>
+                    <label>Your name</label>
+                    <input type="text" name="full_name" placeholder="e.g. Jordan Smith" minlength="2" maxlength="160" required>
                 </div>
                 <div class="input-wrapper">
-                    <label>Gross Annual Revenue (USD)</label>
-                    <input type="number" name="annual_revenue" placeholder="e.g. 5000000" 
-                           min="0" max="1000000000000" step="0.01" required>
+                    <label>Company</label>
+                    <input type="text" name="company_name" placeholder="e.g. Acme Bank" minlength="2" maxlength="160" required>
                 </div>
                 <div class="input-wrapper">
-                    <label>Credit Risk Rating</label>
-                    <input type="text" name="credit_risk" placeholder="e.g. Tier-1 Stable" 
-                           minlength="2" maxlength="20" required>
+                    <label>Work email</label>
+                    <input type="email" name="work_email" placeholder="you@company.com" maxlength="254" required>
+                </div>
+                <div class="input-wrapper">
+                    <label>Phone (optional)</label>
+                    <input type="tel" name="phone" placeholder="Business number" maxlength="40">
+                </div>
+                <div class="input-wrapper">
+                    <label>What are you interested in?</label>
+                    <input type="text" name="interest" placeholder="e.g. B2B market intelligence" minlength="2" maxlength="160" required>
                 </div>
             </div>
-            <button type="submit">Execute Secure Pipeline Load</button>
+            <label class="consent"><input type="checkbox" name="marketing_consent" value="true" required> I agree that BizStack Perks may contact me about this B2B request. I understand I should not submit loan applications, credit reports, or other sensitive consumer financial information here.</label>
+            <button type="submit">Request consultation</button>
         </form>
     </div>
 </div>
