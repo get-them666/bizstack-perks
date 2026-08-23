@@ -48,13 +48,14 @@ export BIZSTACK_ADMIN_PASS="password123"
 export TWILIO_ACCOUNT_SID="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export TWILIO_AUTH_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export TWILIO_NUMBER="+15550000000"
+export BOT_API_TOKEN="use-a-long-random-value"
 ```
 
 ### 3. Initialize the Database Registry Matrix
 ```bash
 python3 -c "
 import sqlite3
-conn = sqlite3.connect('bizstack.db')
+conn = sqlite3.connect('data/bizstack.db')
 c = conn.cursor()
 c.execute('CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, company_name TEXT UNIQUE NOT NULL, credit_risk_rating TEXT, annual_revenue REAL)')
 c.execute('CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_name TEXT, amount REAL, status TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)')
@@ -67,7 +68,7 @@ conn.close()
 ```bash
 uvicorn main:app --reload --port 8000
 ```
-Access the application endpoint terminal via your browser at `http://127.0.0`.
+Access the application endpoint terminal via your browser at `http://127.0.0.1:8000`.
 
 ---
 
@@ -75,7 +76,7 @@ Access the application endpoint terminal via your browser at `http://127.0.0`.
 
 1.  **Code Push:** Ensure `.gitignore` is active, then execute `git push origin main`.
 2.  **Railway Deploy:** Link your repository. In the **Variables** settings panel, map your custom production environment keys (`TWILIO_ACCOUNT_SID`, `BIZSTACK_ADMIN_PASS`, etc.).
-3.  **Data Volume Mount:** Create a Railway persistent disk storage **Volume** component. Mount the path strictly to `/app/data` to guarantee your SQLite registry is never wiped out during application resets.
+3.  **Data Volume Mount:** Create a Railway persistent disk storage **Volume** component. Mount it at `/app/data` (not `/app/data/bizstack.db`) so SQLite can create the database file and preserve it across redeploys.
 4.  **Cloudflare DNS Routing:** Map a `CNAME` record pointing your custom domain (`bizstackperks.com`) straight to your Railway platform domain with proxy active (orange cloud) to enable automated SSL protection layers.
 
 ---

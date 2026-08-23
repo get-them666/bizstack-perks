@@ -9,7 +9,7 @@ import logging
 import requests
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks
+from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from twilio.rest import Client
@@ -31,9 +31,10 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "ACxxxx")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "xxxxxx")
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER", "+15550000000")
 
-# Single source of truth for the database path — points at the Railway
-# persistent volume mount so data survives redeploys.
-DATABASE_PATH = os.getenv("DATABASE_PATH", "/app/data/bizstack.db")
+# Railway mounts its persistent volume at /app/data. Local development uses a
+# project-local directory, which the startup initializer creates as needed.
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 
 # Configure root system log routing to capture internal telemetry
 logging.basicConfig(
@@ -148,6 +149,20 @@ def get_db():
 		conn.close()
 
 
+def require_admin(request: Request):
+	"""Require an authenticated operator for state-changing admin actions."""
+	session = request.cookies.get("session_token")
+	if not session or not secrets.compare_digest(session, SESSION_SECRET):
+		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+
+def require_bot_token(request: Request):
+	"""Authorize the standalone scheduler without exposing a public trigger."""
+	provided_token = request.headers.get("X-Bizstack-Bot-Token")
+	if not BOT_API_TOKEN or not provided_token or not secrets.compare_digest(provided_token, BOT_API_TOKEN):
+		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bot token")
+
+
 # Read custom agent prompts dynamically from your local folder path
 def read_agent_file(filename: str) -> str:
 	try:
@@ -165,6 +180,18 @@ def read_agent_file(filename: str) -> str:
 async def home_terminal(request: Request):
 	"""Serves the cool carbon-black layout home page."""
 	return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/health")
+def healthcheck():
+	"""Lightweight Railway healthcheck which verifies SQLite is reachable."""
+	try:
+		with sqlite3.connect(DATABASE_PATH) as conn:
+			conn.execute("SELECT 1")
+	except sqlite3.Error as exc:
+		log_database_fault("healthcheck", str(exc))
+		raise HTTPException(status_code=503, detail="Database unavailable") from exc
+	return {"status": "ok"}
 
 
 @app.get("/items/{item_id}")
@@ -245,11 +272,13 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 
 @app.post("/api/profile")
 async def register_profile(
+	request: Request,
 	company_name: str = Form(...),
 	annual_revenue: float = Form(...),
 	credit_risk: str = Form(...),
 	conn=Depends(get_db)
 ):
+	require_admin(request)
 	cursor = conn.cursor()
 	try:
 		cursor.execute(
@@ -282,12 +311,14 @@ async def clear_profile_ledger(request: Request, conn=Depends(get_db)):
 
 @app.post("/api/pipeline-load-trigger")
 async def pipeline_load_trigger(
+	request: Request,
 	company_name: str = Form(...),
 	annual_revenue: float = Form(...),
 	credit_risk: str = Form(...),
 	conn=Depends(get_db)
 ):
 	"""Endpoint to load and trigger pipeline data ingestion."""
+	require_admin(request)
 	cursor = conn.cursor()
 	try:
 		cursor.execute(
@@ -404,18 +435,19 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 #====================================================
 
 @app.post("/api/trigger-outbound")
-async def trigger_outbound_call(to_number: str, custom_message: str):
+async def trigger_outbound_call(request: Request, to_number: str = Form(...), custom_message: str = Form(...)):
 	"""API endpoint to execute background automated outbound dial loops."""
+	require_admin(request)
+	if not to_number.startswith("+") or not to_number[1:].isdigit() or not 8 <= len(to_number) <= 16:
+		raise HTTPException(status_code=422, detail="Use an E.164 destination number")
+	if not custom_message.strip() or len(custom_message) > 1_000:
+		raise HTTPException(status_code=422, detail="Message must contain 1 to 1000 characters")
 	client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
-	twiml_instruction = f"""
-
-	{custom_message}
-
-	"""
+	twiml = VoiceResponse()
+	twiml.say(custom_message.strip())
 
 	call = client.calls.create(
-	twiml=twiml_instruction,
+	twiml=str(twiml),
 	to=to_number,
 	from_=TWILIO_NUMBER)
 	return {"status": "queued", "call_sid": call.sid}
@@ -460,11 +492,12 @@ def run_scraper_bot_worker():
 		log_system_message(f"❌ [Scraper Node] Processing Exception Error: {str(e)}", "ERROR")
 
 @app.post("/api/bot/scrape")
-async def trigger_bot_data_ingestion(background_tasks: BackgroundTasks):
+async def trigger_bot_data_ingestion(request: Request, background_tasks: BackgroundTasks):
 	"""
 	API programmatic pipeline node that registers a non-blocking background crawler.
 	Keeps the dashboard system active without locking client HTTP streams.
 	"""
+	require_bot_token(request)
 	background_tasks.add_task(run_scraper_bot_worker)
 	return {"status": "scraper_launched"}
 
@@ -482,36 +515,6 @@ def get_production_db():
 		yield conn
 	finally:
 		conn.close()
-
-#====================================================
-# 🔐 9. INVISIBLE PROGRAMMATIC BACKEND GATEWAY
-#====================================================
-# ⚠️ SECURITY NOTE: this route bypasses the login form entirely using a
-# hardcoded fallback secret ("operator_alpha_99") if BACKDOOR_SECRET_KEY
-# is not set in the environment. Strongly recommend removing this route
-# or requiring the env var with no default before deploying publicly.
-
-@app.get("/backend-gateway-node")
-async def secure_backdoor_entrance(token: str = None):
-	"""
-	Hidden programmatic entry point allowing instant operator access.
-	Bypasses login forms safely by injecting tracking session cookies via token validation.
-	"""
-	SECRET_BACKDOOR_KEY = os.getenv("BACKDOOR_SECRET_KEY", "operator_alpha_99")
-
-	if token == SECRET_BACKDOOR_KEY:
-		response = RedirectResponse(url="/dashboard", status_code=303)
-		response.set_cookie(
-			key="session_token",
-			value=SESSION_SECRET,
-			httponly=True,
-			secure=False,  # Set to True only when running inside public HTTPS tunnels
-			samesite="lax"
-		)
-		print("🔓 [Security Node] Operator bypassed login gate using programmatic security token.")
-		return response
-
-	return Response(content="⚠️ Access Denied: Unauthorized Terminal Identifier Matrix.", status_code=403)
 
 #====================================================
 # 📝 10. SYSTEM LOG EXTRACTION ENGINE
@@ -534,34 +537,6 @@ async def read_system_log_stream(request: Request):
 		return Response(content=last_50_lines, media_type="text/plain")
 	except FileNotFoundError:
 		return Response(content="api_server.log tracking target file not generated yet.", media_type="text/plain")
-
-#====================================================
-# 🔐 12. HIDDEN PROGRAMMATIC OPERATOR ENTRYWAY
-#====================================================
-# ⚠️ SECURITY NOTE: same backdoor concern as above — hardcoded fallback
-# secret bypasses login entirely.
-
-@app.get("/system-access-node")
-async def secure_operator_entryway(passkey: str = None):
-	"""
-	Hidden programmatic entry point allowing instant operator access.
-	Bypasses login forms safely by injecting tracking session cookies via token validation.
-	"""
-	OPERATOR_ACCESS_KEY = os.getenv("BACKDOOR_SECRET_KEY", "operator_alpha_99")
-
-	if passkey == OPERATOR_ACCESS_KEY:
-		response = RedirectResponse(url="/dashboard", status_code=303)
-		response.set_cookie(
-			key="session_token",
-			value=SESSION_SECRET,
-			httponly=True,
-			secure=False,  # Set to True only when deploying inside public HTTPS tunnels
-			samesite="lax"
-		)
-		print("🔓 [Security Node] Operator bypassed login gate using programmatic passkey token.")
-		return response
-
-	return Response(content="⚠️ Access Denied: Unauthorized Terminal Identifier Matrix.", status_code=403)
 
 #====================================================
 # 💾 13. RAW DATABASE FILE STREAMING DOWNLOAD
@@ -665,9 +640,10 @@ def run_live_finnhub_sync():
 #====================================================
 # 🚀 DYNAMIC DATA LEDGER RE-ROUTE OVERRIDE
 #====================================================
-@app.get("/api/bot/scrape-live")
-def force_production_ingestion_sync():
+@app.post("/api/bot/scrape-live")
+def force_production_ingestion_sync(request: Request):
 	"""Ingests a static set of sample corporate tracking metadata straight to SQLite."""
+	require_admin(request)
 	conn = sqlite3.connect(DATABASE_PATH)
 	cursor = conn.cursor()
 
@@ -696,14 +672,15 @@ def force_production_ingestion_sync():
 # ⚙️ PRODUCTION OVERRIDE INTERCEPT ROUTE
 #====================================================
 @app.post("/api/profile/auto-ingest")
-def handle_profile_ingestion_override():
+def handle_profile_ingestion_override(request: Request):
 	"""
 	Intercepts standard manual form submissions.
 	Bypasses text boxes to execute data matrices when the Railway flag is true.
 	"""
+	require_admin(request)
 	if os.getenv("AUTO_INGEST_OVERRIDE") == "true":
 		log_system_message("🚀 [Production Toggle Intercept] Automatically executing background scraper pipeline...")
-		force_production_ingestion_sync()
+		force_production_ingestion_sync(request)
 		return RedirectResponse(url="/dashboard", status_code=303)
 
 	return RedirectResponse(url="/dashboard?error=MissingManualFields", status_code=303)

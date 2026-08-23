@@ -1,12 +1,18 @@
+import os
 import urllib.request
 import urllib.error
 import time
 import sys
 from datetime import datetime
 
-# Point strictly to your validated local FastAPI background bot endpoint 
-TARGET_ENDPOINT = "http://127.0.0"
+# Override in production with
+# BIZSTACK_BOT_ENDPOINT=https://bizstackperks.com/api/bot/scrape.
+TARGET_ENDPOINT = os.getenv("BIZSTACK_BOT_ENDPOINT", "http://127.0.0.1:8000/api/bot/scrape")
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 INTERVAL_SECONDS = 300  # Triggers the background ingestion pipeline every 5 minutes
+
+if not BOT_API_TOKEN:
+    raise RuntimeError("BOT_API_TOKEN must be set before starting the cron bot")
 
 print(f"🚀 BizStack Perks Automated Automation Cron Engine Initialized.")
 print(f"🔗 Target Stream Node: {TARGET_ENDPOINT}")
@@ -18,7 +24,12 @@ while True:
     
     try:
         # Create a structured POST request payload using Python's standard library
-        request = urllib.request.Request(TARGET_ENDPOINT, method="POST")
+        request = urllib.request.Request(
+            TARGET_ENDPOINT,
+            data=b"",
+            method="POST",
+            headers={"X-Bizstack-Bot-Token": BOT_API_TOKEN},
+        )
         
         # Open the network socket tunnel to target endpoint handler
         with urllib.request.urlopen(request, timeout=10.0) as response:
