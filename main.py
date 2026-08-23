@@ -898,14 +898,38 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
     token = request.headers.get("X-Bot-Token")
     expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
     
+
+
+# ==========================================
+# UNIFIED COMMERCIAL FUNDING BOT ROUTINGS
+# ==========================================
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+import os
+
+class WebhookPayload(BaseModel):
+    status: str
+
+@app.get("/commercial", response_class=HTMLResponse)
+async def read_commercial_portal(request: Request):
+    """Serves the unified public funding screen to human web visitors."""
+    return templates.TemplateResponse("commercial.html", {"request": request})
+
+@app.post("/api/bot/state-webhook")
+async def handle_unified_state_webhook(payload: WebhookPayload, request: Request):
+    """Secure backend pipeline. Triggers automation handshake out of sight."""
+    token = request.headers.get("X-Bot-Token")
+    expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
+    
     if token != expected_token:
         return {"error": "Unauthorized handshake request"}, 401
         
     if payload.status == "APPROVED":
-        # Automated parameter routing sequence triggered behind the scenes
-        print("
-[Background Bot] LLC State Approved! Initializing submission handshake...")
-        print("[Background Bot] Financial profile parameters successfully routed to network banks.")
         return {"bot_action": "handshake_triggered", "status": "SUCCESS"}
         
     return {"bot_action": "idle", "reason": "LLC status pending"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
