@@ -872,3 +872,6 @@ async def receive_stripe_payment_webhook(request: Request):
 async def predict():
 	result = startup["startup"]()
 	return {"result": result}
+
+# Application Contact Settings
+SUPPORT_EMAIL = "hello@bizstackperks.com"
