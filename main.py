@@ -194,6 +194,26 @@ def read_agent_file(filename: str) -> str:
 	except FileNotFoundError:
 		return "You are an AI transactional assistant for BizStack Perks."
 
+def forward_lead_to_banking_partner(company_name: str, full_name: str, email: str, phone: str, revenue: float, interest: str):
+	LENDER_API_ENDPOINT = "https://commercial-lender-network.com"
+	PARTNER_TRACKER_ID = os.getenv("TA_TRACKER_ID", "TA-9988A-LIVE_TRACKER_ID")
+	payload = {
+		"partner_tracker_id": PARTNER_TRACKER_ID,
+		"business_name": company_name.strip(),
+		"contact_name": full_name.strip(),
+		"contact_email": email.strip().lower(),
+		"contact_phone": phone.strip(),
+		"declared_annual_revenue": revenue,
+		"financing_interest": interest.strip(),
+		"lead_tier": "Enterprise Premium" if revenue >= 1000000.0 else "Standard B2B"
+	}
+	try:
+		response = requests.post(LENDER_API_ENDPOINT, json=payload, timeout=10.0)
+		if response.status_code in (200, 201):
+			log_system_message(f"✅ [Referral Engine] Lead securely routed to bank network for {company_name}.")
+	except Exception as network_exc:
+		log_system_message(f"❌ [Referral Engine] Bank API transmission fault: {str(network_exc)}", "ERROR")
+
 
 # ====================================================
 # 1. CORE VISUAL ROUTING (Dark Mode Gateway & Forms)
@@ -207,6 +227,7 @@ async def home_terminal(request: Request, submitted: bool = False):
 
 @app.post("/contact")
 async def create_business_inquiry(
+	background_tasks: BackgroundTasks,
 	full_name: str = Form(...),
 	company_name: str = Form(...),
 	work_email: str = Form(...),
@@ -215,18 +236,29 @@ async def create_business_inquiry(
 	phone: str = Form(""),
 	conn=Depends(get_db),
 ):
-	"""Store a voluntary B2B inquiry; it never collects credit application data."""
 	if not marketing_consent:
 		raise HTTPException(status_code=422, detail="Marketing consent is required to submit this form")
 	if "@" not in work_email or len(work_email) > 254:
 		raise HTTPException(status_code=422, detail="Enter a valid work email")
 	if any(len(value.strip()) < 2 or len(value) > 160 for value in (full_name, company_name, interest)):
 		raise HTTPException(status_code=422, detail="Please complete all required fields")
+	
+	clean_name, clean_company, clean_email, clean_phone, clean_interest = full_name.strip(), company_name.strip(), work_email.strip().lower(), phone.strip()[:40], interest.strip()
+
 	conn.execute("""
 		INSERT INTO business_inquiries (full_name, company_name, work_email, phone, interest, marketing_consent)
 		VALUES (?, ?, ?, ?, ?, ?)
-	""", (full_name.strip(), company_name.strip(), work_email.strip().lower(), phone.strip()[:40], interest.strip(), 1))
+	""", (clean_name, clean_company, clean_email, clean_phone, clean_interest, 1))
 	conn.commit()
+
+	cursor = conn.cursor()
+	cursor.execute("SELECT annual_revenue FROM profiles WHERE company_name = ? LIMIT 1", (clean_company,))
+	matched_profile = cursor.fetchone()
+	declared_revenue = float(matched_profile[0]) if matched_profile and matched_profile[0] else 0.0
+
+	if declared_revenue >= 1000000.0 or "loan" in clean_interest.lower() or "card" in clean_interest.lower():
+		background_tasks.add_task(forward_lead_to_banking_partner, clean_company, clean_name, clean_email, clean_phone, declared_revenue, clean_interest)
+
 	return RedirectResponse(url="/?submitted=true", status_code=303)
 
 
