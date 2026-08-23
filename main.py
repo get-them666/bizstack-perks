@@ -158,6 +158,27 @@ async def lifespan(app: FastAPI):
 # ====================================================
 
 app = FastAPI(title="BizStack Perks Production Node", lifespan=lifespan)
+import stripe
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
+
+@app.get("/premium/subscribe")
+async def create_stripe_subscription_session(request: Request):
+	try:
+		session = stripe.checkout.Session.create(
+			payment_method_types=["card"],
+			line_items=[{
+				"price": os.getenv("STRIPE_PRICE_ID", "price_placeholder"),
+				"quantity": 1,
+			}],
+			mode="subscription",
+			success_url="https://bizstackperks.com",
+			cancel_url="https://bizstackperks.com",
+		)
+		return RedirectResponse(url=session.url, status_code=303)
+	except Exception as stripe_err:
+		log_system_message(f"❌ [Stripe] Checkout Init Error: {str(stripe_err)}", "ERROR")
+		raise HTTPException(status_code=500, detail="Payment gateway session allocation error")
+
 
 # Mount templates engine for your cool dark mode layout
 templates = Jinja2Templates(directory="templates")
@@ -828,6 +849,25 @@ def handle_profile_ingestion_override(request: Request):
 #====================================================
 # 🔮 PREDICT (schema-check endpoint)
 #====================================================
+@app.post("/stripe/webhooks")
+async def receive_stripe_payment_webhook(request: Request):
+	payload = await request.body()
+	sig_header = request.headers.get("stripe-signature")
+	webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+	try:
+		event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+	except ValueError:
+		raise HTTPException(status_code=400, detail="Invalid payload signature metadata")
+	except stripe.error.SignatureVerificationError:
+		raise HTTPException(status_code=400, detail="Invalid webhook crypt signature verification")
+
+	if event["type"] == "checkout.session.completed":
+		session_data = event["data"]["object"]
+		customer_email = session_data.get("customer_details", {}).get("email")
+		log_system_message(f"💰 [Stripe Webhook] Verified payment success logged for premium customer: {customer_email}")
+		
+	return {"status": "event_logged_to_matrix"}
+
 @app.get("/predict")
 async def predict():
 	result = startup["startup"]()
