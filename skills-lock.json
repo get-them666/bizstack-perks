@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "use-railway": {
+      "source": "railwayapp/railway-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/railway/skills/use-railway/SKILL.md",
+      "computedHash": "670ed631943a05391ebb1b83988a8fe54dd4d26e0d5ffe9d43064a9fc578385e"
+    }
+  }
+}
