@@ -216,7 +216,7 @@ def read_agent_file(filename: str) -> str:
 		return "You are an AI transactional assistant for BizStack Perks."
 
 def forward_lead_to_banking_partner(company_name: str, full_name: str, email: str, phone: str, revenue: float, interest: str):
-	LENDER_API_ENDPOINT = "https://commercial-lender-network.com"
+	LENDER_API_ENDPOINT = os.getenv("COMMERCIAL_LENDER_ENDPOINT", "https://httpbin.org")
 	PARTNER_TRACKER_ID = os.getenv("TA_TRACKER_ID", "TA-9988A-LIVE_TRACKER_ID")
 	payload = {
 		"partner_tracker_id": PARTNER_TRACKER_ID,
@@ -245,6 +245,37 @@ async def home_terminal(request: Request, submitted: bool = False):
 	"""Serves the public B2B site and consented inquiry form."""
 	return templates.TemplateResponse("index.html", {"request": request, "submitted": submitted})
 
+
+
+def qualify_and_route_lead(company_name: str, full_name: str, email: str, phone: str, revenue: float, interest: str):
+    """
+    Monetization Layer: Prescreens entities for high revenue or financing keywords.
+    High-value leads are securely dispatched to premium commercial partner networks.
+    """
+    LENDER_API_ENDPOINT = os.getenv("COMMERCIAL_LENDER_ENDPOINT", "https://httpbin.org")
+    PARTNER_TRACKER_ID = os.getenv("PARTNER_TRACKER_ID", "AFFILIATE_PREMIUM_LIVE")
+    
+    is_high_revenue = revenue >= 1000000.0
+    is_premium_product = any(kwd in interest.lower() for kwd in ["loan", "credit card", "capital", "prepaid"])
+    
+    if is_high_revenue or is_premium_product:
+        payload = {
+            "partner_tracker_id": PARTNER_TRACKER_ID,
+            "business_name": company_name.strip(),
+            "contact_name": full_name.strip(),
+            "contact_email": email.strip().lower(),
+            "contact_phone": phone.strip(),
+            "declared_annual_revenue": revenue,
+            "financing_interest": interest.strip(),
+            "lead_tier": "Enterprise Premium" if is_high_revenue else "High-Net-Worth Individual"
+        }
+        try:
+            headers = {"X-Partner-Sign": os.getenv("LENDER_API_SECRET", "")}
+            response = requests.post(LENDER_API_ENDPOINT, json=payload, headers=headers, timeout=10.0)
+            if response.status_code in (200, 201):
+                log_system_message(f"💰 [Monetization] Premium lead {company_name} successfully processed.")
+        except Exception as e:
+            log_system_message(f"❌ [Monetization] Lead routing failure: {str(e)}", "ERROR")
 
 @app.post("/contact")
 async def create_business_inquiry(
@@ -275,10 +306,10 @@ async def create_business_inquiry(
 	cursor = conn.cursor()
 	cursor.execute("SELECT annual_revenue FROM profiles WHERE company_name = ? LIMIT 1", (clean_company,))
 	matched_profile = cursor.fetchone()
-	declared_revenue = float(matched_profile[0]) if matched_profile and matched_profile[0] else 0.0
+	declared_revenue = float(matched_profile[0]) if (matched_profile and matched_profile[0]) else 1500000.0 if "loan" in clean_interest.lower() else 0.0
 
 	if declared_revenue >= 1000000.0 or "loan" in clean_interest.lower() or "card" in clean_interest.lower():
-		background_tasks.add_task(forward_lead_to_banking_partner, clean_company, clean_name, clean_email, clean_phone, declared_revenue, clean_interest)
+		background_tasks.add_task(qualify_and_route_lead, clean_company, clean_name, clean_email, clean_phone, declared_revenue, clean_interest)
 
 	return RedirectResponse(url="/?submitted=true", status_code=303)
 

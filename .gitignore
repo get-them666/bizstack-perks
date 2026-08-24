@@ -19,3 +19,8 @@ untitled text*
 .env
 *.log
 .env
+
+.env
+data/
+*.db
+.DS_Store
