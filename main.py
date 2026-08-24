@@ -186,7 +186,8 @@ templates = Jinja2Templates(directory="templates")
 
 # Database structural generator loop
 def get_db():
-	conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+	db_target = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
+	conn = sqlite3.connect(db_target, check_same_thread=False)
 	try:
 		yield conn
 	finally:
