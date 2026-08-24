@@ -989,4 +989,7 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    # Read the platform allocation PORT string variable, fallback to 8000 locally
+    container_port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
