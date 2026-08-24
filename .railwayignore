@@ -6,3 +6,7 @@ data/
 *.db
 *.log
 .git/
+templates/bizstack-perks.zip
+templates/bizstack-perks/
+.tmp.driveupload/
+main.patch
