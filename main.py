@@ -20,8 +20,8 @@ from twilio.twiml.voice_response import Gather, VoiceResponse
 # ====================================================
 
 # Administrative Authentication Credentials
-MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
-MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "password123")
+MOCK_USERNAME = os.environ["BIZSTACK_ADMIN_USER"]
+MOCK_PASSWORD = os.environ["BIZSTACK_ADMIN_PASS"]
 
 # Cryptographic Tracking Secret (Failsafe generates a random token per spin if empty)
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
@@ -923,7 +923,7 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
     expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
     
     if token != expected_token:
-        return {"error": "Unauthorized handshake request"}, 401
+        raise HTTPException(status_code=401, detail="Unauthorized handshake request")
         
     if payload.status == "APPROVED":
         return {"bot_action": "handshake_triggered", "status": "SUCCESS"}

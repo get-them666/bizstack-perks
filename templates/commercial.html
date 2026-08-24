@@ -2,21 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Commercial Capital Solutions | Unified Node</title>
+    <title>BizStack Commercial Terminal</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d0e10; color: #e2e8f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .matrix-card { background: #16191f; padding: 40px; border-radius: 8px; border: 1px solid #242936; text-align: center; max-width: 420px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
-        h1 { color: #00ffcc; font-size: 22px; margin-bottom: 10px; letter-spacing: 1px; font-family: monospace; }
-        p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
-        .status-telemetry { background: #1e2330; padding: 12px; border-radius: 4px; font-weight: bold; font-size: 14px; color: #38bdf8; border-left: 3px solid #00ffcc; font-family: monospace; }
+        body { background: #0a0a0a; color: #e0e0e0; font-family: monospace; padding: 40px; }
+        .form-container { max-width: 500px; margin: 0 auto; border: 1px solid #222; padding: 30px; background: #111; border-radius: 4px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #00ffcc; }
+        input, select { width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; box-sizing: border-box; }
+        button { background: #00ffcc; color: #000; border: none; padding: 12px; width: 100%; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="matrix-card">
-        <h1>[ COMMERCIAL FUNDING NODE ]</h1>
-        <p>Your institutional parameters are queued. The background automation bot is checking active ledger profiles and tracking state registration approvals.</p>
-        <div class="status-telemetry">SYS_STATUS: ACTIVE // MONITORING_LLC</div>
+    <div class="form-container">
+        <h2>Commercial Pipeline Ingestion</h2>
+        <form action="/contact" method="post">
+            <div class="input-group">
+                <label>Corporate Officer Name</label>
+                <input type="text" name="full_name" required>
+            </div>
+            <div class="input-group">
+                <label>Registered Business Entity</label>
+                <input type="text" name="company_name" required>
+            </div>
+            <div class="input-group">
+                <label>Commercial Contact Email</label>
+                <input type="email" name="work_email" required>
+            </div>
+            <div class="input-group">
+                <label>Financing Requirements</label>
+                <select name="interest">
+                    <option value="Commercial Business Loan">Commercial Business Loan</option>
+                    <option value="Prepaid Operational Card">Prepaid Operational Card Yield</option>
+                </select>
+            </div>
+            <input type="hidden" name="marketing_consent" value="true">
+            <button type="submit">Transmit Authorization Request</button>
+        </form>
     </div>
 </body>
 </html>
