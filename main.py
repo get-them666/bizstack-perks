@@ -756,6 +756,37 @@ async def stream_raw_database_binary(request: Request):
 	return Response(content="Database storage binary not found.", status_code=404)
 
 #====================================================
+# 💡 NEW ENDPOINT: SUBMIT CARD LEAD
+#====================================================
+@app.post("/api/card-leads")
+async def create_card_lead(
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    email: str = Form(...),
+    card_type: str = Form(...),
+    phone: str = Form(""),
+    conn=Depends(get_db)
+):
+    """Saves new client credit card intake profiles to the ledger database."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO card_leads (first_name, last_name, email, phone, card_type)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (first_name.strip(), last_name.strip(), email.strip().lower(), phone.strip(), card_type.strip())
+        )
+        conn.commit()
+        return {"status": "success", "message": "Lead ingested successfully"}
+    except sqlite3.IntegrityError as duplicate_err:
+        log_database_fault("Card Lead - Integrity Issue", str(duplicate_err))
+        raise HTTPException(status_code=400, detail="Profile email identity has already been registered")
+    except sqlite3.Error as db_err:
+        log_database_fault("Card Lead - Operational Base Error", str(db_err))
+        raise HTTPException(status_code=500, detail="Internal server data transaction loop issue")
+
+#====================================================
 # 📞 16. TWILIO TELEPHONY CALLBACK STATUS LOGGER
 #====================================================
 
@@ -924,31 +955,7 @@ async def read_commercial_portal(request: Request):
     return templates.TemplateResponse("commercial.html", {"request": request})
 
 @app.post("/api/bot/state-webhook")
-async def handle_unified_state_webhook(payload: WebhookPayload, request: Request):
-    """Secure backend pipeline. Triggers automation handshake out of sight."""
-    token = request.headers.get("X-Bot-Token")
-    expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
-    
-
-
-# ==========================================
-# UNIFIED COMMERCIAL FUNDING BOT ROUTINGS
-# ==========================================
-from fastapi import Request
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-import os
-
-class WebhookPayload(BaseModel):
-    status: str
-
-@app.get("/commercial", response_class=HTMLResponse)
-async def read_commercial_portal(request: Request):
-    """Serves the unified public funding screen to human web visitors."""
-    return templates.TemplateResponse("commercial.html", {"request": request})
-
-@app.post("/api/bot/state-webhook")
-async def handle_unified_state_webhook(payload: WebhookPayload, request: Request):
+async def handle_unified_state_webhook(payload: WebhookPayload, request: Request, conn=Depends(get_db)):
     """Secure backend pipeline. Triggers automation handshake out of sight."""
     token = request.headers.get("X-Bot-Token")
     expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
@@ -956,10 +963,27 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
     if token != expected_token:
         raise HTTPException(status_code=401, detail="Unauthorized handshake request")
         
-    if payload.status == "APPROVED":
-        return {"bot_action": "handshake_triggered", "status": "SUCCESS"}
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE card_leads 
+            SET status = ? 
+            WHERE status = 'PENDING'
+            """,
+            (payload.status,)
+        )
+        affected_rows = cursor.rowcount
+        conn.commit()
         
-    return {"bot_action": "idle", "reason": "LLC status pending"}
+        return {
+            "bot_action": "handshake_triggered" if payload.status == "APPROVED" else "idle",
+            "status": "SUCCESS",
+            "synchronized_leads": affected_rows
+        }
+    except sqlite3.Error as db_error:
+        log_database_fault("Webhook State Sync Sync Fault", str(db_error))
+        raise HTTPException(status_code=500, detail="Database synchronization pipeline fault")
 
 if __name__ == "__main__":
     import uvicorn
