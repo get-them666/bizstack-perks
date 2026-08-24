@@ -582,7 +582,15 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 @app.post("/api/trigger-outbound")
 async def trigger_outbound_call(request: Request, to_number: str = Form(...), custom_message: str = Form(...)):
 	"""API endpoint to execute background automated outbound dial loops."""
-	require_admin(request)
+	# Allow both admin dashboard cookies and secure terminal bot tokens
+	token = request.headers.get("X-Bizstack-Bot-Token") or request.headers.get("X-Bot-Token")
+	expected_token = os.getenv("BOT_API_TOKEN", "use-a-long-random-value")
+	
+	if token != expected_token:
+		try:
+			require_admin(request)
+		except Exception:
+			raise HTTPException(status_code=401, detail="Unauthorized broadcast action token signature mismatch")
 	if not to_number.startswith("+") or not to_number[1:].isdigit() or not 8 <= len(to_number) <= 16:
 		raise HTTPException(status_code=422, detail="Use an E.164 destination number")
 	if not custom_message.strip() or len(custom_message) > 1_000:
