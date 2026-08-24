@@ -92,7 +92,7 @@ def verify_and_build_production_schema_startup():
 	if data_dir and not os.path.exists(data_dir):
 		os.makedirs(data_dir, exist_ok=True)
 
-	conn = sqlite3.connect(DATABASE_PATH)
+	conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')))
 	cursor = conn.cursor()
 	cursor.execute("""
 	CREATE TABLE IF NOT EXISTS profiles (
@@ -319,7 +319,7 @@ async def create_business_inquiry(
 def healthcheck():
 	"""Lightweight Railway healthcheck which verifies SQLite is reachable."""
 	try:
-		with sqlite3.connect(DATABASE_PATH) as conn:
+		with sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db'))) as conn:
 			conn.execute("SELECT 1")
 	except sqlite3.Error as exc:
 		log_database_fault("healthcheck", str(exc))
@@ -556,7 +556,7 @@ async def handle_response(Digits: str = Form(None), SpeechResult: str = Form(Non
 		response.say("Perfect. Please hold while we confirm your commercial profile ledger.")
 
 		# Log voice-initiated transaction event directly to database
-		conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+		conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')), check_same_thread=False)
 		cursor = conn.cursor()
 		cursor.execute(
 			"INSERT INTO transactions (entity_name, amount, status) VALUES (?, ?, ?)",
@@ -614,7 +614,7 @@ def run_finnhub_sync():
 	"""Fetch company profiles from Finnhub and retain an auditable run record."""
 	api_token = os.getenv("FINNHUB_DATA_KEY")
 	tickers = configured_tickers()
-	conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+	conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')), check_same_thread=False)
 	cursor = conn.cursor()
 	cursor.execute("INSERT INTO bot_runs (source, status, message) VALUES (?, ?, ?)", (
 		"Finnhub Stock Profile 2", "running", f"Tickers: {', '.join(tickers)}"
@@ -703,7 +703,7 @@ def get_production_db():
 	Establishes persistent connection loops with structural cross-environment handling.
 	Ensures transactional ledger profiles map safely to cloud disc volumes.
 	"""
-	conn = sqlite3.connect(DATABASE_PATH)
+	conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')))
 	try:
 		yield conn
 	finally:
@@ -831,7 +831,7 @@ def run_live_finnhub_sync():
 	API_TOKEN = os.getenv("FINNHUB_DATA_KEY", "sandbox_c8m0fhaad3i9p792a0g0")
 
 	try:
-		conn = sqlite3.connect(DATABASE_PATH)
+		conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')))
 		cursor = conn.cursor()
 		records_added = 0
 
@@ -868,7 +868,7 @@ def run_live_finnhub_sync():
 def force_production_ingestion_sync(request: Request):
 	"""Ingests a static set of sample corporate tracking metadata straight to SQLite."""
 	require_admin(request)
-	conn = sqlite3.connect(DATABASE_PATH)
+	conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')))
 	cursor = conn.cursor()
 
 	live_ingested_data = [
