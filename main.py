@@ -101,6 +101,12 @@ def verify_and_build_production_schema_startup():
 # one — this is now the only place `app` is created)
 # ====================================================
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    verify_and_build_production_schema_startup()
+    yield
+
+
 app = FastAPI(title="BizStack Perks Production Node", lifespan=lifespan)
 import stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
