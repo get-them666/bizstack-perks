@@ -289,12 +289,12 @@ def read_item(item_id: int, q: str | None = None):
 # 2. SECURITY GATE ROUTING (Authentication & Cookies)
 # ====================================================
 
-@app.get("/login", response_class=HTMLResponse)
+@app.get(SECRET_PATH, response_class=HTMLResponse)
 async def login_gate(request: Request, error: str = None):
 	"""Serves the secure carbon-black login gate screen."""
 	return templates.TemplateResponse("login.html", {"request": request, "error": error})
 
-@app.post("/login")
+@app.post(SECRET_PATH)
 async def process_login(
 	username: str = Form(...),
 	password: str = Form(...),
@@ -316,7 +316,7 @@ async def process_login(
 	# Loop back with error parameter if validation fails
 	return RedirectResponse(url="/login?error=Invalid+Identifier+or+Keyphrase", status_code=303)
 
-@app.get("/logout")
+@app.get(LOGOUT_PATH)
 async def process_logout():
 	"""Clears system authorization context tokens."""
 	response = RedirectResponse(url="/login", status_code=303)
@@ -328,7 +328,7 @@ async def process_logout():
 # 3. SECURE PROFILE LEDGER (Protected Dashboard Window)
 # ====================================================
 
-@app.get("/dashboard", response_class=HTMLResponse)
+@app.get(DASHBOARD_PATH, response_class=HTMLResponse)
 async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 	"""Serves the dynamic profile registry monitoring window with live metrics."""
 	# Production Safety Check: Verify tracking cookie token matching status
