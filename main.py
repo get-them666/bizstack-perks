@@ -71,8 +71,7 @@ def verify_and_build_production_schema_startup():
         marketing_consent INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );""")
-    # Fixes column mismatch by adding status TEXT DEFAULT 'PENDING'
-        cursor.execute("""
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS card_leads (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,
@@ -85,6 +84,7 @@ def verify_and_build_production_schema_startup():
     );""")
     conn.commit()
     conn.close()
+    log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
     return "startup"
 
 # ====================================================
