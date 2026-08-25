@@ -79,7 +79,7 @@ def verify_and_build_production_schema_startup():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );""")
     # Fixes column mismatch by adding status TEXT DEFAULT 'PENDING'
-    cursor.execute("""
+        cursor.execute("""
     CREATE TABLE IF NOT EXISTS card_leads (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,
@@ -87,7 +87,6 @@ def verify_and_build_production_schema_startup():
         email TEXT UNIQUE NOT NULL,
         phone TEXT,
         card_type TEXT NOT NULL,
-        status TEXT DEFAULT 'PENDING',
         status TEXT DEFAULT 'PENDING',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );""")
