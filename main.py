@@ -1,4 +1,3 @@
-from contextlib import asynccontextmanager
 from datetime import datetime
 import csv
 import io
@@ -9,14 +8,8 @@ import sys
 import logging
 import requests
 import stripe
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
-import stripe  # Fixes the NameError bug in Stripe webhook execution loops
-from pydantic import BaseModel
-from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
-from fastapi.templating import Jinja2Templates
-from twilio.rest import Client
-from twilio.twiml.voice_response import Gather, VoiceResponse
 
 # ====================================================
 # CONFIGURATION CONSOLE CONSTANTS
@@ -100,14 +93,12 @@ def verify_and_build_production_schema_startup():
 # one — this is now the only place `app` is created)
 # ====================================================
 
-@asynccontextmanager
 async def lifespan(app: FastAPI):
     verify_and_build_production_schema_startup()
     yield
 
 
 app = FastAPI(title="BizStack Perks Production Node", lifespan=lifespan)
-import stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
 
 @app.get("/premium/subscribe")
@@ -900,9 +891,6 @@ SUPPORT_EMAIL = "hello@bizstackperks.com"
 # ==========================================
 # UNIFIED COMMERCIAL FUNDING BOT ROUTINGS
 # ==========================================
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-import os
 
 class WebhookPayload(BaseModel):
     status: str
