@@ -1,3 +1,6 @@
+from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from datetime import datetime
 import csv
 import io
@@ -10,6 +13,16 @@ import requests
 import stripe
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
+
+def log_system_message(message: str, level: str = "INFO"):
+    current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_row = f"[{current_timestamp}] {level}: {message}\n"
+    try:
+        with open("api_server.log", "a") as f:
+            f.write(log_row)
+            f.flush()
+    except Exception:
+        pass
 
 # ====================================================
 # CONFIGURATION CONSOLE CONSTANTS
