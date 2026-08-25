@@ -24,3 +24,15 @@ untitled text*
 data/
 *.db
 .DS_Store
+
+.env
+data/
+*.db
+.DS_Store
+.env
+data/
+*.db
+*.log
+__pycache__/
+venv/
+.DS_Store

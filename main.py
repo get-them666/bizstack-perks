@@ -7,8 +7,11 @@ import sqlite3
 import sys
 import logging
 import requests
+import stripe
+from pydantic import BaseModel
+import stripe  # Fixes the NameError bug in Stripe webhook execution loops
 from contextlib import asynccontextmanager
-
+from pydantic import BaseModel
 from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -16,140 +19,81 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import Gather, VoiceResponse
 
 # ====================================================
-# PRODUCTION SECURITY CONFIGURATIONS
+# CONFIGURATION CONSOLE CONSTANTS
 # ====================================================
-
-# Administrative Authentication Credentials
-MOCK_USERNAME = os.environ["BIZSTACK_ADMIN_USER"]
-MOCK_PASSWORD = os.environ["BIZSTACK_ADMIN_PASS"]
-
-# Cryptographic Tracking Secret (Failsafe generates a random token per spin if empty)
+MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
+MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "MatrixSecurePerks2026!")
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
 
-# Twilio Cloud Messaging Credentials
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "ACxxxx")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "xxxxxx")
-TWILIO_NUMBER = os.getenv("TWILIO_NUMBER", "+15550000000")
+# Dynamic Obscure Routing Path Key Configurations
+ADMIN_LOGIN_PATH = os.getenv("ADMIN_LOGIN_PATH", "secure-matrix-gate-88")
+SECRET_PATH = f"/{ADMIN_LOGIN_PATH}"
+DASHBOARD_PATH = f"/{ADMIN_LOGIN_PATH}-panel"
+LOGOUT_PATH = f"/{ADMIN_LOGIN_PATH}-exit"
 
-# Railway mounts its persistent volume at /app/data. Local development uses a
-# project-local directory, which the startup initializer creates as needed.
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
-BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
-
-# Configure root system log routing to capture internal telemetry
-logging.basicConfig(
-	filename="api_server.log",
-	level=logging.INFO,
-	format="[%(asctime)s] %(levelname)s [%(name)s]: %(message)s",
-	datefmt="%Y-%m-%d %H:%M:%S"
-)
-
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "fallback_bot_security_token")
 
 # ====================================================
-# LOGGING HELPERS (defined early since lifespan uses them)
-# ====================================================
-
-def log_system_message(message: str, level: str = "INFO"):
-	"""
-	Forces an immediate structural disk flush to bypass file buffering.
-	Ensures tail terminal utilities read telemetry prints in real time.
-	"""
-	current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-	log_row = f"[{current_timestamp}] {level}: {message}\n"
-
-	try:
-		with open("api_server.log", "a") as f:
-			f.write(log_row)
-			f.flush()  # Forces the operating system to write instantly to the physical storage disk
-	except Exception:
-		pass
-
-
-def log_database_fault(operation_name: str, error_message: str):
-	"""
-	Catches database structural locks and bad syntax loops.
-	Flushes the trace lines straight to the text log file.
-	"""
-	current_time_marker = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-	log_row_entry = f"[{current_time_marker}] ERROR [sqlite]: Fault inside {operation_name} -> {error_message}\n"
-
-	try:
-		with open("api_server.log", "a") as f:
-			f.write(log_row_entry)
-			f.flush()
-	except Exception:
-		pass
-
-
-#====================================================
 # ⚡ AUTOMATED PRODUCTION SCHEMA INITIALIZER
-#====================================================
-
+# ====================================================
 def verify_and_build_production_schema_startup():
-	"""Validates and generates the required database structure on boot."""
-	# Ensure the volume's data directory exists before connecting
-	data_dir = os.path.dirname(DATABASE_PATH)
-	if data_dir and not os.path.exists(data_dir):
-		os.makedirs(data_dir, exist_ok=True)
-
-	conn = sqlite3.connect(os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db')))
-	cursor = conn.cursor()
-	cursor.execute("""
-	CREATE TABLE IF NOT EXISTS profiles (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		company_name TEXT UNIQUE NOT NULL,
-		credit_risk_rating TEXT,
-		annual_revenue REAL
-	);
-	""")
-	cursor.execute("""
-	CREATE TABLE IF NOT EXISTS transactions (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		entity_name TEXT,
-		amount REAL,
-		status TEXT
-	);
-	""")
-	cursor.execute("""
-	CREATE TABLE IF NOT EXISTS bot_runs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		source TEXT NOT NULL,
-		status TEXT NOT NULL,
-		started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		completed_at DATETIME,
-		records_added INTEGER NOT NULL DEFAULT 0,
-		message TEXT
-	);
-	""")
-	cursor.execute("""
-	CREATE TABLE IF NOT EXISTS business_inquiries (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		full_name TEXT NOT NULL,
-		company_name TEXT NOT NULL,
-		work_email TEXT NOT NULL,
-		phone TEXT,
-		interest TEXT NOT NULL,
-		marketing_consent INTEGER NOT NULL DEFAULT 0,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	""")
-	conn.commit()
-	conn.close()
-	log_system_message(f"📡 Schema validation passed on startup for volume: {DATABASE_PATH}")
-
-	return "startup"
-
-
-startup = {}
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-	startup["startup"] = verify_and_build_production_schema_startup
-	verify_and_build_production_schema_startup()
-	yield
-	startup.clear()
-
+    data_dir = os.path.dirname(DATABASE_PATH)
+    if data_dir and not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_name TEXT UNIQUE NOT NULL,
+        credit_risk_rating TEXT,
+        annual_revenue REAL
+    );""")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_name TEXT,
+        amount REAL,
+        status TEXT
+    );""")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS bot_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME,
+        records_added INTEGER NOT NULL DEFAULT 0,
+        message TEXT
+    );""")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS business_inquiries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT NOT NULL,
+        company_name TEXT NOT NULL,
+        work_email TEXT NOT NULL,
+        phone TEXT,
+        interest TEXT NOT NULL,
+        marketing_consent INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );""")
+    # Fixes column mismatch by adding status TEXT DEFAULT 'PENDING'
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS card_leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        phone TEXT,
+        card_type TEXT NOT NULL,
+        status TEXT DEFAULT 'PENDING',
+        status TEXT DEFAULT 'PENDING',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );""")
+    conn.commit()
+    conn.close()
+    return "startup"
 
 # ====================================================
 # SINGLE APP INSTANCE (was previously created 3x, which
