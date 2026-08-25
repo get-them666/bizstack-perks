@@ -301,7 +301,7 @@ async def process_login(
 ):
 	"""Intercepts keyphrase verifications to authorize session flow with production flags."""
 	if username == MOCK_USERNAME and password == MOCK_PASSWORD:
-		response = RedirectResponse(url="/dashboard", status_code=303)
+		response = RedirectResponse(url="/dashboard", status_code=200)
 
 		# Secure tracking token cookie deployment with production security hardened settings
 		response.set_cookie(
