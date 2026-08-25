@@ -34,7 +34,7 @@ SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
 # Dynamic Obscure Routing Path Key Configurations
 ADMIN_LOGIN_PATH = os.getenv("ADMIN_LOGIN_PATH", "secure-matrix-gate-88")
 SECRET_PATH = f"/{ADMIN_LOGIN_PATH}"
-DASHBOARD_PATH = f"/{ADMIN_LOGIN_PATH}-panel"
+DASHBOARD_PATH = "/dashboard"
 LOGOUT_PATH = f"/{ADMIN_LOGIN_PATH}-exit"
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
