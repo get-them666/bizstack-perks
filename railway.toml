@@ -1,0 +1,7 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "python3 generate_perks.py && python3 verify_links.py"
+
+[deploy]
+startCommand = "python3 -m http.server $PORT"
+restartPolicyType = "ON_FAILURE"
