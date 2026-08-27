@@ -157,5 +157,5 @@ async def process_administrative_logout():
     from fastapi.responses import RedirectResponse
     response = RedirectResponse(url="/login", status_code=303)
     # Clear the session cookie to securely log out the user session
-    response.delete_cookie(key="session")
+    response.delete_cookie(key="session_token")
     return response
