@@ -160,8 +160,8 @@ async def process_administrative_logout():
     response.delete_cookie(key="session_token")
     return response
 
-@app.get("/api/profile")
-async def retrieve_raw_profile_registry():
+@app.api_route("/api/profile", methods=["GET", "POST"])
+async def handle_profile_registry_endpoint(request: Request):
     import sqlite3
     try:
         with sqlite3.connect("bizstack.db") as conn:
