@@ -195,3 +195,23 @@ if __name__ == "__main__":
     import uvicorn
     container_port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
+@app.get("/client", response_class=HTMLResponse)
+async def serve_client_dashboard_view(request: Request):
+    # Fetch the client passkey parameters from the incoming URL query string
+    client_key = request.query_params.get("key")
+    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
+    
+    if not client_key or client_key != expected_key:
+        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
+
+    import sqlite3
+    try:
+        with sqlite3.connect("data/bizstack.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
+            profiles_data = cursor.fetchall()
+    except Exception:
+        profiles_data = []
+
+    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
