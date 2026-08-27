@@ -117,10 +117,7 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
     total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
     return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue, "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x"), "last_bot_run": ("Finnhub Stock Profile 2", "success", "Active", "Complete", "", "") if profiles_data else None})
 
-if __name__ == "__main__":
-    import uvicorn
-    container_port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
 
 @app.post("/api/bot/run")
 async def receive_bot_handshake(request: Request):
@@ -192,3 +189,9 @@ async def handle_profile_registry_endpoint(request: Request):
         return {"status": "SUCCESS", "record_count": len(profiles_list), "data": profiles_list}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    container_port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
