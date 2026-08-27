@@ -145,4 +145,9 @@ async def trigger_bot_scrape(request: Request):
         except Exception as db_err:
             print(f"DB Error: {db_err}")
 
-    return {"status": "SUCCESS", "synced_tickers": synced}
+    if request.headers.get("X-Bot-Token"):
+        return {"status": "SUCCESS", "synced_tickers": synced}
+    
+    # Browser form submission fallback: Redirect back to the dashboard visually
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard", status_code=303)
