@@ -122,3 +122,59 @@ async def explicit_production_logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("session_token")
     return response
+
+# ====================================================
+# PATCH: RESTORE COMPLETE BOT AUTOMATION PIPELINES
+# ====================================================
+FINNHUB_PROFILE_URL = "https://finnhub.io"
+
+def configured_tickers():
+    return [ticker.strip().upper() for ticker in os.getenv("FINNHUB_TICKERS", "AAPL,MSFT,GOOGL").split(",") if ticker.strip()]
+
+def run_finnhub_sync():
+    api_token = os.getenv("FINNHUB_DATA_KEY")
+    tickers = configured_tickers()
+    conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO bot_runs (source, status, message) VALUES (?, ?, ?)", ("Finnhub Stock Profile 2", "running", f"Tickers: {', '.join(tickers)}"))
+    run_id = cursor.lastrowid
+    conn.commit()
+    records_added = 0
+    try:
+        if not api_token: raise RuntimeError("FINNHUB_DATA_KEY is not configured")
+        for ticker in tickers:
+            response = requests.get(FINNHUB_PROFILE_URL, params={"symbol": ticker, "token": api_token}, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            company_name = data.get("name")
+            if not company_name: continue
+            industry = data.get("finnhubIndustry") or "General Commercial"
+            market_cap = float(data.get("marketCapitalization") or 0) * 1_000_000
+            try:
+                cursor.execute("INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)", (company_name, f"Finnhub: {industry}", market_cap))
+                records_added += 1
+            except sqlite3.IntegrityError: pass
+        message = f"Synced {len(tickers)} ticker(s): {', '.join(tickers)}"
+        cursor.execute("UPDATE bot_runs SET status = ?, completed_at = CURRENT_TIMESTAMP, records_added = ?, message = ? WHERE id = ?", ("success", records_added, message, run_id))
+        conn.commit()
+    except Exception as exc:
+        cursor.execute("UPDATE bot_runs SET status = ?, completed_at = CURRENT_TIMESTAMP, records_added = ?, message = ? WHERE id = ?", ("failed", records_added, str(exc)[:500], run_id))
+        conn.commit()
+    finally: conn.close()
+
+@app.post("/api/bot/run")
+@app.get("/api/bot/run-fallback")  # <-- Fallback allowing browser tab click executions
+async def run_bot_now(request: Request, background_tasks: BackgroundTasks):
+    """Allows an operator to trigger real-data sync loops on demand."""
+    background_tasks.add_task(run_finnhub_sync)
+    return RedirectResponse(url="/dashboard?status=sync_launched", status_code=303)
+
+@app.get("/api/database/download")
+async def stream_raw_database_binary(request: Request):
+    """Programmatic down-stream file export endpoint."""
+    session = request.cookies.get("session_token")
+    if not session or session != SESSION_SECRET:
+        return Response(content="Unauthorized Access Block", status_code=401)
+    if os.path.exists(DATABASE_PATH):
+        return FileResponse(path=DATABASE_PATH, filename="bizstack_workspace_backup.db", media_type="application/x-sqlite3")
+    return Response(content="Database storage binary not found.", status_code=404)
