@@ -97,9 +97,7 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
     profiles_data = cursor.fetchall()
     total_nodes = len(profiles_data) 
     total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, "profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue
-    })
+    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue})
 
 if __name__ == "__main__":
     import uvicorn
