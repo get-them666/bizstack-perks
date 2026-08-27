@@ -254,3 +254,22 @@ async def serve_client_dashboard_view(request: Request):
         profiles_data = []
 
     return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
+
+@app.get("/client", response_class=HTMLResponse)
+async def serve_client_dashboard_view(request: Request):
+    # Enforce access parameter token boundaries for external client privacy
+    client_key = request.query_params.get("key")
+    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
+    
+    if not client_key or client_key != expected_key:
+        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
+
+    try:
+        with sqlite3.connect("data/bizstack.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
+            profiles_data = cursor.fetchall()
+    except Exception:
+        profiles_data = []
+
+    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
