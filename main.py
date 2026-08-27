@@ -1070,3 +1070,11 @@ async def serve_login_frontend_view(request: Request):
 async def serve_login_view(request: Request):
     """Explicitly registers literal login paths ahead of execution loops."""
     return templates.TemplateResponse("login.html", {"request": request})
+
+# ====================================================
+# PATCH: DIRECT ROUTING INTERFACE FOR STANDARD LOGIN
+# ====================================================
+@app.get("/login", response_class=HTMLResponse)
+async def serve_login_view(request: Request):
+    """Explicitly registers literal login paths ahead of execution loops."""
+    return templates.TemplateResponse("login.html", {"request": request})
