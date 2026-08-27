@@ -159,3 +159,18 @@ async def process_administrative_logout():
     # Clear the session cookie to securely log out the user session
     response.delete_cookie(key="session_token")
     return response
+
+@app.get("/api/profile")
+async def retrieve_raw_profile_registry():
+    import sqlite3
+    try:
+        with sqlite3.connect("bizstack.db") as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles")
+            rows = cursor.fetchall()
+            
+        profiles_list = [dict(row) for row in rows]
+        return {"status": "SUCCESS", "record_count": len(profiles_list), "data": profiles_list}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
