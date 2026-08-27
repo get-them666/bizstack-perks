@@ -1,5 +1,57 @@
 from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
+from datetime import datetime
+import csv
+import io
+import os
+import secrets
+import sqlite3
+import sys
+import logging
+import requests
+import stripe
+from contextlib import asynccontextmanager
+from pydantic import BaseModel
+from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.rest import Client
+
+# --- GLOBAL APP INSTANCE & LIFECYCLE ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if "verify_and_build_production_schema_startup" in globals():
+        verify_and_build_production_schema_startup()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+templates = Jinja2Templates(directory="templates")
+
+# --- CENTRAL ROUTE GUARDRAILS & ASSISTANTS ---
+def get_db():
+    db_path = os.getenv('DATABASE_PATH', os.path.join('data', 'bizstack.db'))
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def require_admin(request: Request):
+    session = request.cookies.get("session_token")
+    if not session or session != os.getenv("SESSION_COOKIE_SECRET", "MatrixSecurePerks2026!"):
+        raise HTTPException(status_code=303, headers={"Location": "/login"})
+
+def require_bot_token(request: Request):
+    token = request.headers.get("X-Bot-Token") or request.headers.get("X-Bizstack-Bot-Token")
+    expected = os.getenv("BOT_API_TOKEN", "fallback_bot_security_token")
+    if token != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized token signature")
+
+def log_database_fault(context: str, error_msg: str):
+    if "log_system_message" in globals():
+        log_system_message(f"Database Fault in [{context}]: {error_msg}", "ERROR")
+
+from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
+from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from datetime import datetime
 import csv
@@ -106,146 +158,6 @@ def verify_and_build_production_schema_startup():
 # one — this is now the only place `app` is created)
 # ====================================================
 
-
-# ====================================================
-# UNIFIED LITERAL PATH ROUTING ENGINE OVERRIDE
-# ====================================================
-@app.get("/login", response_class=HTMLResponse)
-async def forced_literal_login_get(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
-
-@app.post("/login")
-async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username == MOCK_USERNAME and password == MOCK_PASSWORD:
-        response = RedirectResponse(url="/dashboard", status_code=303)
-        response.set_cookie(key="session_token", value=SESSION_SECRET, httponly=True, secure=True, samesite="lax")
-        return response
-    return RedirectResponse(url="/login?error=Invalid+Identifier+or+Keyphrase", status_code=303)
-
-async def lifespan(app: FastAPI):
-    verify_and_build_production_schema_startup()
-    yield
-
-
-app = FastAPI(title="BizStack Perks Production Node", lifespan=lifespan)
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
-
-@app.get("/premium/subscribe")
-async def create_stripe_subscription_session(request: Request):
-	try:
-		session = stripe.checkout.Session.create(
-			payment_method_types=["card"],
-			line_items=[{
-				"price": os.getenv("STRIPE_PRICE_ID", "price_placeholder"),
-				"quantity": 1,
-			}],
-			mode="subscription",
-			success_url="https://bizstackperks.com",
-			cancel_url="https://bizstackperks.com",
-		)
-		return RedirectResponse(url=session.url, status_code=303)
-	except Exception as stripe_err:
-		log_system_message(f"❌ [Stripe] Checkout Init Error: {str(stripe_err)}", "ERROR")
-		raise HTTPException(status_code=500, detail="Payment gateway session allocation error")
-
-
-# Mount templates engine for your cool dark mode layout
-templates = Jinja2Templates(directory="templates")
-
-
-# Database structural generator loop
-def get_db():
-	db_target = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
-	conn = sqlite3.connect(db_target, check_same_thread=False)
-	try:
-		yield conn
-	finally:
-		conn.close()
-
-
-def require_admin(request: Request):
-	"""Require an authenticated operator for state-changing admin actions."""
-	session = request.cookies.get("session_token")
-	if not session or not secrets.compare_digest(session, SESSION_SECRET):
-		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-
-
-def require_bot_token(request: Request):
-	"""Authorize the standalone scheduler without exposing a public trigger."""
-	provided_token = request.headers.get("X-Bizstack-Bot-Token")
-	if not BOT_API_TOKEN or not provided_token or not secrets.compare_digest(provided_token, BOT_API_TOKEN):
-		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bot token")
-
-
-# Read custom agent prompts dynamically from your local folder path
-def read_agent_file(filename: str) -> str:
-	try:
-		with open(f"agent_prompts/{filename}", "r") as f:
-			return f.read().strip()
-	except FileNotFoundError:
-		return "You are an AI transactional assistant for BizStack Perks."
-
-def forward_lead_to_banking_partner(company_name: str, full_name: str, email: str, phone: str, revenue: float, interest: str):
-	LENDER_API_ENDPOINT = os.getenv("COMMERCIAL_LENDER_ENDPOINT", "https://httpbin.org")
-	PARTNER_TRACKER_ID = os.getenv("TA_TRACKER_ID", "TA-9988A-LIVE_TRACKER_ID")
-	payload = {
-		"partner_tracker_id": PARTNER_TRACKER_ID,
-		"business_name": company_name.strip(),
-		"contact_name": full_name.strip(),
-		"contact_email": email.strip().lower(),
-		"contact_phone": phone.strip(),
-		"declared_annual_revenue": revenue,
-		"financing_interest": interest.strip(),
-		"lead_tier": "Enterprise Premium" if revenue >= 1000000.0 else "Standard B2B"
-	}
-	try:
-		response = requests.post(LENDER_API_ENDPOINT, json=payload, timeout=10.0)
-		if response.status_code in (200, 201):
-			log_system_message(f"✅ [Referral Engine] Lead securely routed to bank network for {company_name}.")
-	except Exception as network_exc:
-		log_system_message(f"❌ [Referral Engine] Bank API transmission fault: {str(network_exc)}", "ERROR")
-
-
-# ====================================================
-# 1. CORE VISUAL ROUTING (Dark Mode Gateway & Forms)
-# ====================================================
-
-@app.get("/", response_class=HTMLResponse)
-async def home_terminal(request: Request, submitted: bool = False):
-	"""Serves the public B2B site and consented inquiry form."""
-	return templates.TemplateResponse("index.html", {"request": request, "submitted": submitted})
-
-
-
-def qualify_and_route_lead(company_name: str, full_name: str, email: str, phone: str, revenue: float, interest: str):
-    """
-    Monetization Layer: Prescreens entities for high revenue or financing keywords.
-    High-value leads are securely dispatched to premium commercial partner networks.
-    """
-    LENDER_API_ENDPOINT = os.getenv("COMMERCIAL_LENDER_ENDPOINT", "https://httpbin.org")
-    PARTNER_TRACKER_ID = os.getenv("PARTNER_TRACKER_ID", "AFFILIATE_PREMIUM_LIVE")
-    
-    is_high_revenue = revenue >= 1000000.0
-    is_premium_product = any(kwd in interest.lower() for kwd in ["loan", "credit card", "capital", "prepaid"])
-    
-    if is_high_revenue or is_premium_product:
-        payload = {
-            "partner_tracker_id": PARTNER_TRACKER_ID,
-            "business_name": company_name.strip(),
-            "contact_name": full_name.strip(),
-            "contact_email": email.strip().lower(),
-            "contact_phone": phone.strip(),
-            "declared_annual_revenue": revenue,
-            "financing_interest": interest.strip(),
-            "lead_tier": "Enterprise Premium" if is_high_revenue else "High-Net-Worth Individual"
-        }
-        try:
-            headers = {"X-Partner-Sign": os.getenv("LENDER_API_SECRET", "")}
-            response = requests.post(LENDER_API_ENDPOINT, json=payload, headers=headers, timeout=10.0)
-            if response.status_code in (200, 201):
-                log_system_message(f"💰 [Monetization] Premium lead {company_name} successfully processed.")
-        except Exception as e:
-            log_system_message(f"❌ [Monetization] Lead routing failure: {str(e)}", "ERROR")
 
 @app.post("/contact")
 async def create_business_inquiry(
@@ -964,133 +876,18 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
     finally:
         conn.close()
 
-if __name__ == "__main__":
-    import uvicorn
-    import os
-    # Read the platform allocation PORT string variable, fallback to 8000 locally
-    container_port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
 
 # ====================================================
-# PATCH: LITERAL PATH FALLBACK MATRIX
+# UNIFIED LITERAL PATH ROUTING ENGINE
 # ====================================================
-@app.get("/login", response_class=HTMLResponse)
-async def login_page_fallback(request: Request):
-    """Fallback handler rendering the interface for standard login requests."""
-    return templates.TemplateResponse("login.html", {"request": request})
 
-@app.post("/login")
-@app.post("/api/login")
-async def login_api_fallback(
-    request: Request, 
-    username: str = Form(...), 
-    password: str = Form(...)
-):
-    """Reroutes explicit login request streams straight to your validation core."""
-    if username == MOCK_USERNAME and password == MOCK_PASSWORD:
-        response = RedirectResponse(url="/dashboard", status_code=303)
-        response.set_cookie(
-            key="session_token", value=SESSION_SECRET,
-            httponly=True, secure=True, samesite="lax"
-        )
-        return response
-    return RedirectResponse(url="/login?error=Invalid+Identifier+or+Keyphrase", status_code=303)
 
-# ====================================================
-# PATCH: PERSISTENT STORAGE INTEGRITY ASSURANCE
-# ====================================================
-@app.get("/api/database/verify-and-download")
-async def secure_database_stream_override(request: Request):
-    """Guarantees folder allocation blocks exist before running binary downstreams."""
-    session = request.cookies.get("session_token")
-    if not session or session != SESSION_SECRET:
-        return Response(content="Unauthorized Access Block", status_code=401)
-        
-    data_dir = os.path.dirname(DATABASE_PATH)
-    if data_dir and not os.path.exists(data_dir):
-        os.makedirs(data_dir, exist_ok=True)
-        
-    if not os.path.exists(DATABASE_PATH):
-        # Create an empty db sequence or initialize database parameters on the fly
-        verify_and_build_production_schema_startup()
-        
-    return FileResponse(
-        path=DATABASE_PATH,
-        filename="bizstack_production_backup.db",
-        media_type="application/x-sqlite3"
-    )
-
-# ====================================================
-# PATCH: TWILIO SMS/MESSAGING AUTOMATION ROUTE
-# ====================================================
-@app.post("/twilio/messaging")
-async def incoming_sms_webhook_handler(request: Request):
-    """Processes inbound text message updates from Twilio telephony tracks."""
-    form_data = await request.form()
-    from_number = form_data.get("From", "Unknown")
-    incoming_text = form_data.get("Body", "").strip().lower()
-    
-    log_system_message(f"💬 Incoming message from {from_number}: {incoming_text}", "INFO")
-    
-    # Render direct Twilio Markup Language (TwiML) responses natively 
-    twiml_reply = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<Response>'
-        f'<Message>BizStack Ledger Notice: Received choice "{incoming_text}". Network synchronizations active.</Message>'
-        '</Response>'
-    )
-    return Response(content=twiml_reply, media_type="application/xml")
-
-# ====================================================
-# PATCH: PLAID BANK LINKING COMPLIANCE MATRIX
-# ====================================================
-@app.post("/api/bank/create-link-token")
-async def generate_plaid_link_token(request: Request):
-    """Generates localized single-use validation handshakes for safe bank authentication."""
-    session = request.cookies.get("session_token")
-    if not session or session != SESSION_SECRET:
-        raise HTTPException(status_code=401, detail="Authentication token context missing")
-        
-    # Standard payload structure matching Plaid production layout specs
-    plaid_payload = {
-        "client_id": os.getenv("PLAID_CLIENT_ID"),
-        "secret": os.getenv("PLAID_SECRET"),
-        "user": {"client_user_id": "bizstack_admin_node"},
-        "client_name": "BizStack Perks LLC",
-        "products": ["auth", "transactions"],
-        "country_codes": ["US"],
-        "language": "en"
-    }
-    
-    plaid_env = os.getenv("PLAID_ENV", "sandbox")
-    plaid_url = f"https://{plaid_env}://"
-    
-    try:
-        res = requests.post(plaid_url, json=plaid_payload, timeout=10)
-        return res.json()
-    except Exception as network_err:
-        raise HTTPException(status_code=500, detail=f"Bank linkage tunnel broken: {str(network_err)}")
-
-# ====================================================
-# PATCH: EXPLICIT STANDARD LOGIN PAGE REGISTRATION
-# ====================================================
-@app.get("/login", response_class=HTMLResponse)
-async def serve_login_frontend_view(request: Request):
-    """Explicitly intercept standard user pathways to render the login page template."""
-    return templates.TemplateResponse("login.html", {"request": request})
 
 # ====================================================
 # PATCH: DIRECT ROUTING INTERFACE FOR STANDARD LOGIN
 # ====================================================
-@app.get("/login", response_class=HTMLResponse)
-async def serve_login_view(request: Request):
-    """Explicitly registers literal login paths ahead of execution loops."""
-    return templates.TemplateResponse("login.html", {"request": request})
 
 # ====================================================
 # PATCH: DIRECT ROUTING INTERFACE FOR STANDARD LOGIN
 # ====================================================
-@app.get("/login", response_class=HTMLResponse)
-async def serve_login_view(request: Request):
-    """Explicitly registers literal login paths ahead of execution loops."""
-    return templates.TemplateResponse("login.html", {"request": request})
