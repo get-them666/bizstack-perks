@@ -139,7 +139,7 @@ async def trigger_bot_scrape(request: Request):
                     data = res.json()
                     if data and "name" in data:
                         # Upsert data into local DB node registry
-                        with sqlite3.connect("data/bizstack.db") as conn:
+                        with sqlite3.connect("bizstack.db") as conn:
                             cursor = conn.cursor()
                             cursor.execute(
                                 "INSERT OR REPLACE INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
