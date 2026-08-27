@@ -1054,3 +1054,11 @@ async def generate_plaid_link_token(request: Request):
         return res.json()
     except Exception as network_err:
         raise HTTPException(status_code=500, detail=f"Bank linkage tunnel broken: {str(network_err)}")
+
+# ====================================================
+# PATCH: EXPLICIT STANDARD LOGIN PAGE REGISTRATION
+# ====================================================
+@app.get("/login", response_class=HTMLResponse)
+async def serve_login_frontend_view(request: Request):
+    """Explicitly intercept standard user pathways to render the login page template."""
+    return templates.TemplateResponse("login.html", {"request": request})
