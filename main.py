@@ -178,3 +178,11 @@ async def stream_raw_database_binary(request: Request):
     if os.path.exists(DATABASE_PATH):
         return FileResponse(path=DATABASE_PATH, filename="bizstack_workspace_backup.db", media_type="application/x-sqlite3")
     return Response(content="Database storage binary not found.", status_code=404)
+
+# ====================================================
+# PATCH: EXPLICIT STATIC HOMEPAGE ROUTING FALLBACK
+# ====================================================
+@app.get("/index.html")
+async def static_homepage_fallback(request: Request):
+    """Intercepts legacy index.html paths to keep frontend links healthy."""
+    return RedirectResponse(url="/", status_code=301)
