@@ -954,3 +954,103 @@ if __name__ == "__main__":
     # Read the platform allocation PORT string variable, fallback to 8000 locally
     container_port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
+# ====================================================
+# PATCH: LITERAL PATH FALLBACK MATRIX
+# ====================================================
+@app.get("/login", response_class=HTMLResponse)
+async def login_page_fallback(request: Request):
+    """Fallback handler rendering the interface for standard login requests."""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+@app.post("/api/login")
+async def login_api_fallback(
+    request: Request, 
+    username: str = Form(...), 
+    password: str = Form(...)
+):
+    """Reroutes explicit login request streams straight to your validation core."""
+    if username == MOCK_USERNAME and password == MOCK_PASSWORD:
+        response = RedirectResponse(url="/dashboard", status_code=303)
+        response.set_cookie(
+            key="session_token", value=SESSION_SECRET,
+            httponly=True, secure=True, samesite="lax"
+        )
+        return response
+    return RedirectResponse(url="/login?error=Invalid+Identifier+or+Keyphrase", status_code=303)
+
+# ====================================================
+# PATCH: PERSISTENT STORAGE INTEGRITY ASSURANCE
+# ====================================================
+@app.get("/api/database/verify-and-download")
+async def secure_database_stream_override(request: Request):
+    """Guarantees folder allocation blocks exist before running binary downstreams."""
+    session = request.cookies.get("session_token")
+    if not session or session != SESSION_SECRET:
+        return Response(content="Unauthorized Access Block", status_code=401)
+        
+    data_dir = os.path.dirname(DATABASE_PATH)
+    if data_dir and not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+        
+    if not os.path.exists(DATABASE_PATH):
+        # Create an empty db sequence or initialize database parameters on the fly
+        verify_and_build_production_schema_startup()
+        
+    return FileResponse(
+        path=DATABASE_PATH,
+        filename="bizstack_production_backup.db",
+        media_type="application/x-sqlite3"
+    )
+
+# ====================================================
+# PATCH: TWILIO SMS/MESSAGING AUTOMATION ROUTE
+# ====================================================
+@app.post("/twilio/messaging")
+async def incoming_sms_webhook_handler(request: Request):
+    """Processes inbound text message updates from Twilio telephony tracks."""
+    form_data = await request.form()
+    from_number = form_data.get("From", "Unknown")
+    incoming_text = form_data.get("Body", "").strip().lower()
+    
+    log_system_message(f"💬 Incoming message from {from_number}: {incoming_text}", "INFO")
+    
+    # Render direct Twilio Markup Language (TwiML) responses natively 
+    twiml_reply = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response>'
+        f'<Message>BizStack Ledger Notice: Received choice "{incoming_text}". Network synchronizations active.</Message>'
+        '</Response>'
+    )
+    return Response(content=twiml_reply, media_type="application/xml")
+
+# ====================================================
+# PATCH: PLAID BANK LINKING COMPLIANCE MATRIX
+# ====================================================
+@app.post("/api/bank/create-link-token")
+async def generate_plaid_link_token(request: Request):
+    """Generates localized single-use validation handshakes for safe bank authentication."""
+    session = request.cookies.get("session_token")
+    if not session or session != SESSION_SECRET:
+        raise HTTPException(status_code=401, detail="Authentication token context missing")
+        
+    # Standard payload structure matching Plaid production layout specs
+    plaid_payload = {
+        "client_id": os.getenv("PLAID_CLIENT_ID"),
+        "secret": os.getenv("PLAID_SECRET"),
+        "user": {"client_user_id": "bizstack_admin_node"},
+        "client_name": "BizStack Perks LLC",
+        "products": ["auth", "transactions"],
+        "country_codes": ["US"],
+        "language": "en"
+    }
+    
+    plaid_env = os.getenv("PLAID_ENV", "sandbox")
+    plaid_url = f"https://{plaid_env}://"
+    
+    try:
+        res = requests.post(plaid_url, json=plaid_payload, timeout=10)
+        return res.json()
+    except Exception as network_err:
+        raise HTTPException(status_code=500, detail=f"Bank linkage tunnel broken: {str(network_err)}")
