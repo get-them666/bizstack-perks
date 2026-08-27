@@ -7,6 +7,24 @@ import io
 import os
 import secrets
 import sqlite3
+
+# Automated In-Memory / Local Volume Production Table Matrix Provisioning
+try:
+    with sqlite3.connect("bizstack.db") as init_conn:
+        init_cursor = init_conn.cursor()
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_name TEXT UNIQUE NOT NULL,
+                credit_risk_rating TEXT,
+                annual_revenue REAL
+            )
+        ''')
+        init_conn.commit()
+    print("🎯 SQLite production matrix schemas successfully verified/created.")
+except Exception as schema_err:
+    print(f"Schema Init Error: {schema_err}")
+
 import sys
 import logging
 import requests
