@@ -77,7 +77,7 @@ async def dynamic_root_gateway(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def serve_login_view(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse("login.html", context={"request": request})
 
 @app.post("/login")
 async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
