@@ -1,7 +1,6 @@
 [build]
-builder = "NIXPACKS"
-buildCommand = "python3 generate_perks.py && python3 verify_links.py"
+builder = "Nixpacks"
 
 [deploy]
-startCommand = "python3 -m http.server $PORT"
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "ON_FAILURE"
