@@ -76,8 +76,8 @@ async def dynamic_root_gateway(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/login", response_class=HTMLResponse)
-async def serve_login_view(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+async def serve_login_view(request: Request, error: str = None):
+    return templates.TemplateResponse(request=request, name="login.html", context={"error": error})
 
 @app.post("/login")
 async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -97,9 +97,16 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
     profiles_data = cursor.fetchall()
     total_nodes = len(profiles_data)
     total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, "profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue
-    })
+        
+    return templates.TemplateResponse(
+        request=request, 
+        name="dashboard.html", 
+        context={
+            "profiles": profiles_data, 
+            "total_nodes": total_nodes, 
+            "total_revenue": total_revenue
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn
