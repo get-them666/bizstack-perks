@@ -106,6 +106,22 @@ def verify_and_build_production_schema_startup():
 # one — this is now the only place `app` is created)
 # ====================================================
 
+
+# ====================================================
+# UNIFIED LITERAL PATH ROUTING ENGINE OVERRIDE
+# ====================================================
+@app.get("/login", response_class=HTMLResponse)
+async def forced_literal_login_get(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == MOCK_USERNAME and password == MOCK_PASSWORD:
+        response = RedirectResponse(url="/dashboard", status_code=303)
+        response.set_cookie(key="session_token", value=SESSION_SECRET, httponly=True, secure=True, samesite="lax")
+        return response
+    return RedirectResponse(url="/login?error=Invalid+Identifier+or+Keyphrase", status_code=303)
+
 async def lifespan(app: FastAPI):
     verify_and_build_production_schema_startup()
     yield
