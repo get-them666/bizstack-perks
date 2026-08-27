@@ -5,153 +5,143 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BizStack Client Registry Portal</title>
     <style>
-        :root {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #121824;
-            --accent: #10b981;
-            --text-main: #f8fafc;
-            --text-muted: #64748b;
-            --border-color: #1e293b;
-        }
         body {
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
+            background-color: #0d0f12;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             padding: 40px 20px;
+            margin: 0;
         }
-        .wrapper {
-            max-width: 1100px;
+        .container {
+            max-width: 1200px;
             margin: 0 auto;
         }
-        header {
+        .header-matrix {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 24px;
+            margin-bottom: 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 20px;
-            margin-bottom: 40px;
         }
         h1 {
+            color: #58a6ff;
+            margin: 0 0 8px 0;
             font-size: 1.5rem;
-            font-weight: 700;
             letter-spacing: -0.5px;
-            margin: 0;
-            color: #fff;
         }
-        .status-pill {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent);
+        .status-badge {
+            background-color: rgba(56, 139, 253, 0.15);
+            color: #58a6ff;
             padding: 6px 12px;
-            border-radius: 9999px;
-            font-size: 0.8rem;
+            border-radius: 20px;
+            font-size: 12px;
             font-weight: 600;
+            border: 1px solid rgba(56, 139, 253, 0.4);
         }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background-color: var(--accent);
-            border-radius: 50%;
-        }
-        .search-bar {
+        .search-box {
             width: 100%;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            color: #fff;
-            padding: 14px 16px;
-            border-radius: 8px;
-            font-size: 0.95rem;
+            padding: 12px 16px;
+            background: #0d0f12;
+            border: 1px solid #30363d;
+            color: #f0f6fc;
+            border-radius: 6px;
+            margin-bottom: 24px;
+            font-size: 14px;
             box-sizing: border-box;
-            margin-bottom: 30px;
-            transition: border-color 0.2s;
         }
-        .search-bar:focus {
+        .search-box:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.3);
         }
-        .grid-card {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+        .table-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
             overflow: hidden;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-        }
-        th, td {
-            padding: 16px 24px;
             text-align: left;
         }
+        th, td {
+            padding: 14px 20px;
+            font-size: 14px;
+        }
         th {
-            background-color: #161f30;
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            font-weight: 600;
+            background-color: #21262d;
+            color: #8b949e;
             text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 600;
             letter-spacing: 0.5px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid #30363d;
         }
         td {
-            border-bottom: 1px solid var(--border-color);
-            font-size: 0.9rem;
+            border-bottom: 1px solid #21262d;
         }
         tr:last-child td {
             border-bottom: none;
         }
-        .entity-name {
-            font-weight: 600;
-            color: #fff;
+        tr:hover td {
+            background-color: rgba(139, 148, 158, 0.04);
         }
-        .node-tag {
+        .entity-title {
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .node-id {
             font-family: monospace;
-            color: var(--text-muted);
-            background: #1e293b;
-            padding: 2px 6px;
+            color: #8b949e;
+        }
+        .rating-pill {
+            display: inline-block;
+            padding: 2px 8px;
             border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
-    <div class="wrapper">
-        <header>
+    <div class="container">
+        <div class="header-matrix">
             <div>
-                <h1>BizStack Client Registry</h1>
-                <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 0.9rem;">Real-time synchronized data ingestion distribution feed.</p>
+                <h1>⚡ Client Registry Workspace</h1>
+                <p style="color: #8b949e; margin: 0; font-size: 14px;">Secure, real-time synchronized data ingestion distribution node view.</p>
             </div>
-            <div class="status-pill">
-                <div class="status-dot"></div> Secure Feed Connected
-            </div>
-        </header>
+            <span class="status-badge">🟢 Secure Feed Connected</span>
+        </div>
+        
+        <input type="text" id="matrixSearch" class="search-box" placeholder="Filter commercial entities or node records instantly..." onkeyup="filterClientMatrix()">
 
-        <input type="text" id="filterInput" class="search-bar" placeholder="Search commercial entities or registration codes..." onkeyup="runGridFilter()">
-
-        <div class="grid-card">
+        <div class="table-card">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 150px;">Node Code</th>
-                        <th>Corporate Entity Name</th>
-                        <th>Risk Assessment Rating</th>
+                        <th style="width: 120px;">Node ID</th>
+                        <th>Commercial Entity Name</th>
+                        <th>Credit Risk Security Rating</th>
                     </tr>
                 </thead>
-                <tbody id="profileRows">
+                <tbody id="clientTableRows">
                     {% for profile in profiles %}
                     <tr>
-                        <td><span class="node-tag">NODE-00{{ profile[0] }}</span></td>
-                        <td>{{ profile[1] }}</span></td>
+                        <td class="node-id">#NODE-00{{ profile[0] }}</td>
+                        {{ profile[1] }}</td>
                         <td>
-                            <span style="color: {% if 'Low' in profile[2] %}#34d399{% else %}#f59e0b{% endif %}; font-weight: 500;">
+                            <span class="rating-pill" style="background: rgba(46, 160, 67, 0.15); color: #56d364; border: 1px solid rgba(46, 160, 67, 0.4);">
                                 {{ profile[2] }}
                             </span>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 40px;">No operational profile datasets currently synchronized.</td>
+                        <td colspan="3" style="text-align: center; color: #8b949e; padding: 40px;">No operational profile datasets currently synchronized.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -160,12 +150,12 @@
     </div>
 
     <script>
-        function runGridFilter() {
-            let filter = document.getElementById('filterInput').value.toUpperCase();
-            let rows = document.getElementById('profileRows').getElementsByTagName('tr');
+        function filterClientMatrix() {
+            let input = document.getElementById('matrixSearch').value.toUpperCase();
+            let rows = document.getElementById('clientTableRows').getElementsByTagName('tr');
             for (let i = 0; i < rows.length; i++) {
-                let text = rows[i].textContent || rows[i].innerText;
-                rows[i].style.display = text.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+                let txt = rows[i].textContent || rows[i].innerText;
+                rows[i].style.display = txt.toUpperCase().indexOf(input) > -1 ? "" : "none";
             }
         }
     </script>
