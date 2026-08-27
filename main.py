@@ -108,7 +108,17 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
         }
     )
 
-if __name__ == "__main__":
+
+# ====================================================
+# PATCH: ALL-INCLUSIVE HOME & LEGACY PATH MATCHING
+# ====================================================
+@app.get("/index")
+@app.get("/index.html")
+async def multi_path_home_fallback(request: Request):
+    """Catch all variations of home keywords to route safely back to root domain."""
+    return RedirectResponse(url="/", status_code=301)
+
+if __name__ == '__main__':
     import uvicorn
     container_port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
@@ -182,10 +192,6 @@ async def stream_raw_database_binary(request: Request):
 # ====================================================
 # PATCH: EXPLICIT STATIC HOMEPAGE ROUTING FALLBACK
 # ====================================================
-@app.get("/index.html")
-async def static_homepage_fallback(request: Request):
-    """Intercepts legacy index.html paths to keep frontend links healthy."""
-    return RedirectResponse(url="/", status_code=301)
 
 # ====================================================
 # PATCH: STRIPE SECURE PAYMENT CHECKOUT MATRIX
