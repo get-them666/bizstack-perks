@@ -151,3 +151,11 @@ async def trigger_bot_scrape(request: Request):
     # Browser form submission fallback: Redirect back to the dashboard visually
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/dashboard", status_code=303)
+
+@app.get("/logout")
+async def process_administrative_logout():
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse(url="/login", status_code=303)
+    # Clear the session cookie to securely log out the user session
+    response.delete_cookie(key="session")
+    return response
