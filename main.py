@@ -58,6 +58,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 
+# ====================================================
+# PATCH: ALL-INCLUSIVE PUBLIC HOME ROUTING CORE
+# ====================================================
+@app.get("/")
+@app.get("/index")
+@app.get("/index.html")
+async def serve_public_homepage(request: Request):
+    """Intercepts public traffic to load your frontend index template view."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
 def get_db():
     conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
     try:
@@ -112,7 +123,6 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
 # ====================================================
 # PATCH: ALL-INCLUSIVE HOME & LEGACY PATH MATCHING
 # ====================================================
-@app.get("/index")
 @app.get("/index.html")
 async def multi_path_home_fallback(request: Request):
     """Catch all variations of home keywords to route safely back to root domain."""
