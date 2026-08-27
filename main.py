@@ -97,7 +97,7 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
     profiles_data = cursor.fetchall()
     total_nodes = len(profiles_data) 
     total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
-    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue})
+    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue, "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x")})
 
 if __name__ == "__main__":
     import uvicorn
@@ -118,6 +118,12 @@ import httpx
 @app.post("/api/bot/scrape")
 async def trigger_bot_scrape(request: Request):
     token = request.headers.get("X-Bot-Token")
+    if not token:
+        try:
+            form_data = await request.form()
+            token = form_data.get("bot_token")
+        except Exception:
+            pass
     if not token or token != os.getenv("BOT_API_TOKEN"):
         return {"status": "ERROR", "message": "Unauthorized client agent"}
 
