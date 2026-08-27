@@ -1,3 +1,11 @@
+import os
+# --- AUTOMATED PIPELINE REPAIR INITIALIZER ---
+if not os.path.exists("data"):
+    os.makedirs("data", exist_ok=True)
+if not os.path.exists(os.path.join("data", "perks.json")):
+    with open(os.path.join("data", "perks.json"), "w") as f:
+        f.write("[]")
+# ---------------------------------------------
 import json
 import os
 
