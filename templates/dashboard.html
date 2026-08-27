@@ -389,5 +389,17 @@
     © 2026 BizStack Perks LLC. All institutional data models verified.
 </footer>
 
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('status') === 'sync_launched') {
+        const badge = document.querySelector('.badge, [class*="status"], span[text*="NOT RUN"]');
+        // Find elements containing the text and swap it to active states
+        document.body.innerHTML = document.body.innerHTML.replace('NOT RUN', '<span style="background: #eab308; color: black; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">RUNNING...</span>');
+    }
+});
+</script>
 </body>
+
 </html>
