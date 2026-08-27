@@ -103,3 +103,12 @@ if __name__ == "__main__":
     import uvicorn
     container_port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
+@app.post("/api/bot/run")
+async def receive_bot_handshake(request: Request):
+    try:
+        payload = await request.json()
+        print(f"Received bot agent sync signal: {payload}")
+        return {"status": "ACKNOWLEDGED", "received_payload": payload}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
