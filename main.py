@@ -112,3 +112,13 @@ if __name__ == "__main__":
     import uvicorn
     container_port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
+
+# ====================================================
+# PATCH: DIRECT ROUTING INTERFACE FOR STANDARD LOGOUT
+# ====================================================
+@app.get("/logout")
+async def explicit_production_logout():
+    """Clears system authorization context tokens and routes back to login."""
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie("session_token")
+    return response
