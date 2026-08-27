@@ -36,3 +36,19 @@ data/
 __pycache__/
 venv/
 .DS_Store
+
+# --- BACKEND PERSISTENCE & SYSTEM CACHE ---
+node_modules/
+.env
+.env.production
+.env.local
+__pycache__/
+*.pyc
+api_server.log
+data/*.db
+data/*.db-journal
+
+# --- BACKGROUND CLOUD CLIENT OVERRIDES ---
+.tmp.driveupload/
+.DS_Store
+.icloud
