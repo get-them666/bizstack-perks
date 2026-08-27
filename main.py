@@ -24,6 +24,35 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+# ====================================================
+# RESTORED DEFINITIVE PATH ROUTING ENGINE
+# ====================================================
+@app.get("/login", response_class=HTMLResponse)
+async def forced_literal_login_get(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    # Pull constants directly from environment safe fallbacks
+    mock_user = os.getenv("BIZSTACK_ADMIN_USER", "admin")
+    mock_pass = os.getenv("BIZSTACK_ADMIN_PASS", "MatrixSecurePerks2026!")
+    session_secret = os.getenv("SESSION_COOKIE_SECRET", "MatrixSecurePerks2026!")
+    
+    if username == mock_user and password == mock_pass:
+        response = RedirectResponse(url="/dashboard", status_code=303)
+        response.set_cookie(key="session_token", value=session_secret, httponly=True, secure=True, samesite="lax")
+        return response
+    return RedirectResponse(url="/login?error=Invalid+Credentials", status_code=303)
+
+@app.get("/", response_class=HTMLResponse)
+async def dynamic_root_gateway(request: Request):
+    session_secret = os.getenv("SESSION_COOKIE_SECRET", "MatrixSecurePerks2026!")
+    session = request.cookies.get("session_token")
+    if session and session == session_secret:
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
+
 templates = Jinja2Templates(directory="templates")
 
 # --- CENTRAL ROUTE GUARDRAILS & ASSISTANTS ---
