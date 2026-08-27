@@ -10,7 +10,7 @@ import sqlite3
 
 # Automated In-Memory / Local Volume Production Table Matrix Provisioning
 try:
-    with sqlite3.connect("bizstack.db") as init_conn:
+    with sqlite3.connect("data/bizstack.db") as init_conn:
         init_cursor = init_conn.cursor()
         init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS profiles (
@@ -152,7 +152,7 @@ async def trigger_bot_scrape(request: Request):
     for ticker in tickers:
         ticker = ticker.strip()
         try:
-            with sqlite3.connect("bizstack.db") as conn:
+            with sqlite3.connect("data/bizstack.db") as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT OR REPLACE INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
@@ -182,7 +182,7 @@ async def process_administrative_logout():
 async def handle_profile_registry_endpoint(request: Request):
     import sqlite3
     try:
-        with sqlite3.connect("bizstack.db") as conn:
+        with sqlite3.connect("data/bizstack.db") as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles")
