@@ -112,3 +112,42 @@ async def receive_bot_handshake(request: Request):
         return {"status": "ACKNOWLEDGED", "received_payload": payload}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
+
+import httpx
+
+@app.post("/api/bot/scrape")
+async def trigger_bot_scrape(request: Request):
+    # Verify the incoming bot secret token
+    token = request.headers.get("X-Bot-Token")
+    if not token or token != os.getenv("BOT_API_TOKEN"):
+        return {"status": "ERROR", "message": "Unauthorized client agent"}
+
+    api_key = os.getenv("FINNHUB_DATA_KEY")
+    if not api_key or "your_actual" in api_key:
+        return {"status": "ERROR", "message": "Valid Finnhub key missing"}
+
+    tickers = os.getenv("FINNHUB_TICKERS", "AAPL,MSFT,GOOGL").split(",")
+    synced = []
+
+    try:
+        async with httpx.AsyncClient() as client:
+            for ticker in tickers:
+                ticker = ticker.strip()
+                url = f"https://finnhub.io{ticker}&token={api_key}"
+                res = await client.get(url)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data and "name" in data:
+                        # Upsert data into local DB node registry
+                        with sqlite3.connect("data/bizstack.db") as conn:
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "INSERT OR REPLACE INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
+                                (data["name"], "Medium Risk", data.get("marketCapitalization", 500000) * 1000)
+                            )
+                            conn.commit()
+                        synced.append(ticker)
+        
+        return {"status": "SUCCESS", "synced_tickers": synced}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
