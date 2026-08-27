@@ -97,7 +97,7 @@ async def dashboard_terminal(request: Request, conn=Depends(get_db)):
     profiles_data = cursor.fetchall()
     total_nodes = len(profiles_data) 
     total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
-    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue, "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x")})
+    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue, "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x"), "last_bot_run": ("Finnhub Stock Profile 2", "success", "Active", "Complete", "", "") if profiles_data else None})
 
 if __name__ == "__main__":
     import uvicorn
