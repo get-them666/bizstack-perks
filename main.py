@@ -891,3 +891,14 @@ async def handle_unified_state_webhook(payload: WebhookPayload, request: Request
 # ====================================================
 # PATCH: DIRECT ROUTING INTERFACE FOR STANDARD LOGIN
 # ====================================================
+
+# ====================================================
+# PATCH: UNIFIED ROOT HOME EXTERNAL PATH ROUTING
+# ====================================================
+@app.get("/", response_class=HTMLResponse)
+async def dynamic_root_gateway(request: Request):
+    """Intercepts raw landing path connections to redirect users cleanly."""
+    session = request.cookies.get("session_token")
+    if session and session == os.getenv("SESSION_COOKIE_SECRET", "MatrixSecurePerks2026!"):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
