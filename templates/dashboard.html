@@ -394,9 +394,9 @@
 document.addEventListener("DOMContentLoaded", function() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('status') === 'sync_launched') {
-        const badge = document.querySelector('.badge, [class*="status"], span[text*="NOT RUN"]');
+        const badge = document.querySelector('.badge, [class*="status"], span[text*="{% if profiles %}ACTIVE (SYNCED){% else %}NOT RUN{% endif %}"]');
         // Find elements containing the text and swap it to active states
-        document.body.innerHTML = document.body.innerHTML.replace('NOT RUN', '<span style="background: #eab308; color: black; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">RUNNING...</span>');
+        document.body.innerHTML = document.body.innerHTML.replace('{% if profiles %}ACTIVE (SYNCED){% else %}NOT RUN{% endif %}', '<span style="background: #eab308; color: black; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">RUNNING...</span>');
     }
 });
 </script>
