@@ -186,3 +186,32 @@ async def stream_raw_database_binary(request: Request):
 async def static_homepage_fallback(request: Request):
     """Intercepts legacy index.html paths to keep frontend links healthy."""
     return RedirectResponse(url="/", status_code=301)
+
+# ====================================================
+# PATCH: STRIPE SECURE PAYMENT CHECKOUT MATRIX
+# ====================================================
+@app.post("/api/stripe/create-checkout")
+async def create_stripe_payment_session(request: Request):
+    """Generates secure single-use checkout sessions mapped to your live domain."""
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe API keys are unassigned in environment parameters")
+        
+    try:
+        checkout_session = stripe.checkout.session.create(
+            payment_method_types=['card', 'us_bank_account'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {'name': 'BizStack Perks Operator Access'},
+                    'unit_amount': 2900,  # Value in cents ($29.00)
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url='https://bizstackperks.com',
+            cancel_url='https://bizstackperks.com',
+        )
+        return {"checkout_url": checkout_session.url}
+    except Exception as stripe_error:
+        raise HTTPException(status_code=400, detail=str(stripe_error))
