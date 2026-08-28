@@ -71,9 +71,9 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
-    @patch("main.stripe.checkout.Session.create")
-    def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_create):
-        mock_create.return_value = {
+    @patch("main.stripe.StripeClient")
+    def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
+        mock_session = {
             "id": "cs_test_123",
             "url": "https://checkout.stripe.com/pay/cs_test_123",
             "customer": "cus_123",
@@ -84,6 +84,9 @@ class BizStackPerksAppTests(unittest.TestCase):
             "amount_total": 4900,
             "currency": "usd",
         }
+        mock_client = Mock()
+        mock_client.checkout.sessions.create.return_value = mock_session
+        mock_stripe_client_cls.return_value = mock_client
 
         response = self.client.post(
             "/api/checkout/create",
@@ -132,7 +135,8 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Welcome to BizStack Perks", response.text)
         self.assertIn("/twilio/voice/menu", response.text)
 
-    def test_twilio_status_persists_call_events(self):
+    @patch("main.RequestValidator.validate", return_value=True)
+    def test_twilio_status_persists_call_events(self, _mock_validate):
         response = self.client.post(
             "/twilio/voice/status",
             data={
