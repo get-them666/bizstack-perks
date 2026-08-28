@@ -90,3 +90,20 @@ async def catch_all_fallback(catchall: str):
     if catchall.startswith("api/"):
         return {"detail": "Not Found"}, 404
     return FileResponse("dist/index.html")
+
+# --- BIZSTACK THEME AND STATIC ROUTING FIX ---
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# 1. Mount your static directory so theme CSS, JS, and image assets load properly
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 2. Add the catch-all fallback route targeting dashboard.html inside templates
+@app.get("/{catchall:path}")
+async def catch_all_fallback(catchall: str):
+    if catchall.startswith("api/"):
+        return {"detail": "Not Found"}, 404
+        
+    return FileResponse("templates/dashboard.html")
