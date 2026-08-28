@@ -594,3 +594,7 @@ async def trigger_outbound_call(
         message=payload.message,
     )
     return {"call_sid": call.sid, "status": getattr(call, "status", "queued")}
+
+@app.get("/privacy", response_class=FileResponse)
+async def read_privacy():
+    return "static/privacy.html"
