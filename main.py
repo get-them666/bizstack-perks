@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 import re
 import secrets
@@ -594,6 +595,12 @@ async def trigger_outbound_call(
         message=payload.message,
     )
     return {"call_sid": call.sid, "status": getattr(call, "status", "queued")}
+
+@app.get("/privacy", response_class=FileResponse)
+async def read_privacy():
+    return "static/privacy.html"
+=======
+>>>>>>> 44aea48ace24fb4a5795e01e5cd5db5668d356cc
 
 @app.get("/privacy", response_class=FileResponse)
 async def read_privacy():
