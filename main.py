@@ -3,10 +3,8 @@ import secrets
 import sqlite3
 from datetime import datetime
 from fastapi import FastAPI, Form, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Gather
 
 app = FastAPI(title="BizStack Perks")
@@ -19,11 +17,6 @@ DATABASE_PATH = "bizstack.db"
 MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
 MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "password123")
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
-
-# Twilio setup
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_PHONE = os.getenv("TWILIO_PHONE_NUMBER", "")
 
 def get_db():
     conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
@@ -147,19 +140,6 @@ async def get_profiles(request: Request, conn=Depends(get_db)):
         ]
     }
 
-@app.post("/api/profile/delete/{profile_id}")
-async def delete_profile(profile_id: int, request: Request, conn=Depends(get_db)):
-    """Delete a profile"""
-    session = request.cookies.get("session_token")
-    if not session or session != SESSION_SECRET:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
-    conn.commit()
-    
-    return {"status": "deleted"}
-
 # ==================== TWILIO VOICE ====================
 
 @app.post("/twilio/inbound")
@@ -187,7 +167,6 @@ async def handle_input(Digits: str = Form(None), SpeechResult: str = Form(None),
     choice = Digits or (SpeechResult.lower() if SpeechResult else "").strip()
     
     if "1" in choice:
-        # Read company info
         cursor = conn.cursor()
         cursor.execute("SELECT company_name, annual_revenue FROM profiles LIMIT 1")
         company = cursor.fetchone()
@@ -201,8 +180,7 @@ async def handle_input(Digits: str = Form(None), SpeechResult: str = Form(None),
     
     elif "2" in choice:
         response.say("Transferring you to an agent. Please hold.")
-        # In production, transfer to a real number or queue
-        response.dial("+1234567890")  # Replace with your agent number
+        response.dial("+1234567890")
     
     else:
         response.say("I didn't catch that. Please try again.")
