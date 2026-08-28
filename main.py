@@ -298,7 +298,7 @@ async def checkout_success(request: Request, session_id: Optional[str] = None):
 
 @app.get("/checkout/cancel", response_class=HTMLResponse)
 async def checkout_cancel(request: Request):
-return templates.TemplateResponse(request=request, name="checkout_cancel.html", context={})
+    return templates.TemplateResponse(request=request, name="checkout_cancel.html", context={})
 
 
 # ==================== AUTHENTICATION ====================

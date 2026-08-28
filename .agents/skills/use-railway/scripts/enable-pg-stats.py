@@ -21,7 +21,7 @@ import sys
 import re
 from typing import List
 
-from dal import run_psql_query, info, error, confirm_with_user
+from dal import run_psql_query, run_railway_command, info, error, confirm_with_user
 
 
 def parse_preload_libraries(value: str) -> List[str]:
