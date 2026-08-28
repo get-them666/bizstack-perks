@@ -74,3 +74,19 @@ async def create_checkout_session(request: Request):
         return {"status": "success", "url": session.url}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# --- FRONTEND MONOREPO ROUTING FIX ---
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Map the static asset directory to serve compiled CSS, JS, and media
+if os.path.exists("dist"):
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+# Wildcard route to handle client-side page refreshes gracefully
+@app.get("/{catchall:path}")
+async def catch_all_fallback(catchall: str):
+    if catchall.startswith("api/"):
+        return {"detail": "Not Found"}, 404
+    return FileResponse("dist/index.html")
