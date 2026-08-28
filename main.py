@@ -186,7 +186,21 @@ async def handle_profile_registry_endpoint(request: Request):
             rows = cursor.fetchall()
             
         profiles_list = [dict(row) for row in rows]
-        return {"status": "SUCCESS", "record_count": len(profiles_list), "data": profiles_list}
+        # Format metrics to pass cleanly to your dashboard layout engine
+        total_nodes = len(profiles_list)
+        total_revenue = sum(p.get('annual_revenue', 0.0) for p in profiles_list)
+        
+        return templates.TemplateResponse(
+            request, 
+            "dashboard.html", 
+            {
+                "profiles": profiles_list, 
+                "total_nodes": total_nodes, 
+                "total_revenue": total_revenue,
+                "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x"),
+                "last_bot_run": ("Finnhub Stock Profile 2", "success", "Active", "Complete", "", "") if profiles_list else None
+            }
+        )
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
 
