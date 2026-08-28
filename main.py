@@ -450,12 +450,9 @@ async def get_ledger_with_fee():
         gross_volume = 14250.75
         pending_escrow = 840.00
         claims_count = 312
-        
-        # 3. Apply your 3% monetization cut
         commission_rate = 0.03
         your_cut = gross_volume * commission_rate
         user_payouts = gross_volume - your_cut
-        
         return {
             "status": "success",
             "metrics": {
