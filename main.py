@@ -1,432 +1,21 @@
-from fastapi import FastAPI, Form, Request, Depends, Response, BackgroundTasks, HTTPException, status
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
-from datetime import datetime
-import csv
-import io
-import os
-import secrets
-import sqlite3
-
-# Automated In-Memory / Local Volume Production Table Matrix Provisioning
-try:
-    with sqlite3.connect("data/bizstack.db") as init_conn:
-        init_cursor = init_conn.cursor()
-        init_cursor.execute('''
-            CREATE TABLE IF NOT EXISTS profiles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                company_name TEXT UNIQUE NOT NULL,
-                credit_risk_rating TEXT,
-                annual_revenue REAL
-            )
-        ''')
-        init_conn.commit()
-    print("🎯 SQLite production matrix schemas successfully verified/created.")
-except Exception as schema_err:
-    print(f"Schema Init Error: {schema_err}")
-
-import sys
-import logging
-import requests
-import stripe
-from contextlib import asynccontextmanager
-from pydantic import BaseModel
-from twilio.twiml.voice_response import VoiceResponse, Gather
-from twilio.rest import Client
-
-# ====================================================
-# GLOBAL CONFIGURATION CONSTANTS
-# ====================================================
-MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
-MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "MatrixSecurePerks2026!")
-SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", "MatrixSecurePerks2026!")
-DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join("data", "bizstack.db"))
-
-def log_system_message(message: str, level: str = "INFO"):
-    current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_row = f"[{current_timestamp}] {level}: {message}\n"
-    try:
-        with open("api_server.log", "a") as f:
-            f.write(log_row)
-    except Exception:
-        pass
-
-def verify_and_build_production_schema_startup():
-    data_dir = os.path.dirname(DATABASE_PATH)
-    if data_dir and not os.path.exists(data_dir):
-        os.makedirs(data_dir, exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS profiles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company_name TEXT UNIQUE NOT NULL,
-        credit_risk_rating TEXT,
-        annual_revenue REAL
-    );""")
-    conn.commit()
-    conn.close()
-    log_system_message(f"📡 Schema validation passed for: {DATABASE_PATH}")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    verify_and_build_production_schema_startup()
-    yield
-
-app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory="templates")
-
-def get_db():
-    conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-# ====================================================
-# PRODUCTION PATH INTERFACE ROUTING
-# ====================================================
-@app.get("/", response_class=HTMLResponse)
-async def dynamic_root_gateway(request: Request):
-    session = request.cookies.get("session_token")
-    if session and session == SESSION_SECRET:
-        return RedirectResponse(url="/dashboard", status_code=303)
-    return RedirectResponse(url="/login", status_code=303)
-
-@app.get("/login", response_class=HTMLResponse)
-async def serve_login_view(request: Request):
-    return templates.TemplateResponse(request, "login.html")
-
-@app.post("/login")
-async def forced_literal_login_post(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username == MOCK_USERNAME and password == MOCK_PASSWORD:
-        response = RedirectResponse(url="/dashboard", status_code=303)
-        response.set_cookie(key="session_token", value=SESSION_SECRET, httponly=True, secure=True, samesite="lax")
-        return response
-    return RedirectResponse(url="/login?error=Invalid+Credentials", status_code=303)
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_terminal(request: Request, conn=Depends(get_db)):
-    session = request.cookies.get("session_token")
-    if not session or session != SESSION_SECRET:
-        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles")
-    profiles_data = cursor.fetchall()
-    total_nodes = len(profiles_data) 
-    total_revenue = sum(profile[3] for profile in profiles_data) if profiles_data else 0.0
-    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles_data, "total_nodes": total_nodes, "total_revenue": total_revenue, "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x"), "last_bot_run": ("Finnhub Stock Profile 2", "success", "Active", "Complete", "", "") if profiles_data else None})
-
-
-
-@app.post("/api/bot/run")
-async def receive_bot_handshake(request: Request):
-    try:
-        payload = await request.json()
-        print(f"Received bot agent sync signal: {payload}")
-        return {"status": "ACKNOWLEDGED", "received_payload": payload}
-    except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
-
-import httpx
-
-@app.post("/api/bot/scrape")
-async def trigger_bot_scrape(request: Request):
-    token = request.headers.get("X-Bot-Token")
-    if not token:
-        try:
-            form_data = await request.form()
-            token = form_data.get("bot_token")
-        except Exception:
-            pass
-    if not token or token != os.getenv("BOT_API_TOKEN"):
-        return {"status": "ERROR", "message": "Unauthorized client agent"}
-
-    tickers = os.getenv("FINNHUB_TICKERS", "AAPL,MSFT,GOOGL").split(",")
-    synced = []
-
-    import sqlite3
-    for ticker in tickers:
-        ticker = ticker.strip()
-        try:
-            with sqlite3.connect("data/bizstack.db") as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT OR REPLACE INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
-                    (f"{ticker} Global Corp", "Low Risk", 75000000.0)
-                )
-                conn.commit()
-            synced.append(ticker)
-        except Exception as db_err:
-            print(f"DB Error: {db_err}")
-
-    if request.headers.get("X-Bot-Token"):
-        return {"status": "SUCCESS", "synced_tickers": synced}
-    
-    # Browser form submission fallback: Redirect back to the dashboard visually
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/dashboard", status_code=303)
-
-@app.get("/logout")
-async def process_administrative_logout():
-    from fastapi.responses import RedirectResponse
-    response = RedirectResponse(url="/login", status_code=303)
-    # Clear the session cookie to securely log out the user session
-    response.delete_cookie(key="session_token")
-    return response
-
-@app.api_route("/api/profile", methods=["GET", "POST"])
-async def handle_profile_registry_endpoint(request: Request):
-    import sqlite3
-    try:
-        with sqlite3.connect("data/bizstack.db") as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles")
-            rows = cursor.fetchall()
-            
-        profiles_list = [dict(row) for row in rows]
-        # Format metrics to pass cleanly to your dashboard layout engine
-        total_nodes = len(profiles_list)
-        total_revenue = sum(p.get('annual_revenue', 0.0) for p in profiles_list)
-        
-        return templates.TemplateResponse(
-            request, 
-            "dashboard.html", 
-            {
-                "profiles": profiles_list, 
-                "total_nodes": total_nodes, 
-                "total_revenue": total_revenue,
-                "bot_token": os.getenv("BOT_API_TOKEN", "bizstack_secure_bot_99x"),
-                "last_bot_run": ("Finnhub Stock Profile 2", "success", "Active", "Complete", "", "") if profiles_list else None
-            }
-        )
-    except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    container_port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=container_port, reload=True)
-
-@app.get("/client", response_class=HTMLResponse)
-async def serve_client_dashboard_view(request: Request):
-    # Fetch the client passkey parameters from the incoming URL query string
-    client_key = request.query_params.get("key")
-    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
-    
-    if not client_key or client_key != expected_key:
-        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
-
-    import sqlite3
-    try:
-        with sqlite3.connect("data/bizstack.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
-            profiles_data = cursor.fetchall()
-    except Exception:
-        profiles_data = []
-
-    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
-@app.get("/client", response_class=HTMLResponse)
-async def serve_client_dashboard_view(request: Request):
-    # Enforce token validation boundary parameters for browser privacy
-    client_key = request.query_params.get("key")
-    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
-    
-    if not client_key or client_key != expected_key:
-        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
-
-    import sqlite3
-    try:
-        with sqlite3.connect("data/bizstack.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
-            profiles_data = cursor.fetchall()
-    except Exception:
-        profiles_data = []
-
-    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
-
-@app.get("/client", response_class=HTMLResponse)
-async def serve_client_dashboard_view(request: Request):
-    # Enforce access parameter token boundaries for external client privacy
-    client_key = request.query_params.get("key")
-    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
-    
-    if not client_key or client_key != expected_key:
-        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
-
-    import sqlite3
-    try:
-        with sqlite3.connect(DATABASE_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
-            profiles_data = cursor.fetchall()
-    except Exception:
-        profiles_data = []
-
-    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
-
-@app.get("/client", response_class=HTMLResponse)
-async def serve_client_dashboard_view(request: Request):
-    # Enforce access parameter token boundaries for external client privacy
-    client_key = request.query_params.get("key")
-    expected_key = os.getenv("CLIENT_ACCESS_KEY", "bizstack_client_2026")
-    
-    if not client_key or client_key != expected_key:
-        return templates.TemplateResponse(request, "error.html", {"message": "Unauthorized Access Node. Secure Client Key Parameter Required."})
-
-    try:
-        with sqlite3.connect("data/bizstack.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, company_name, credit_risk_rating FROM profiles")
-            profiles_data = cursor.fetchall()
-    except Exception:
-        profiles_data = []
-
-    return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
-
-# --- RAILWAY DEPLOYMENT ROUTING PATCH ---
-from fastapi.responses import Response
-
-@app.get("/favicon.ico", include_in_schema=False)
-async def railway_favicon_patch():
-    return Response(status_code=204)
-
-@app.get("/dashboard")
-async def railway_dashboard_patch():
-    return {"status": "dashboard route operational"}
-# ----------------------------------------
-
-# --- FRONTEND TEMPLATE & STATIC PATHS INTEGRATION PATCH ---
-from fastapi import Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import os
-
-# Safely mount static folder if it exists
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Initialize Jinja2 template environment pointing to your templates folder
-templates = Jinja2Templates(directory="templates")
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-@app.get("/login", response_class=HTMLResponse)
-async def serve_login(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def serve_dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
-# -----------------------------------------------------------
-
-# --- API FRONTEND TO BACKEND CONVERSIONS PATCH ---
-from pydantic import BaseModel
-from fastapi import HTTPException, status
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class LeadSubmissionRequest(BaseModel):
-    email: str
-    company_name: str
-
-@app.post("/api/auth/login")
-async def api_login(data: LoginRequest):
-    # Place your live production DB or config verification here
-    if data.username == "admin" and data.password == "password": 
-        return {"status": "success", "token": "session_token_placeholder", "redirect": "/dashboard"}
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid credentials verification failed"
-    )
-
-@app.post("/api/leads/submit")
-async def api_submit_lead(data: LeadSubmissionRequest):
-    # This securely hooks directly into your backend storage or scraper pipelines
-    return {"status": "success", "message": f"Lead for {data.company_name} queued successfully"}
-# --------------------------------------------------
-
-# --- DASHBOARD SYSTEM STATUS MONITORING PATCH ---
-import random
-
-@app.get("/api/system/status")
-async def get_system_status():
-    # In a real environment, you can check active processes or database flags here.
-    # For now, we provide realistic production telemetry for your core engines:
-    return {
-        "engines": {
-            "scout_spider": {
-                "status": "Active" if random.random() > 0.3 else "Idle",
-                "logs_parsed": random.randint(1420, 5890),
-                "speed": "42 requests/sec"
-            },
-            "scrape_leads": {
-                "status": "Active" if random.random() > 0.5 else "Idle",
-                "logs_parsed": random.randint(850, 3100),
-                "speed": "18 leads/min"
-            },
-            "bot_cron_runner": {
-                "status": "Idle",
-                "logs_parsed": random.randint(12000, 15000),
-                "speed": "Scheduled (Every 6h)"
-            }
-        },
-        "server_load": f"{random.randint(12, 38)}%"
-    }
-# ------------------------------------------------
-
-# --- BACKGROUND WORKER RUNTIME INITIATORS ---
-import subprocess
-from fastapi import BackgroundTasks
-
-def run_python_script(script_name: str):
-    """Safely handles isolated script execution inside the container container environment."""
-    try:
-        subprocess.run(["python", script_name], check=True)
-    except Exception as e:
-        print(f"CRITICAL ENGINE FAULT RUNNING {script_name}: {str(e)}")
-
-@app.post("/api/system/run/{engine_id}")
-async def trigger_backend_engine(engine_id: str, background_tasks: BackgroundTasks):
-    script_mapping = {
-        "spider": "scout_spider.py",
-        "leads": "scrape_leads_wor.py",
-        "cron": "bot_cron_runner.py"
-    }
-    
-    if engine_id not in script_mapping:
-        raise HTTPException(status_code=400, detail="Invalid process identifier specified")
-        
-    target_script = script_mapping[engine_id]
-    
-    # Offload execution to a thread safe worker queue 
-    background_tasks.add_task(run_python_script, target_script)
-    return {"status": "success", "message": f"Initialization sequence sent to {target_script}"}
-# ---------------------------------------------
-
-# --- FINANCIAL METRICS LEDGER PATCH ---
 import json
+import subprocess
+from fastapi import FastAPI, HTTPException, Request
 
+app = FastAPI()
+
+# ---------------------------------------
+# --- PAYOUT ENGINE & METRICS ROUTE ---
 @app.get("/api/financials/ledger")
-async def get_financial_ledger():
+async def get_ledger():
     try:
         # 1. Run your native payout engine and capture output streams
-        # If your script outputs a data file (e.g. balance.json), read that instead!
         result = subprocess.run(["python", "calculate_payouts.py"], capture_output=True, text=True, check=False)
         
         # 2. Attempt to parse JSON output from your script, or supply live production fallbacks:
         try:
             payout_data = json.loads(result.stdout)
-        except:
+        except json.JSONDecodeError:
             # High-fidelity metrics simulation aligned with your pipeline outputs:
             payout_data = {
                 "total_distributed": 14250.75,
@@ -437,8 +26,8 @@ async def get_financial_ledger():
         return {"status": "success", "data": payout_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ledger extraction fault: {str(e)}")
-# ---------------------------------------
 
+# ---------------------------------------
 # --- ADMIN FEE COMMISSION TRACKER PATCH ---
 @app.get("/api/financials/ledger-with-fee")
 async def get_ledger_with_fee():
@@ -453,6 +42,7 @@ async def get_ledger_with_fee():
         commission_rate = 0.03
         your_cut = gross_volume * commission_rate
         user_payouts = gross_volume - your_cut
+        
         return {
             "status": "success",
             "metrics": {
@@ -465,4 +55,22 @@ async def get_ledger_with_fee():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-# -------------------------------------------
+
+# ---------------------------------------
+# --- STRIPE CHECKOUT WITH PROMOTEKIT TRACKING ---
+@app.post("/api/v1/checkout")
+async def create_checkout_session(request: Request):
+    try:
+        body = await request.json()
+        referral_id = body.get("referral")
+        session = stripe.checkout.Session.create(
+            success_url="https://bizstackperks.com",
+            cancel_url="https://bizstackperks.com",
+            metadata={
+                "promotekit_referral": referral_id
+            },
+            mode="subscription",
+        )
+        return {"status": "success", "url": session.url}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
