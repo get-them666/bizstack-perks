@@ -107,3 +107,24 @@ async def catch_all_fallback(catchall: str):
         return {"detail": "Not Found"}, 404
         
     return FileResponse("templates/dashboard.html")
+
+# --- BIZSTACK PERKS THEME & PATH ROUTING MATRIX ---
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# 1. Mount static directories so styles and assets load perfectly
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 2. Main Onboarding Gateway Route (Root URL)
+@app.get("/")
+async def serve_onboarding_gateway():
+    return FileResponse("templates/index.html")
+
+# 3. Wildcard Catch-All Workspace Route (For /dashboard and other pages)
+@app.get("/{catchall:path}")
+async def workspace_fallback(catchall: str):
+    if catchall.startswith("api/") or catchall.startswith("static/"):
+        return {"detail": "Endpoint Not Found"}, 404
+    return FileResponse("templates/dashboard.html")
