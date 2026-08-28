@@ -1,30 +1,36 @@
-from flask import Flask, request, jsonify, render_template
-import sqlite3
+from fastapi import FastAPI, Form, responses
+import stripe
+import os
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route('/api/v1/submit-lead', methods=['POST'])
-def process_financial_lead():
-    name = request.form.get('client_name')
-    credit = request.form.get('credit_score')
-    amount = request.form.get('loan_amount')
-    
-    if not name or not amount:
-        return jsonify({"status": "ERROR", "message": "Missing criteria parameters."}), 400
+# Read your credentials from the Railway environment panel
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+DOMAIN = os.getenv("DOMAIN", "https://bizstackperks.com")
 
-    conn = sqlite3.connect('bizstack.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO leads (name, credit_tier, requested_capital) 
-        VALUES (?, ?, ?)
-    ''', (name, credit, float(amount)))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({
-        "status": "INITIALIZED",
-        "message": f"Lead profile for {name} synchronized into database grid."
-    })
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+@app.post("/api/checkout/create")
+async def create_checkout_session(email: str = Form(None), business_name: str = Form(None)):
+    try:
+        # Generate a standard Stripe dynamic product checkout window
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            customer_email=email,
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': f"BizStack Perks Entry Plan - {business_name or 'Client Portal'}",
+                    },
+                    'unit_amount': 4900, # Value in cents ($49.00)
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f"{DOMAIN}/dashboard?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{DOMAIN}/?error=checkout_cancelled",
+        )
+        return responses.RedirectResponse(url=session.url, status_code=303)
+    except Exception as e:
+        print(f"[STRIPE RUNTIME ERROR]: {str(e)}")
+        # If credentials are wrong, this keeps the site from breaking entirely
+        return responses.RedirectResponse(url=f"{DOMAIN}/?error=Unable+to+start+checkout", status_code=303)
