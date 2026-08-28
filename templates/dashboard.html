@@ -1,20 +1,21 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BizStack Perks Dashboard</title>
-    <!-- Tailwind Engine -->
     <script src="https://jsdelivr.net"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 font-mono antialiased p-6">
     <div class="max-w-7xl mx-auto space-y-6">
         <h1 class="text-xl font-black text-slate-400 tracking-wider">BIZSTACK ADMIN CONSOLE v1.0</h1>
         
-        <!-- ⚡ STEM WORKER INFRASTRUCTURE TELEMETRY -->
-        <div id="monitoring-panel" class="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-md">
+        <!-- TELEMETRY_MARKER -->
+                <!-- ⚡ SYSTEM WORKER INFRASTRUCTURE TELEMETRY -->
+        <div id="monitoring-panel" class="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
             <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
-                <h2 class="text-xs font-bold tracking-wider text-emerald-400">⚡ STEM WORKER INFRASTRUCTURE TELEMETRY</h2>
+                <h2 class="text-sm font-bold tracking-wider text-emerald-400">⚡ STEM WORKER INFRASTRUCTURE TELEMETRY</h2>
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                     <span class="text-xs text-slate-400">LOAD: <span id="load-display">22%</span></span>
@@ -23,44 +24,168 @@
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <!-- Scout Spider Card -->
-                <div id="card-spider" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
-                        <span>scout_spider.py</span>
-                        <span id="spider-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
-                    </div>
-                    <div class="text-xs space-y-1 text-slate-500">
-                        <p>Lines Parsed: <span id="spider-parsed" class="text-slate-300">4,630</span></p>
-                        <p>Throughput: <span id="spider-speed" class="text-slate-300">42 requests/sec</span></p>
+                <div id="card-spider" class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                            <span>scout_spider.py</span>
+                            <span id="spider-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                        </div>
+                        <div class="text-xs space-y-1 text-slate-500">
+                            <p>Lines Parsed: <span id="spider-parsed" class="text-slate-300">4,630</span></p>
+                            <p>Throughput: <span id="spider-speed" class="text-slate-300">42 requests/sec</span></p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Scrape Leads Card -->
-                <div id="card-leads" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
-                        <span>scrape_leads_wor.py</span>
-                        <span id="leads-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
-                    </div>
-                    <div class="text-xs space-y-1 text-slate-500">
-                        <p>Lines Parsed: <span id="leads-parsed" class="text-slate-300">2,715</span></p>
-                        <p>Throughput: <span id="leads-speed" class="text-slate-300">18 leads/min</span></p>
+                <div id="card-leads" class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                            <span>scrape_leads_wor.py</span>
+                            <span id="leads-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                        </div>
+                        <div class="text-xs space-y-1 text-slate-500">
+                            <p>Lines Parsed: <span id="leads-parsed" class="text-slate-300">2,715</span></p>
+                            <p>Throughput: <span id="leads-speed" class="text-slate-300">18 leads/min</span></p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Bot Cron Runner Card -->
-                <div id="card-cron" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
-                        <span>bot_cron_runner.py</span>
-                        <span id="cron-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
-                    </div>
-                    <div class="text-xs space-y-1 text-slate-500">
-                        <p>Total Runs: <span id="cron-parsed" class="text-slate-300">12,079</span></p>
-                        <p>Schedule: <span id="cron-speed" class="text-slate-300">Scheduled (Every 6h)</span></p>
+                <div id="card-cron" class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                            <span>bot_cron_runner.py</span>
+                            <span id="cron-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                        </div>
+                        <div class="text-xs space-y-1 text-slate-500">
+                            <p>Total Runs: <span id="cron-parsed" class="text-slate-300">12,079</span></p>
+                            <p>Schedule: <span id="cron-speed" class="text-slate-300">Scheduled (Every 6h)</span></p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- NEXT_PATCH_TARGET_MARKER -->
+        <!-- LEDGER_MARKER -->
+		        <!-- 💵 BIZSTACK REVENUE & PAYOUT LEDGER -->
+        <div id="financial-ledger" class="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+                <h2 class="text-sm font-bold tracking-wider text-indigo-400">💵 BIZSTACK REVENUE & PAYOUT LEDGER</h2>
+                <span class="text-[10px] bg-slate-950 text-slate-500 border border-slate-800 px-2 py-0.5 rounded">MONETIZATION MODULE: ACTIVE</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <!-- Gross Processed -->
+                <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Gross Volume</span>
+                    <span class="text-lg font-extrabold text-slate-300 mt-2" id="ledger-gross">$0.00</span>
+                </div>
+
+                <!-- Your 3% Cut -->
+                <div class="p-4 bg-slate-950 border-emerald-500/30 bg-gradient-to-b from-slate-950 to-emerald-950/20 rounded-xl flex flex-col justify-between border-2 shadow-lg shadow-emerald-950/40">
+                    <span class="text-xs text-emerald-400 font-bold tracking-wide uppercase">💰 Your 3% Cut</span>
+                    <span class="text-2xl font-black text-emerald-400 mt-2" id="ledger-commission">$0.00</span>
+                </div>
+
+                <!-- Net User Payouts -->
+                <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Net User Claims</span>
+                    <span class="text-lg font-extrabold text-indigo-400 mt-2" id="ledger-net">$0.00</span>
+                </div>
+
+                <!-- Pending Escrow -->
+                <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Pending Escrow</span>
+                    <span class="text-lg font-extrabold text-amber-400 mt-2" id="ledger-pending">$0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCRIPTS_MARKER -->
+            <!-- 🔌 AUTOMATED API INTEGRATION LOGIC -->
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // 1. Inject Run Engine Action Buttons Automatically
+        const engineCards = {
+            spider: document.getElementById('card-spider'),
+            leads: document.getElementById('card-leads'),
+            cron: document.getElementById('card-cron')
+        };
+
+        Object.entries(engineCards).forEach(([id, cardEl]) => {
+            if (!cardEl) return;
+            const btn = document.createElement('button');
+            btn.innerText = "RUN ENGINE";
+            btn.className = "mt-4 w-full text-[11px] font-bold py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 hover:bg-slate-950 hover:text-emerald-400 hover:border-emerald-600 transition duration-200 cursor-pointer";
+            
+            btn.addEventListener('click', async () => {
+                btn.innerText = "LAUNCHING...";
+                btn.disabled = true;
+                try {
+                    const res = await fetch(`/api/system/run/${id}`, { method: 'POST' });
+                    if (res.ok) {
+                        btn.innerText = "ENGINE RUNNING";
+                        setTimeout(() => { btn.innerText = "RUN ENGINE"; btn.disabled = false; }, 4000);
+                    } else { throw new Error(); }
+                } catch {
+                    btn.innerText = "FAULT DETECTED";
+                    setTimeout(() => { btn.innerText = "RUN ENGINE"; btn.disabled = false; }, 3000);
+                }
+            });
+            cardEl.appendChild(btn);
+        });
+
+        // 2. Continuous Background Telemetry Polling Loop
+        async function updateTelemetry() {
+            try {
+                const res = await fetch('/api/system/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('load-display').innerText = data.server_load;
+                
+                const config = {
+                    spider: { key: 'scout_spider', statusEl: 'spider-status', parsedEl: 'spider-parsed', speedEl: 'spider-speed' },
+                    leads: { key: 'scrape_leads', statusEl: 'leads-status', parsedEl: 'leads-parsed', speedEl: 'leads-speed' },
+                    cron: { key: 'bot_cron_runner', statusEl: 'cron-status', parsedEl: 'cron-parsed', speedEl: 'cron-speed' }
+                };
+
+                Object.values(config).forEach(cfg => {
+                    const engine = data.engines[cfg.key];
+                    const el = document.getElementById(cfg.statusEl);
+                    el.innerText = engine.status.toUpperCase();
+                    el.className = engine.status === "Active" 
+                        ? "px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold"
+                        : "px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800";
+                    document.getElementById(cfg.parsedEl).innerText = engine.logs_parsed.toLocaleString();
+                    document.getElementById(cfg.speedEl).innerText = engine.speed;
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        // 3. Financial Metrics Streaming Ledger Pipeline
+        async function fetchMonetizationData() {
+            try {
+                const res = await fetch('/api/financials/ledger-with-fee');
+                if (!res.ok) return;
+                const body = await res.json();
+                const data = body.metrics;
+
+                document.getElementById('ledger-gross').innerText = `$${data.gross_volume.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('ledger-commission').innerText = `$${data.your_commission_cut.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('ledger-net').innerText = `$${data.user_payouts.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('ledger-pending').innerText = `$${data.pending_escrow.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            } catch (err) { console.error(err); }
+        }
+
+        updateTelemetry();
+        fetchMonetizationData();
+        setInterval(updateTelemetry, 3000);
+        setInterval(fetchMonetizationData, 10000);
+    });
+    </script>
+
+
 
     </div>
 </body>
