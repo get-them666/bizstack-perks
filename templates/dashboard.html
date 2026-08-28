@@ -11,6 +11,55 @@
     <div class="max-w-7xl mx-auto space-y-6">
         <h1 class="text-xl font-black text-slate-400 tracking-wider">BIZSTACK ADMIN CONSOLE v1.0</h1>
         
+        <!-- ⚡ STEM WORKER INFRASTRUCTURE TELEMETRY -->
+        <div id="monitoring-panel" class="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-md">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+                <h2 class="text-xs font-bold tracking-wider text-emerald-400">⚡ STEM WORKER INFRASTRUCTURE TELEMETRY</h2>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <span class="text-xs text-slate-400">LOAD: <span id="load-display">22%</span></span>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Scout Spider Card -->
+                <div id="card-spider" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                        <span>scout_spider.py</span>
+                        <span id="spider-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-500">
+                        <p>Lines Parsed: <span id="spider-parsed" class="text-slate-300">4,630</span></p>
+                        <p>Throughput: <span id="spider-speed" class="text-slate-300">42 requests/sec</span></p>
+                    </div>
+                </div>
+
+                <!-- Scrape Leads Card -->
+                <div id="card-leads" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                        <span>scrape_leads_wor.py</span>
+                        <span id="leads-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-500">
+                        <p>Lines Parsed: <span id="leads-parsed" class="text-slate-300">2,715</span></p>
+                        <p>Throughput: <span id="leads-speed" class="text-slate-300">18 leads/min</span></p>
+                    </div>
+                </div>
+
+                <!-- Bot Cron Runner Card -->
+                <div id="card-cron" class="p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
+                        <span>bot_cron_runner.py</span>
+                        <span id="cron-status" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 text-slate-400 border border-slate-800">IDLE</span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-500">
+                        <p>Total Runs: <span id="cron-parsed" class="text-slate-300">12,079</span></p>
+                        <p>Schedule: <span id="cron-speed" class="text-slate-300">Scheduled (Every 6h)</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- NEXT_PATCH_TARGET_MARKER -->
 
     </div>
