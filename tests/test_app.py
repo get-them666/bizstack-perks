@@ -71,9 +71,10 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
-    @patch("main.stripe.checkout.Session.create")
-    def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_create):
-        mock_create.return_value = {
+    @patch("main.stripe.StripeClient")
+    def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
+        mock_stripe_client = Mock()
+        mock_stripe_client.checkout.sessions.create.return_value = {
             "id": "cs_test_123",
             "url": "https://checkout.stripe.com/pay/cs_test_123",
             "customer": "cus_123",
@@ -84,6 +85,7 @@ class BizStackPerksAppTests(unittest.TestCase):
             "amount_total": 4900,
             "currency": "usd",
         }
+        mock_stripe_client_cls.return_value = mock_stripe_client
 
         response = self.client.post(
             "/api/checkout/create",
@@ -133,15 +135,21 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("/twilio/voice/menu", response.text)
 
     def test_twilio_status_persists_call_events(self):
+        validator = self.main.RequestValidator("auth-token")
+        callback_data = {
+            "CallSid": "CA_status_123",
+            "CallStatus": "completed",
+            "Direction": "inbound",
+            "From": "+15551234567",
+            "To": "+15550000000",
+        }
+        callback_url = "http://testserver/twilio/voice/status"
+        signature = validator.compute_signature(callback_url, callback_data)
+
         response = self.client.post(
             "/twilio/voice/status",
-            data={
-                "CallSid": "CA_status_123",
-                "CallStatus": "completed",
-                "Direction": "inbound",
-                "From": "+15551234567",
-                "To": "+15550000000",
-            },
+            data=callback_data,
+            headers={"X-Twilio-Signature": signature},
         )
 
         self.assertEqual(response.status_code, 200)
