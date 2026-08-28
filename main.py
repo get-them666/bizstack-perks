@@ -274,9 +274,9 @@ app = FastAPI(title="BizStack Perks", lifespan=lifespan)
 async def home(request: Request, error: Optional[str] = None):
     """Homepage."""
     return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
+        request=request,
+        name="index.html",
+        context={
             "error": error,
             "checkout_enabled": stripe_ready(),
             "offer_price_display": OFFER_PRICE_DISPLAY,
@@ -290,14 +290,15 @@ async def home(request: Request, error: Optional[str] = None):
 @app.get("/checkout/success", response_class=HTMLResponse)
 async def checkout_success(request: Request, session_id: Optional[str] = None):
     return templates.TemplateResponse(
-        "checkout_success.html",
-        {"request": request, "session_id": session_id},
+        request=request,
+        name="checkout_success.html",
+        context={"session_id": session_id},
     )
 
 
 @app.get("/checkout/cancel", response_class=HTMLResponse)
 async def checkout_cancel(request: Request):
-    return templates.TemplateResponse("checkout_cancel.html", {"request": request})
+return templates.TemplateResponse(request=request, name="checkout_cancel.html", context={})
 
 
 # ==================== AUTHENTICATION ====================
@@ -306,7 +307,7 @@ async def checkout_cancel(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: Optional[str] = None):
     """Login page."""
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse(request=request, name="login.html", context={"error": error})
 
 
 @app.post("/login")
@@ -345,7 +346,7 @@ async def dashboard(request: Request, conn=Depends(get_db)):
     profiles = conn.execute(
         "SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles ORDER BY created_at DESC"
     ).fetchall()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "profiles": profiles})
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={"profiles": profiles})
 
 
 # ==================== PROFILE API ====================
