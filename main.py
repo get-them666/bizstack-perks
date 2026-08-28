@@ -454,7 +454,6 @@ async def get_ledger_with_fee():
         # 3. Apply your 3% monetization cut
         commission_rate = 0.03
         your_cut = gross_volume * commission_rate
-    user_payouts = gross_volume - your_cut
         user_payouts = gross_volume - your_cut
         
         return {
