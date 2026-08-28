@@ -245,8 +245,8 @@
 
             <div class="cta-row">
                 <form class="cta-form" id="checkout-form" method="post" action="/api/checkout/create">
-                    <input type="text" name="business_name" placeholder="Business name (optional)" aria-label="Business name (optional)">
-                    <input type="email" name="email" placeholder="Email for receipts (optional)" aria-label="Email for receipts (optional)">
+                    <input type="text" name="business_name" placeholder="Business name (optional)" aria-label="Business name" autocomplete="organization">
+                    <input type="email" name="email" placeholder="Email for receipts (optional)" aria-label="Email address" autocomplete="email">
                     <button class="button button-primary" type="submit">Start checkout</button>
                 </form>
                 <a class="button button-secondary" href="{{ support_phone_href }}">Call or contact</a>
