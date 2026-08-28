@@ -383,3 +383,32 @@ async def get_system_status():
         "server_load": f"{random.randint(12, 38)}%"
     }
 # ------------------------------------------------
+
+# --- BACKGROUND WORKER RUNTIME INITIATORS ---
+import subprocess
+from fastapi import BackgroundTasks
+
+def run_python_script(script_name: str):
+    """Safely handles isolated script execution inside the container container environment."""
+    try:
+        subprocess.run(["python", script_name], check=True)
+    except Exception as e:
+        print(f"CRITICAL ENGINE FAULT RUNNING {script_name}: {str(e)}")
+
+@app.post("/api/system/run/{engine_id}")
+async def trigger_backend_engine(engine_id: str, background_tasks: BackgroundTasks):
+    script_mapping = {
+        "spider": "scout_spider.py",
+        "leads": "scrape_leads_wor.py",
+        "cron": "bot_cron_runner.py"
+    }
+    
+    if engine_id not in script_mapping:
+        raise HTTPException(status_code=400, detail="Invalid process identifier specified")
+        
+    target_script = script_mapping[engine_id]
+    
+    # Offload execution to a thread safe worker queue 
+    background_tasks.add_task(run_python_script, target_script)
+    return {"status": "success", "message": f"Initialization sequence sent to {target_script}"}
+# ---------------------------------------------
