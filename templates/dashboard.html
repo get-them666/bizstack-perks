@@ -547,3 +547,56 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 </script>
+
+<!-- 📊 LIVE FINANCIAL LEDGER STATUS PROFILE -->
+<div id="financial-ledger" class="max-w-5xl mx-auto mt-6 p-6 bg-slate-900 border border-slate-800 rounded-2xl text-slate-100 font-mono">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h2 class="text-md font-bold tracking-wider text-indigo-400">💵 BIZSTACK PERKS FINANCIAL BALANCE LEDGER</h2>
+        <span class="text-[10px] bg-slate-950 text-slate-500 border border-slate-800 px-2 py-0.5 rounded" id="ledger-timestamp">FETCHING ENGINE...</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Distribution Card -->
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+            <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Total Distributed</span>
+            <span class="text-xl font-extrabold text-emerald-400 mt-2" id="ledger-total">$0.00</span>
+        </div>
+
+        <!-- Pending Escrow Card -->
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+            <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Pending Escrow</span>
+            <span class="text-xl font-extrabold text-amber-400 mt-2" id="ledger-pending">$0.00</span>
+        </div>
+
+        <!-- Conversion Counter Card -->
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl flex flex-col justify-between">
+            <span class="text-xs text-slate-500 font-bold tracking-wide uppercase">Active Perks Claimed</span>
+            <span class="text-xl font-extrabold text-indigo-400 mt-2" id="ledger-count">0 Claims</span>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    async function loadLedgerData() {
+        try {
+            const response = await fetch('/api/financials/ledger');
+            if (!response.ok) return;
+            const resBody = await response.json();
+            const metrics = resBody.data;
+
+            // Update UI elements with localized formatting
+            document.getElementById('ledger-total').innerText = `$${metrics.total_distributed.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('ledger-pending').innerText = `$${metrics.pending_clearing.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('ledger-count').innerText = `${metrics.perks_claimed_count} Items`;
+            document.getElementById('ledger-timestamp').innerText = `ENGINE LOG: ${metrics.last_calculation_run.toUpperCase()}`;
+        } catch (error) {
+            console.error("Ledger communication failure:", error);
+        }
+    }
+
+    // Initialize layout values and poll updates alongside script telemetry
+    loadLedgerData();
+    setInterval(loadLedgerData, 10000); // Polled updates run every 10 seconds
+});
+</script>
