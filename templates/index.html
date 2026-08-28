@@ -3,345 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BizStack Perks | Financial institution intelligence</title>
-    <style>
-        /* Base Dark Matrix Theme */
-        :root {
-            --bg-deep: #050708;
-            --bg-card: #0d1114;
-            --accent-neon: #00E676;
-            --accent-glow: rgba(0, 230, 118, 0.15);
-            --border-color: #1e262c;
-            --text-primary: #ffffff;
-            --text-secondary: #8a99a6;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-deep);
-            color: var(--text-primary);
-            min-height: 100vh;
-            padding: 40px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 1000px;
-        }
-
-        /* Header Accent Styling */
-        header {
-            margin-bottom: 50px;
-            width: 100%;
-        }
-
-        .header-wrapper {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 20px;
-        }
-
-        .brand-trigger {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 800;
-            font-size: 1.5rem;
-            letter-spacing: 2px;
-            color: var(--text-primary);
-            margin-bottom: 4px;
-        }
-
-        .brand-trigger span {
-            color: var(--accent-neon);
-        }
-
-        header p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            text-align: left;
-        }
-
-        /* Telemetry Clock Element */
-        .telemetry-node {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border-color);
-            padding: 10px 18px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: var(--accent-neon);
-            letter-spacing: 1px;
-            box-shadow: 0 0 15px rgba(0, 230, 118, 0.03);
-        }
-
-        /* 3-Column Core Features Matrix Grid */
-        .perks-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-            margin-bottom: 50px;
-        }
-
-        .matrix-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 32px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .matrix-card:hover {
-            border-color: var(--accent-neon);
-            box-shadow: 0 12px 40px var(--accent-glow);
-            transform: translateY(-4px);
-        }
-
-        .card-meta {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            font-weight: 600;
-            margin-bottom: 16px;
-        }
-
-        .matrix-card h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 12px;
-            letter-spacing: 0.5px;
-        }
-
-        .matrix-card p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            line-height: 1.6;
-            margin-bottom: 24px;
-        }
-
-        /* Interactive Form Matrix Component */
-        .ingestion-terminal {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        }
-
-        .ingestion-terminal h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .input-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .input-wrapper label {
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-            letter-spacing: 0.5px;
-        }
-
-        input {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 14px 16px;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            outline: none;
-            transition: border-color 0.2s ease;
-        }
-
-        input:focus {
-            border-color: var(--accent-neon);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .consent {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            color: var(--text-secondary);
-            font-size: 0.82rem;
-            line-height: 1.45;
-            margin-bottom: 20px;
-        }
-
-        .consent input { width: auto; margin-top: 2px; }
-        .notice { color: var(--accent-neon); margin: 0 0 20px; font-size: 0.9rem; }
-
-        /* Cyberpunk Button Implementation */
-        .action-link, button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            background: transparent;
-            color: var(--accent-neon);
-            font-size: 0.85rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-            transition: color 0.2s ease;
-            text-align: left;
-        }
-
-        .action-link:hover {
-            color: var(--text-primary);
-        }
-
-        button {
-            background: var(--accent-neon);
-            color: #000000;
-            padding: 16px 32px;
-            border-radius: 8px;
-            width: 100%;
-            transition: opacity 0.2s ease;
-        }
-
-        button:hover {
-            opacity: 0.9;
-        }
-
-        footer {
-            margin-top: 60px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            border-top: 1px solid var(--border-color);
-            padding-top: 24px;
-            width: 100%;
-        }
-    </style>
+    <title>BizStack Perks - Business Benefits Platform</title>
+    <script src="https://jsdelivr.net"></script>
 </head>
-<body>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased">
 
-<div class="container">
-    <header>
-        <div class="header-wrapper">
-            <div>
-                <div class="brand-trigger">⚡ BIZSTACK <span>PERKS</span></div>
-                <p>Financial institution intelligence for B2B teams</p>
+    <!-- 🌐 Navigation Bar -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="text-xl font-bold tracking-tight text-indigo-600">BizStack Perks</div>
+            <div class="flex items-center space-x-6">
+                <a href="#features" class="text-sm font-medium text-slate-600 hover:text-slate-900">Features</a>
+                <a href="/login" class="text-sm font-medium text-slate-600 hover:text-slate-900">Sign In</a>
+                <a href="/login" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition">Get Started</a>
             </div>
-            <!-- Dynamic JavaScript Matrix Clock -->
-            <div class="telemetry-node">
-                SYSTEM TIME: <span id="matrix-clock">00:00:00 UTC</span>
-            </div>
+        </div>
+    </nav>
+
+    <!-- 🚀 Hero Section -->
+    <header class="max-w-5xl mx-auto px-6 py-20 text-center">
+        <h1 class="text-5xl font-extrabold tracking-tight text-slate-900 sm:text-6xl max-w-3xl mx-auto leading-tight">
+            Unlock premium business perks automatically
+        </h1>
+        <p class="mt-6 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+            Maximize your operational efficiency. Streamline your automation, monitor background scrapers, and manage your custom business rewards effortlessly.
+        </p>
+        <div class="mt-10 flex justify-center space-x-4">
+            <a href="/login" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-indigo-100 hover:bg-indigo-700 transition">
+                Access System Controls
+            </a>
+            <a href="#features" class="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-xl font-medium hover:bg-slate-50 transition">
+                Learn More
+            </a>
         </div>
     </header>
 
-    <!-- Visual Matrix Cards -->
-    <div class="perks-grid">
-        <div class="matrix-card">
-            <div>
-                <div class="card-meta">01 / B2B INTELLIGENCE</div>
-                <h3>Market signal monitoring</h3>
-                <p>Track public company and market signals for financial-institution research. No consumer credit applications or consumer-report data are collected.</p>
+    <!-- ⚙️ Features Grid Section -->
+    <section id="features" class="bg-white border-t border-b border-slate-200 py-20">
+        <div class="max-w-7xl mx-auto px-6">
+            <h2 class="text-3xl font-bold text-center tracking-tight text-slate-900">Engineered for Automated Execution</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+                <!-- Feature 1 -->
+                <div class="p-6 border border-slate-100 rounded-2xl bg-slate-50/50">
+                    <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold mb-4">🕷️</div>
+                    <h3 class="text-lg font-bold text-slate-900">Scout Lead Generation</h3>
+                    <p class="text-sm text-slate-600 mt-2 leading-relaxed">Run multi-threaded crawler infrastructure directly inside your secure ecosystem to source real-time lead updates.</p>
+                </div>
+                <!-- Feature 2 -->
+                <div class="p-6 border border-slate-100 rounded-2xl bg-slate-50/50">
+                    <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold mb-4">💸</div>
+                    <h3 class="text-lg font-bold text-slate-900">Payout Distribution</h3>
+                    <p class="text-sm text-slate-600 mt-2 leading-relaxed">Instantly process, audit, and optimize balance allocations using server-side script calculations.</p>
+                </div>
+                <!-- Feature 3 -->
+                <div class="p-6 border border-slate-100 rounded-2xl bg-slate-50/50">
+                    <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold mb-4">🛡️</div>
+                    <h3 class="text-lg font-bold text-slate-900">Enterprise Ready</h3>
+                    <p class="text-sm text-slate-600 mt-2 leading-relaxed">Hosted inside a private sandbox deployment with strict operational logging and automated fallback support.</p>
+                </div>
             </div>
-            <a href="/commercial" class="action-link" style="color: #00E676; font-weight: bold;">Open Ingestion Terminal →</a>
         </div>
+    </section>
 
-        <div class="matrix-card">
-            <div>
-                <div class="card-meta">02 / PARTNER WORKFLOWS</div>
-                <h3>Institutional programs</h3>
-                <p>Organize consented B2B inquiries and lender-partner workflows for reviewed, compliant service programs.</p>
-            </div>
-            <a href="/dashboard" class="action-link">Request Consult Matrix →</a>
+    <!-- 🏷️ Footer -->
+    <footer class="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400">
+        <div>&copy; 2026 BizStack Perks. All rights reserved.</div>
+        <div class="flex space-x-4 mt-4 sm:mt-0">
+            <a href="/login" class="hover:text-slate-600">Admin Control</a>
         </div>
+    </footer>
 
-        <div class="matrix-card">
-            <div>
-                <div class="card-meta">03 / AUDITABLE OPERATIONS</div>
-                <h3>Transparent automation</h3>
-                <p>See the source, timing, and outcome of every market-data sync from the operator dashboard.</p>
-            </div>
-            <a href="/dashboard" class="action-link">View Connected Node →</a>
-        </div>
-    </div>
-
-    <div class="ingestion-terminal" id="terminal">
-        <h2>⚡ Request a B2B consultation</h2>
-        {% if submitted %}<p class="notice">Thanks—your request was received. Our team will follow up using the details you provided.</p>{% endif %}
-        <form action="/contact" method="POST">
-            <div class="form-grid">
-                <div class="input-wrapper">
-                    <label>Your name</label>
-                    <input type="text" name="full_name" placeholder="e.g. Jordan Smith" minlength="2" maxlength="160" required>
-                </div>
-                <div class="input-wrapper">
-                    <label>Company</label>
-                    <input type="text" name="company_name" placeholder="e.g. Acme Bank" minlength="2" maxlength="160" required>
-                </div>
-                <div class="input-wrapper">
-                    <label>Work email</label>
-                    <input type="email" name="work_email" placeholder="you@company.com" maxlength="254" required>
-                </div>
-                <div class="input-wrapper">
-                    <label>Phone (optional)</label>
-                    <input type="tel" name="phone" placeholder="Business number" maxlength="40">
-                </div>
-                <div class="input-wrapper">
-                    <label>What are you interested in?</label>
-                    <input type="text" name="interest" placeholder="e.g. B2B market intelligence" minlength="2" maxlength="160" required>
-                </div>
-            </div>
-            <label class="consent"><input type="checkbox" name="marketing_consent" value="true" required> I agree that BizStack Perks may contact me about this B2B request. I understand I should not submit loan applications, credit reports, or other sensitive consumer financial information here.</label>
-            <button type="submit">Request consultation</button>
-        </form>
-    </div>
-</div>
-
-<footer>
-    © 2026 BizStack Perks LLC. All institutional data models verified.
-</footer>
-
-<!-- Clock Execution Thread Script -->
-<script>
-    function updateMatrixClock() {
-        const now = new Date();
-        const timeString = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-        const clockElement = document.getElementById('matrix-clock');
-        if (clockElement) {
-			clockElement.textContent = timeString;
-			}
-			}
-	setInterval(updateMatrixClock, 1000);
-	updateMatrixClock();
-</script>
+</body>
+</html>
