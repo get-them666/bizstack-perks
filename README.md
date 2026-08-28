@@ -1,90 +1,139 @@
-# ⚡ BIZSTACK PERKS UNIFIED OPERATIONAL NODE
+# BizStack Perks
 
-A secure, high-performance production platform built with **FastAPI**, **SQLite**, and **Twilio Voice Integration**. Designed with a high-contrast, premium carbon-black matrix layout, this system processes commercial ingestion details, aggregates financial ledger metrics, maintains strict authorization access states, and manages dynamic telephony automation channels.
+BizStack Perks is a FastAPI app with a conversion-focused homepage, admin dashboard, Stripe Checkout payment flow, and Twilio Voice inbound/outbound call support.
 
----
+## Features
 
-## 📊 Core Features
+- Homepage with pricing, FAQ, and live CTA wired to the backend checkout route
+- Stripe Checkout session creation plus verified webhook processing
+- SQLite persistence for checkout session/payment state and Twilio call events
+- Twilio Voice inbound menu, status callback handling, and outbound call trigger API
+- Simple admin dashboard for profile management
 
-*   **Cyberpunk Visual Interface:** Hardened frontend layout system featuring dark UI telemetry grid structures, live search sorting engines, real-time UTC network clocks, and clean data submission pipelines.
-*   **Secure Session Authentication:** Crypto-hardened portal walls using secure administrative tracking cookies configured with advanced web safety settings (`HttpOnly`, `Secure`, `SameSite=Lax`).
-*   **Dynamic Telephony Core:** Real-time inbound webhook engines utilizing TwiML instruction matrices to intercept calls, process automated keypad responses, log events to database nodes, and trigger outbound broadcast loops.
-*   **Data Integrity & Automation:** Automated asynchronous backend lifecycle scheduler that backs up database instances every 24 hours, alongside integrated CSV report generation, manual database download pathways, and custom HTML error deck fallbacks.
-*   **Server-Side Boundary Guards:** Input verification limits protecting local endpoints from injection vulnerabilities or text block overflow spam.
+## Required environment variables
 
----
+### Core app
 
-## 📂 File Architecture Matrix
-
-```text
-bizstack-perks/
-├── agent_prompts/
-│   └── calling_rules.txt     # System vocal scripts & business rules
-├── templates/
-│   ├── index.html            # Dark-themed onboarding form gateway
-│   ├── login.html            # Secure gateway entry screen
-│   ├── dashboard.html        # Matrix table monitoring workspace
-│   └── error.html            # Custom cyber-themed exception fallback page
-├── main.py                   # Central ASGI runtime backend engine
-├── requirements.txt          # Production application library dependencies
-├── Procfile                  # Cloud infrastructure build instruction command
-└── .gitignore                # Restricts local database logs & keys from escaping
-```
-
----
-
-## 🚀 Rapid Local Deployment
-
-### 1. Initialize Your Environment & Dependencies
-Ensure you are inside your virtual environment, then execute:
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Local Environment Tokens
 ```bash
 export BIZSTACK_ADMIN_USER="admin"
 export BIZSTACK_ADMIN_PASS="password123"
+export SESSION_COOKIE_SECRET="replace-with-a-long-random-secret"
+export PUBLIC_BASE_URL="https://your-domain.example"
+export BOT_API_TOKEN="replace-with-a-long-random-api-token"
+```
+
+### Stripe
+
+```bash
+export STRIPE_SECRET_KEY="sk_live_or_test_..."
+export STRIPE_PUBLISHABLE_KEY="pk_live_or_test_..."
+export STRIPE_WEBHOOK_SECRET="whsec_..."
+export PRICE_ID="price_..."
+```
+
+Optional display copy for the homepage pricing card:
+
+```bash
+export OFFER_PRICE_DISPLAY="$49 / month"
+```
+
+### Twilio Voice
+
+```bash
 export TWILIO_ACCOUNT_SID="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export TWILIO_AUTH_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-export TWILIO_NUMBER="+15550000000"
-export BOT_API_TOKEN="use-a-long-random-value"
-export FINNHUB_DATA_KEY="your-finnhub-api-key"
-# Optional: defaults to AAPL,MSFT,GOOGL
-export FINNHUB_TICKERS="AAPL,MSFT,GOOGL"
+export TWILIO_PHONE_NUMBER="+15550000000"
 ```
 
-### 3. Initialize the Database Registry Matrix
+### Optional app storage override
+
 ```bash
-python3 -c "
-import sqlite3
-conn = sqlite3.connect('data/bizstack.db')
-c = conn.cursor()
-c.execute('CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, company_name TEXT UNIQUE NOT NULL, credit_risk_rating TEXT, annual_revenue REAL)')
-c.execute('CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_name TEXT, amount REAL, status TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)')
-conn.commit()
-conn.close()
-"
+export DATABASE_PATH="/absolute/path/to/bizstack.db"
 ```
 
-### 4. Boot Up the ASGI Track Engine
+## Local setup
+
+1. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Export the environment variables above.
+
+3. Start the app:
+
+   ```bash
+   uvicorn main:app --reload --port 8000
+   ```
+
+4. Open `http://127.0.0.1:8000`.
+
+The app auto-creates the SQLite tables it needs on startup.
+
+## Stripe Checkout flow
+
+- Homepage CTA posts to `POST /api/checkout/create`
+- Successful checkout returns to `GET /checkout/success`
+- Canceled checkout returns to `GET /checkout/cancel`
+- Actual payment confirmation is handled by `POST /api/stripe/webhook`
+
+### Stripe CLI webhook testing
+
+1. Login to Stripe CLI.
+2. Forward events to the local webhook:
+
+   ```bash
+   stripe listen --forward-to http://127.0.0.1:8000/api/stripe/webhook
+   ```
+
+3. Copy the printed `whsec_...` value into `STRIPE_WEBHOOK_SECRET`.
+4. Trigger a test event or complete a test checkout:
+
+   ```bash
+   stripe trigger checkout.session.completed
+   ```
+
+## Twilio Voice setup
+
+Configure your Twilio phone number webhooks to point at your deployed HTTPS app:
+
+- **A call comes in / Voice URL** → `POST https://your-domain.example/twilio/voice/incoming`
+- **Status callback** → `POST https://your-domain.example/twilio/voice/status`
+
+Inbound calls receive a basic greeting plus a simple menu.
+
+### Outbound test call
+
+Trigger an outbound call from the backend with either:
+
+- an authenticated dashboard session cookie, or
+- `X-API-Key: $BOT_API_TOKEN`
+
+Example:
+
 ```bash
-uvicorn main:app --reload --port 8000
+curl -X POST http://127.0.0.1:8000/api/twilio/voice/outbound \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $BOT_API_TOKEN" \
+  -d '{
+    "to_number": "+15551234567",
+    "message": "Hello from BizStack Perks. Your outbound voice flow is working."
+  }'
 ```
-Access the application endpoint terminal via your browser at `http://127.0.0.1:8000`.
 
----
+## Deployment notes
 
-## 🌐 Live Production Provisioning (Railway + Cloudflare)
+- `PUBLIC_BASE_URL` should be the final public HTTPS origin with no trailing slash.
+- Stripe and Twilio webhooks require a reachable HTTPS URL in production.
+- Keep all secrets in environment variables only.
+- Provision a real Stripe product/price and copy its `PRICE_ID`.
+- Provision a Twilio phone number with Voice enabled before testing live calls.
 
-1.  **Code Push:** Ensure `.gitignore` is active, then execute `git push origin main`.
-2.  **Railway Deploy:** Link your repository. In the **Variables** settings panel, map your custom production environment keys (`TWILIO_ACCOUNT_SID`, `BIZSTACK_ADMIN_PASS`, etc.).
-3.  **Data Volume Mount:** Create a Railway persistent disk storage **Volume** component. Mount it at `/app/data` (not `/app/data/bizstack.db`) so SQLite can create the database file and preserve it across redeploys.
-4.  **Cloudflare DNS Routing:** Map a `CNAME` record pointing your custom domain (`bizstackperks.com`) straight to your Railway platform domain with proxy active (orange cloud) to enable automated SSL protection layers.
+## Testing
 
-### Market-data bot
+Run the focused test suite with:
 
-The scheduled bot calls the authenticated `/api/bot/scrape` endpoint and syncs company profiles from Finnhub's Stock Profile 2 API. Set `FINNHUB_DATA_KEY` on the web service and set the same `BOT_API_TOKEN` plus `BIZSTACK_BOT_ENDPOINT=https://bizstackperks.com/api/bot/scrape` wherever `bot_cron_runner.py` runs. The dashboard displays the source, ticker set, latest run, and any error.
-
----
-© 2026 BizStack Perks LLC. Safe local ledger infrastructure operational.
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
