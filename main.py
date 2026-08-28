@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
+from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from twilio.twiml.voice_response import Gather, VoiceResponse
 
@@ -273,9 +274,9 @@ app = FastAPI(title="BizStack Perks", lifespan=lifespan)
 async def home(request: Request, error: Optional[str] = None):
     """Homepage."""
     return templates.TemplateResponse(
-        request,
         "index.html",
         {
+            "request": request,
             "error": error,
             "checkout_enabled": stripe_ready(),
             "offer_price_display": OFFER_PRICE_DISPLAY,
@@ -289,15 +290,14 @@ async def home(request: Request, error: Optional[str] = None):
 @app.get("/checkout/success", response_class=HTMLResponse)
 async def checkout_success(request: Request, session_id: Optional[str] = None):
     return templates.TemplateResponse(
-        request,
         "checkout_success.html",
-        {"session_id": session_id},
+        {"request": request, "session_id": session_id},
     )
 
 
 @app.get("/checkout/cancel", response_class=HTMLResponse)
 async def checkout_cancel(request: Request):
-    return templates.TemplateResponse(request, "checkout_cancel.html", {})
+    return templates.TemplateResponse("checkout_cancel.html", {"request": request})
 
 
 # ==================== AUTHENTICATION ====================
@@ -306,7 +306,7 @@ async def checkout_cancel(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: Optional[str] = None):
     """Login page."""
-    return templates.TemplateResponse(request, "login.html", {"error": error})
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
 
 
 @app.post("/login")
@@ -345,7 +345,7 @@ async def dashboard(request: Request, conn=Depends(get_db)):
     profiles = conn.execute(
         "SELECT id, company_name, credit_risk_rating, annual_revenue FROM profiles ORDER BY created_at DESC"
     ).fetchall()
-    return templates.TemplateResponse(request, "dashboard.html", {"profiles": profiles})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "profiles": profiles})
 
 
 # ==================== PROFILE API ====================
@@ -418,20 +418,22 @@ async def create_checkout_session(
     if not stripe_ready():
         return RedirectResponse(url="/?error=Checkout+is+not+configured+yet", status_code=303)
 
-    stripe.api_key = STRIPE_SECRET_KEY
+    stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
     base_url = normalize_base_url(request)
-    metadata = {}
+    metadata = {"integration_identifier": "bizstack-perks-checkout"}
     if business_name:
         metadata["business_name"] = business_name.strip()[:120]
 
     try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[{"price": PRICE_ID, "quantity": 1}],
-            customer_email=(email or "").strip() or None,
-            success_url=f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base_url}/checkout/cancel",
-            metadata=metadata,
+        session = stripe_client.checkout.sessions.create(
+            params={
+                "mode": "payment",
+                "line_items": [{"price": PRICE_ID, "quantity": 1}],
+                "customer_email": (email or "").strip() or None,
+                "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+                "cancel_url": f"{base_url}/checkout/cancel",
+                "metadata": metadata,
+            },
         )
     except stripe.error.StripeError:
         return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
@@ -468,7 +470,11 @@ async def stripe_webhook(request: Request, conn=Depends(get_db)):
     except stripe.error.SignatureVerificationError as exc:
         raise HTTPException(status_code=400, detail="Invalid signature") from exc
 
-    if event.get("type") == "checkout.session.completed":
+    if event.get("type") in (
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
+    ):
         session_data = event["data"]["object"]
         record_checkout_session(conn, session_data, event.get("id"))
 
@@ -527,7 +533,17 @@ async def handle_input(Digits: Optional[str] = Form(default=None), SpeechResult:
 @app.post("/twilio/voice/status")
 @app.post("/twilio/status")
 async def twilio_status(request: Request, conn=Depends(get_db)):
-    form = await request.form()
+    if TWILIO_AUTH_TOKEN:
+        validator = RequestValidator(TWILIO_AUTH_TOKEN)
+        url = str(request.url)
+        signature = request.headers.get("X-Twilio-Signature", "")
+        form = await request.form()
+        form_dict = dict(form)
+        if not validator.validate(url, form_dict, signature):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+    else:
+        form = await request.form()
+
     call_sid = form.get("CallSid")
     if call_sid:
         upsert_call_event(
