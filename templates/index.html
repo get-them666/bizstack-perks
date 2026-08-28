@@ -3,137 +3,318 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BizStack Perks - Business Profiles & Benefits</title>
+    <title>BizStack Perks - Launch Your Revenue & Voice Ops</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            color-scheme: dark;
+            --bg: #0b1020;
+            --panel: rgba(16, 25, 52, 0.88);
+            --panel-border: rgba(122, 195, 255, 0.18);
+            --text: #f5f7fb;
+            --muted: #9db1d1;
+            --primary: #4fd1ff;
+            --primary-dark: #1198ff;
+            --success: #35d08f;
         }
-        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: radial-gradient(circle at top, #15254f 0%, var(--bg) 55%);
+            color: var(--text);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            line-height: 1.5;
         }
-        
-        .container {
-            text-align: center;
-            max-width: 600px;
-            padding: 40px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
+        .page {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 32px 20px 56px;
+        }
+        .nav, .hero, .grid, .faq, .footer {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 22px;
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
-        h1 {
-            font-size: 3em;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #00d4ff, #0099ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        p {
-            font-size: 1.1em;
-            margin-bottom: 30px;
-            color: #aaa;
-        }
-        
-        .buttons {
+        .nav {
             display: flex;
-            gap: 20px;
-            justify-content: center;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 22px;
+            margin-bottom: 24px;
+        }
+        .brand {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+        .nav-links {
+            display: flex;
+            gap: 18px;
             flex-wrap: wrap;
         }
-        
-        button, a.btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 5px;
-            font-size: 1em;
-            cursor: pointer;
+        .nav-links a, .footer a {
+            color: var(--muted);
             text-decoration: none;
-            transition: all 0.3s ease;
-            display: inline-block;
         }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #00d4ff, #0099ff);
-            color: #000;
-            font-weight: bold;
+        .hero {
+            padding: 40px 32px;
+            margin-bottom: 24px;
         }
-        
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(0, 212, 255, 0.3);
+        .eyebrow {
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-bottom: 12px;
         }
-        
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+        h1 {
+            font-size: clamp(2.4rem, 6vw, 4.2rem);
+            line-height: 1.05;
+            margin-bottom: 16px;
+            max-width: 10ch;
         }
-        
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.2);
+        .hero-copy {
+            color: var(--muted);
+            max-width: 58ch;
+            font-size: 1.05rem;
+            margin-bottom: 28px;
         }
-        
-        .features {
-            margin-top: 60px;
+        .cta-row {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 28px;
+        }
+        .cta-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+        .cta-form input {
+            padding: 14px 16px;
+            min-width: 220px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+        }
+        .button {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 50px;
+            padding: 0 22px;
+            border-radius: 12px;
+            border: 0;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .button:hover { transform: translateY(-1px); }
+        .button-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #03111d;
+            box-shadow: 0 10px 28px rgba(17, 152, 255, 0.28);
+        }
+        .button-secondary {
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+            border: 1px solid rgba(255,255,255,0.14);
+        }
+        .hero-points {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
         }
-        
-        .feature {
-            background: rgba(0, 212, 255, 0.1);
-            padding: 20px;
-            border-radius: 5px;
-            border-left: 3px solid #00d4ff;
+        .point {
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.04);
+            color: var(--muted);
         }
-        
-        .feature h3 {
-            color: #00d4ff;
-            margin-bottom: 10px;
+        .point strong {
+            display: block;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1.3fr 0.9fr;
+            gap: 0;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .section {
+            padding: 28px;
+        }
+        .section + .section {
+            border-left: 1px solid var(--panel-border);
+        }
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 14px;
+        }
+        .price-card {
+            padding: 22px;
+            border-radius: 18px;
+            background: rgba(79, 209, 255, 0.08);
+            border: 1px solid rgba(79, 209, 255, 0.2);
+        }
+        .price {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        ul {
+            padding-left: 18px;
+            color: var(--muted);
+        }
+        li + li { margin-top: 8px; }
+        .faq {
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+        details {
+            padding: 14px 0;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        details:first-of-type { border-top: 0; }
+        summary {
+            cursor: pointer;
+            font-weight: 700;
+        }
+        details p {
+            color: var(--muted);
+            margin-top: 10px;
+        }
+        .alert {
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(255, 91, 91, 0.12);
+            border: 1px solid rgba(255, 91, 91, 0.26);
+            color: #ffb3b3;
+        }
+        .notice {
+            margin-top: 16px;
+            color: var(--success);
+            font-size: 0.95rem;
+        }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 18px 22px;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+        @media (max-width: 860px) {
+            .grid { grid-template-columns: 1fr; }
+            .section + .section { border-left: 0; border-top: 1px solid var(--panel-border); }
+            .hero, .section, .faq { padding: 22px; }
+            .nav { align-items: flex-start; flex-direction: column; gap: 12px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🚀 BizStack Perks</h1>
-        <p>Manage business profiles and employee benefits with ease</p>
-        
-        <div class="buttons">
-            <a href="/login" class="btn btn-primary">Login to Dashboard</a>
-            <a href="/dashboard" class="btn btn-secondary">View Dashboard</a>
-        </div>
-        
-        <div class="features">
-            <div class="feature">
-                <h3>📊 Profiles</h3>
-                <p>Track company information and risk ratings</p>
+    <div class="page">
+        <nav class="nav">
+            <div class="brand">⚡ BizStack Perks</div>
+            <div class="nav-links">
+                <a href="#pricing">Pricing</a>
+                <a href="#faq">FAQ</a>
+                <a href="/login">Dashboard Login</a>
             </div>
-            <div class="feature">
-                <h3>💬 Voice</h3>
-                <p>Call to access business data via IVR</p>
+        </nav>
+
+        <section class="hero">
+            {% if error %}
+            <div class="alert">{{ error }}</div>
+            {% endif %}
+
+            <div class="eyebrow">Monetize + automate</div>
+            <h1>Turn your business perks site into a paid, voice-enabled experience.</h1>
+            <p class="hero-copy">
+                BizStack Perks helps you capture revenue with Stripe Checkout, onboard buyers faster,
+                and support inbound or outbound call flows through Twilio Voice.
+            </p>
+
+            <div class="cta-row">
+                <form class="cta-form" id="checkout-form" method="post" action="/api/checkout/create">
+                    <input type="text" name="business_name" placeholder="Business name (optional)">
+                    <input type="email" name="email" placeholder="Email for receipts (optional)">
+                    <button class="button button-primary" type="submit">Start checkout</button>
+                </form>
+                <a class="button button-secondary" href="{{ support_phone_href }}">Call or contact</a>
             </div>
-            <div class="feature">
-                <h3>💰 Revenue</h3>
-                <p>Monitor annual revenue metrics</p>
+
+            {% if not checkout_enabled %}
+            <p class="notice">Set STRIPE_SECRET_KEY and PRICE_ID to enable live checkout.</p>
+            {% endif %}
+
+            <div class="hero-points">
+                <div class="point">
+                    <strong>Reliable payments</strong>
+                    Webhook-backed Stripe confirmation keeps fulfillment off fragile redirects.
+                </div>
+                <div class="point">
+                    <strong>Voice automation</strong>
+                    Answer inbound calls and launch outbound follow-ups from your backend.
+                </div>
+                <div class="point">
+                    <strong>Fast launch</strong>
+                    Keep your dashboard, lead capture, and conversion paths in one deployable app.
+                </div>
             </div>
-            <div class="feature">
-                <h3>🔒 Secure</h3>
-                <p>Protected dashboard with authentication</p>
+        </section>
+
+        <section class="grid" id="pricing">
+            <div class="section">
+                <h2>What buyers get</h2>
+                <ul>
+                    <li>Hosted checkout flow wired to a real backend route</li>
+                    <li>Payment confirmation recorded after verified Stripe webhook delivery</li>
+                    <li>Inbound voice greeting plus simple Twilio call menu</li>
+                    <li>Backend endpoint to trigger outbound voice calls securely</li>
+                </ul>
             </div>
-        </div>
+            <div class="section">
+                <div class="price-card">
+                    <div class="price">{{ offer_price_display }}</div>
+                    <p>Launch offer for payment, onboarding, and voice workflow activation.</p>
+                    <div style="height: 14px;"></div>
+                    <button class="button button-primary" type="submit" form="checkout-form">Buy now</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="faq" id="faq">
+            <h2>Frequently asked questions</h2>
+            <details open>
+                <summary>How is payment confirmed?</summary>
+                <p>Checkout redirects the buyer back to the site, but fulfillment is confirmed only after the Stripe webhook is verified server-side.</p>
+            </details>
+            <details>
+                <summary>Can the bot receive and make calls?</summary>
+                <p>Yes. Twilio Voice routes can answer inbound calls with TwiML and you can trigger outbound calls from the backend using your configured Twilio number.</p>
+            </details>
+            <details>
+                <summary>What do I need for production?</summary>
+                <p>Configure Stripe and Twilio environment variables, set PUBLIC_BASE_URL to your HTTPS domain, and point the webhook URLs at the deployed app.</p>
+            </details>
+        </section>
+
+        <footer class="footer" id="contact">
+            <span>Revenue-ready checkout and voice automation for BizStack Perks.</span>
+            <span>
+                <a href="/login">Dashboard</a> ·
+                <a href="{{ support_phone_href }}">{{ support_phone_display }}</a>
+            </span>
+        </footer>
     </div>
 </body>
 </html>
-

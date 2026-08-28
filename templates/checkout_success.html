@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment received - BizStack Perks</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0b1020;
+            color: #f5f7fb;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 24px;
+        }
+        .card {
+            max-width: 620px;
+            padding: 32px;
+            border-radius: 20px;
+            background: rgba(16, 25, 52, 0.94);
+            border: 1px solid rgba(79, 209, 255, 0.2);
+        }
+        a {
+            color: #4fd1ff;
+            text-decoration: none;
+            font-weight: 700;
+        }
+        p { color: #b7c5dd; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <h1>Payment received</h1>
+        <p>Your checkout completed successfully. Final activation should rely on the verified Stripe webhook, so keep this page as a confirmation screen only.</p>
+        {% if session_id %}
+        <p>Checkout session: <code>{{ session_id }}</code></p>
+        {% endif %}
+        <p><a href="/">Return home</a></p>
+    </main>
+</body>
+</html>
