@@ -299,3 +299,30 @@ async def railway_favicon_patch():
 async def railway_dashboard_patch():
     return {"status": "dashboard route operational"}
 # ----------------------------------------
+
+# --- FRONTEND TEMPLATE & STATIC PATHS INTEGRATION PATCH ---
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import os
+
+# Safely mount static folder if it exists
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Initialize Jinja2 template environment pointing to your templates folder
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/login", response_class=HTMLResponse)
+async def serve_login(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+# -----------------------------------------------------------
