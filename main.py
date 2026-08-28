@@ -287,3 +287,15 @@ async def serve_client_dashboard_view(request: Request):
         profiles_data = []
 
     return templates.TemplateResponse(request, "client.html", {"profiles": profiles_data})
+
+# --- RAILWAY DEPLOYMENT ROUTING PATCH ---
+from fastapi.responses import Response
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def railway_favicon_patch():
+    return Response(status_code=204)
+
+@app.get("/dashboard")
+async def railway_dashboard_patch():
+    return {"status": "dashboard route operational"}
+# ----------------------------------------
