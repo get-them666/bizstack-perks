@@ -599,9 +599,4 @@ async def trigger_outbound_call(
 @app.get("/privacy", response_class=FileResponse)
 async def read_privacy():
     return "static/privacy.html"
-=======
->>>>>>> 44aea48ace24fb4a5795e01e5cd5db5668d356cc
 
-@app.get("/privacy", response_class=FileResponse)
-async def read_privacy():
-    return "static/privacy.html"
