@@ -1,5 +1,4 @@
-cat << 'EOF' > main.py
-from fastapi import FastAPI, Form, responses, Request, Depends
+from fastapi import FastAPI, Form, responses, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import stripe
@@ -80,4 +79,3 @@ async def create_checkout_session(email: str = Form(None), business_name: str = 
     except Exception as e:
         print(f"[STRIPE RUNTIME ERROR]: {str(e)}")
         return responses.RedirectResponse(url=f"{DOMAIN}/?error=Unable+to+start+checkout", status_code=303)
-EOF
