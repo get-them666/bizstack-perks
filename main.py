@@ -3,6 +3,7 @@ import re
 import secrets
 import sqlite3
 import logging
+import json
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -13,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
+from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import Gather, VoiceResponse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +30,11 @@ STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 PRICE_ID = os.getenv("PRICE_ID", "")
 OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$49 / month")
+LEAD_CONSENT_TEXT = os.getenv(
+    "LEAD_CONSENT_TEXT",
+    "By submitting, you agree that BizStack Perks may contact you by call, text, and email "
+    "about your request. Consent is not a condition of purchase. Message and data rates may apply.",
+)
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
@@ -184,6 +191,27 @@ def create_outbound_twiml(message: str) -> str:
     return str(response)
 
 
+def affiliate_partners() -> list[dict[str, str]]:
+    try:
+        partners = json.loads(os.getenv("AFFILIATE_PARTNERS_JSON", "[]"))
+    except json.JSONDecodeError:
+        logger.warning("AFFILIATE_PARTNERS_JSON is not valid JSON")
+        return []
+
+    if not isinstance(partners, list):
+        logger.warning("AFFILIATE_PARTNERS_JSON must be an array")
+        return []
+
+    return [
+        {"name": partner["name"], "url": partner["url"], "description": partner.get("description", "")}
+        for partner in partners
+        if isinstance(partner, dict)
+        and isinstance(partner.get("name"), str)
+        and isinstance(partner.get("url"), str)
+        and partner["url"].startswith(("https://", "http://"))
+    ]
+
+
 class OutboundCallRequest(BaseModel):
     to_number: str = Field(..., description="Destination number in E.164 format")
     message: str = Field(
@@ -205,6 +233,11 @@ class OutboundCallRequest(BaseModel):
         if not cleaned:
             raise ValueError("message cannot be empty")
         return cleaned
+
+
+class OutboundSmsRequest(BaseModel):
+    lead_id: int
+    message: str = Field(..., min_length=1, max_length=1_600)
 
 
 def init_db() -> None:
@@ -254,6 +287,39 @@ def init_db() -> None:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                application_type TEXT NOT NULL,
+                requested_product TEXT NOT NULL,
+                requested_amount REAL,
+                source TEXT NOT NULL,
+                consent_text TEXT NOT NULL,
+                consented_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                status TEXT NOT NULL DEFAULT 'new',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS message_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id INTEGER,
+                message_sid TEXT UNIQUE,
+                direction TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                from_number TEXT,
+                to_number TEXT,
+                body TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         conn.commit()
     finally:
         conn.close()
@@ -296,6 +362,78 @@ async def checkout_success(request: Request, session_id: Optional[str] = None):
 @app.get("/checkout/cancel", response_class=HTMLResponse)
 async def checkout_cancel(request: Request):
     return templates.TemplateResponse(request=request, name="checkout_cancel.html", context={})
+
+
+@app.get("/apply", response_class=HTMLResponse)
+async def application_form(request: Request, application_type: str = "business"):
+    if application_type not in {"business", "consumer"}:
+        raise HTTPException(status_code=404, detail="Application type not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="apply.html",
+        context={"application_type": application_type, "consent_text": LEAD_CONSENT_TEXT},
+    )
+
+
+@app.post("/api/leads/submit")
+async def submit_lead(
+    full_name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    application_type: str = Form(...),
+    requested_product: str = Form(...),
+    requested_amount: Optional[float] = Form(default=None),
+    source: str = Form(default="website"),
+    consent: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    if application_type not in {"business", "consumer"}:
+        raise HTTPException(status_code=422, detail="Invalid application type")
+    if not all((full_name.strip(), email.strip(), requested_product.strip())):
+        raise HTTPException(status_code=422, detail="Complete the required fields")
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", phone.strip()):
+        raise HTTPException(status_code=422, detail="Enter a valid phone number")
+    if consent != "accepted":
+        raise HTTPException(status_code=422, detail="Consent is required")
+
+    cursor = conn.execute(
+        """
+        INSERT INTO leads (
+            full_name, email, phone, application_type, requested_product, requested_amount,
+            source, consent_text
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            full_name.strip(),
+            email.strip().lower(),
+            phone.strip(),
+            application_type,
+            requested_product.strip(),
+            requested_amount,
+            source.strip()[:120] or "website",
+            LEAD_CONSENT_TEXT,
+        ),
+    )
+    conn.commit()
+    return RedirectResponse(url=f"/application/received?lead_id={cursor.lastrowid}", status_code=303)
+
+
+@app.get("/application/received", response_class=HTMLResponse)
+async def application_received(request: Request, lead_id: Optional[int] = None):
+    return templates.TemplateResponse(
+        request=request,
+        name="application_received.html",
+        context={"lead_id": lead_id},
+    )
+
+
+@app.get("/affiliates", response_class=HTMLResponse)
+async def affiliates(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="affiliates.html",
+        context={"partners": affiliate_partners()},
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)

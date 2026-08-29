@@ -1,0 +1,4 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Partner offers - BizStack Perks</title>
+<style>body{background:#0b1020;color:#f5f7fb;font-family:Arial,sans-serif;margin:0;padding:24px}main{margin:auto;max-width:800px}article{background:#101934;border:1px solid #27426f;border-radius:12px;margin:16px 0;padding:22px}a{color:#4fd1ff}p{color:#b7c5dd}</style></head>
+<body><main><p><a href="/">Back to homepage</a></p><h1>Partner offers</h1><p>Partner links are provided for information. Review each provider's terms before applying.</p>{% for partner in partners %}<article><h2>{{ partner.name }}</h2><p>{{ partner.description }}</p><a href="{{ partner.url }}" rel="noopener noreferrer sponsored" target="_blank">View offer</a></article>{% else %}<article><p>Approved partner offers will be published here soon.</p></article>{% endfor %}</main></body></html>

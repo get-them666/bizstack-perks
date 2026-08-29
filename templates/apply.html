@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request information - BizStack Perks</title>
+    <style>
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; padding: 24px; }
+        main { background: #101934; border: 1px solid #27426f; border-radius: 16px; margin: 0 auto; max-width: 620px; padding: 28px; }
+        h1 { margin-top: 0; } p, label { color: #b7c5dd; } label { display: block; font-weight: bold; margin-top: 16px; }
+        input, select { box-sizing: border-box; margin-top: 6px; padding: 12px; width: 100%; }
+        button { background: #4fd1ff; border: 0; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 22px; padding: 13px 20px; }
+        .consent { display: flex; gap: 8px; margin-top: 20px; } .consent input { width: auto; }
+        a { color: #4fd1ff; }
+    </style>
+</head>
+<body>
+    <main>
+        <p><a href="/">Back to homepage</a></p>
+        <h1>{% if application_type == "business" %}Business financing request{% else %}Consumer credit request{% endif %}</h1>
+        <p>Share only the information needed to request a follow-up. Do not enter Social Security numbers, bank credentials, or card numbers.</p>
+        <form method="post" action="/api/leads/submit">
+            <input type="hidden" name="application_type" value="{{ application_type }}">
+            <input type="hidden" name="source" value="website">
+            <label>Full name <input name="full_name" autocomplete="name" required></label>
+            <label>Email <input type="email" name="email" autocomplete="email" required></label>
+            <label>Phone <input type="tel" name="phone" placeholder="+15551234567" autocomplete="tel" required></label>
+            <label>Interest <input name="requested_product" placeholder="e.g. business line of credit" required></label>
+            <label>Requested amount (optional) <input type="number" min="0" step="0.01" name="requested_amount"></label>
+            <label class="consent"><input type="checkbox" name="consent" value="accepted" required><span>{{ consent_text }}</span></label>
+            <button type="submit">Request follow-up</button>
+        </form>
+    </main>
+</body>
+</html>
