@@ -2,7 +2,6 @@ import os
 import re
 import secrets
 import sqlite3
-import string
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -181,11 +180,6 @@ def create_outbound_twiml(message: str) -> str:
     response.say(message, voice="alice")
     response.hangup()
     return str(response)
-
-
-def checkout_integration_identifier() -> str:
-    suffix = "".join(secrets.choice(string.ascii_lowercase) for _ in range(8))
-    return f"bizstack-perks-checkout-{suffix}"
 
 
 class OutboundCallRequest(BaseModel):
@@ -427,7 +421,6 @@ async def create_checkout_session(
                 "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
                 "cancel_url": f"{base_url}/checkout/cancel",
                 "metadata": metadata,
-                "integration_identifier": checkout_integration_identifier(),
             },
         )
     except stripe.error.StripeError:

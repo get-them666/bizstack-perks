@@ -106,6 +106,10 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "https://checkout.stripe.com/pay/cs_test_123")
         self.assertEqual(self.payment_row("cs_test_123"), ("unpaid", "buyer@example.com", None))
+        checkout_params = mock_stripe_client.checkout.sessions.create.call_args.kwargs["params"]
+        self.assertEqual(checkout_params["line_items"], [{"price": "price_test_123", "quantity": 1}])
+        self.assertNotIn("payment_method_types", checkout_params)
+        self.assertNotIn("integration_identifier", checkout_params)
 
     @patch("main.stripe.Webhook.construct_event")
     def test_stripe_webhook_marks_completed_checkout_paid(self, mock_construct_event):
