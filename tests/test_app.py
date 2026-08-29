@@ -111,6 +111,36 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertNotIn("payment_method_types", checkout_params)
         self.assertNotIn("integration_identifier", checkout_params)
 
+    @patch("main.stripe.StripeClient")
+    def test_checkout_uses_configured_item_when_price_id_is_invalid(self, mock_stripe_client_cls):
+        mock_stripe_client = Mock()
+        mock_stripe_client.checkout.sessions.create.side_effect = [
+            self.main.stripe.InvalidRequestError("No such price", "line_items[0][price]"),
+            {
+                "id": "cs_test_fallback",
+                "url": "https://checkout.stripe.com/pay/cs_test_fallback",
+                "customer": None,
+                "payment_intent": None,
+                "subscription": None,
+                "payment_status": "unpaid",
+                "status": "open",
+                "amount_total": 4900,
+                "currency": "usd",
+            },
+        ]
+        mock_stripe_client_cls.return_value = mock_stripe_client
+
+        response = self.client.post(
+            "/api/checkout/create",
+            data={"business_name": "Acme"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "https://checkout.stripe.com/pay/cs_test_fallback")
+        fallback_params = mock_stripe_client.checkout.sessions.create.call_args_list[1].kwargs["params"]
+        self.assertEqual(fallback_params["line_items"][0]["price_data"]["unit_amount"], 4900)
+
     @patch("main.stripe.Webhook.construct_event")
     def test_stripe_webhook_marks_completed_checkout_paid(self, mock_construct_event):
         mock_construct_event.return_value = {

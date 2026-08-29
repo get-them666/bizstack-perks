@@ -2,6 +2,7 @@ import os
 import re
 import secrets
 import sqlite3
+import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -33,6 +34,7 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
 
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+logger = logging.getLogger(__name__)
 
 
 def get_db():
@@ -412,18 +414,46 @@ async def create_checkout_session(
     if business_name and business_name.strip():
         metadata["business_name"] = business_name.strip()[:120]
 
+    checkout_params = {
+        "mode": "payment",
+        "line_items": [{"price": PRICE_ID, "quantity": 1}],
+        "customer_email": (email or "").strip() or None,
+        "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{base_url}/checkout/cancel",
+        "metadata": metadata,
+    }
+
     try:
-        session = stripe_client.checkout.sessions.create(
-            params={
-                "mode": "payment",
-                "line_items": [{"price": PRICE_ID, "quantity": 1}],
-                "customer_email": (email or "").strip() or None,
-                "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
-                "cancel_url": f"{base_url}/checkout/cancel",
-                "metadata": metadata,
-            },
-        )
-    except stripe.error.StripeError:
+        session = stripe_client.checkout.sessions.create(params=checkout_params)
+    except stripe.InvalidRequestError as exc:
+        if exc.param != "line_items[0][price]":
+            logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
+            return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
+
+        logger.warning("Configured Stripe Price ID cannot be used; using the configured $49 checkout item")
+        checkout_params["line_items"] = [
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"BizStack Perks Entry Plan - {business_name or 'Client Portal'}",
+                    },
+                    "unit_amount": 4900,
+                },
+                "quantity": 1,
+            }
+        ]
+        try:
+            session = stripe_client.checkout.sessions.create(params=checkout_params)
+        except stripe.error.StripeError as fallback_error:
+            logger.warning(
+                "Stripe Checkout fallback failed: code=%s param=%s",
+                fallback_error.code,
+                fallback_error.param,
+            )
+            return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
+    except stripe.error.StripeError as exc:
+        logger.warning("Stripe Checkout failed: code=%s param=%s", exc.code, exc.param)
         return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
 
     record_checkout_session(
