@@ -141,6 +141,31 @@ class BizStackPerksAppTests(unittest.TestCase):
         fallback_params = mock_stripe_client.checkout.sessions.create.call_args_list[1].kwargs["params"]
         self.assertEqual(fallback_params["line_items"][0]["price_data"]["unit_amount"], 4900)
 
+    @patch("main.stripe.StripeClient")
+    def test_checkout_accepts_stripe_session_objects(self, mock_stripe_client_cls):
+        session_data = {
+            "id": "cs_test_object",
+            "url": "https://checkout.stripe.com/pay/cs_test_object",
+            "customer": None,
+            "payment_intent": None,
+            "subscription": None,
+            "payment_status": "unpaid",
+            "status": "open",
+            "amount_total": 4900,
+            "currency": "usd",
+        }
+        mock_session = Mock()
+        mock_session.to_dict.return_value = session_data
+        mock_stripe_client = Mock()
+        mock_stripe_client.checkout.sessions.create.return_value = mock_session
+        mock_stripe_client_cls.return_value = mock_stripe_client
+
+        response = self.client.post("/api/checkout/create", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], session_data["url"])
+        self.assertEqual(self.payment_row("cs_test_object"), ("unpaid", None, None))
+
     @patch("main.stripe.Webhook.construct_event")
     def test_stripe_webhook_marks_completed_checkout_paid(self, mock_construct_event):
         mock_construct_event.return_value = {

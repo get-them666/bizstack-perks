@@ -456,22 +456,23 @@ async def create_checkout_session(
         logger.warning("Stripe Checkout failed: code=%s param=%s", exc.code, exc.param)
         return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
 
+    session_data = session.to_dict() if hasattr(session, "to_dict") else session
     record_checkout_session(
         conn,
         {
-            "id": session["id"],
-            "customer": session.get("customer"),
-            "payment_intent": session.get("payment_intent"),
-            "subscription": session.get("subscription"),
-            "payment_status": session.get("payment_status", "unpaid"),
-            "status": session.get("status", "open"),
-            "amount_total": session.get("amount_total"),
-            "currency": session.get("currency"),
+            "id": session_data["id"],
+            "customer": session_data.get("customer"),
+            "payment_intent": session_data.get("payment_intent"),
+            "subscription": session_data.get("subscription"),
+            "payment_status": session_data.get("payment_status", "unpaid"),
+            "status": session_data.get("status", "open"),
+            "amount_total": session_data.get("amount_total"),
+            "currency": session_data.get("currency"),
             "customer_email": (email or "").strip() or None,
             "customer_details": {"email": (email or "").strip() or None},
         },
     )
-    return RedirectResponse(url=session["url"], status_code=303)
+    return RedirectResponse(url=session_data["url"], status_code=303)
 
 
 @app.post("/api/stripe/webhook")
