@@ -16,6 +16,8 @@ class BizStackPerksAppTests(unittest.TestCase):
             os.environ,
             {
                 "DATABASE_PATH": self.db_path,
+                "BIZSTACK_ADMIN_USER": "admin",
+                "BIZSTACK_ADMIN_PASS": "password123",
                 "SESSION_COOKIE_SECRET": "test-session-secret",
                 "PUBLIC_BASE_URL": "https://example.com",
                 "BOT_API_TOKEN": "test-api-token",
@@ -70,6 +72,14 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("/api/checkout/create", response.text)
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
+
+    def test_client_registry_is_available_to_authenticated_users(self):
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+        response = self.client.get("/client")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Client Registry Workspace", response.text)
+        self.assertIn("Export CSV", response.text)
 
     @patch("main.stripe.StripeClient")
     def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
