@@ -115,7 +115,7 @@ class BizStackPerksAppTests(unittest.TestCase):
     def test_checkout_uses_configured_item_when_price_id_is_invalid(self, mock_stripe_client_cls):
         mock_stripe_client = Mock()
         mock_stripe_client.checkout.sessions.create.side_effect = [
-            self.main.stripe.InvalidRequestError("No such price", "line_items[0][price]"),
+            self.main.stripe.InvalidRequestError("No such price", "line_items[0]"),
             {
                 "id": "cs_test_fallback",
                 "url": "https://checkout.stripe.com/pay/cs_test_fallback",

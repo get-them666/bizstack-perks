@@ -426,7 +426,7 @@ async def create_checkout_session(
     try:
         session = stripe_client.checkout.sessions.create(params=checkout_params)
     except stripe.InvalidRequestError as exc:
-        if exc.param != "line_items[0][price]":
+        if not (exc.param or "").startswith("line_items[0]"):
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
             return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
 
