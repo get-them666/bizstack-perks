@@ -81,6 +81,15 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Client Registry Workspace", response.text)
         self.assertIn("Export CSV", response.text)
 
+    def test_admin_workspace_is_available_to_authenticated_users(self):
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+
+        response = self.client.get("/admin")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("admin workspace", response.text)
+        self.assertIn("Opt-in lead requests", response.text)
+
     @patch("main.stripe.StripeClient")
     def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
         mock_stripe_client = Mock()

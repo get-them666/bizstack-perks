@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin workspace - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; } body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; } header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 1400px; padding: 24px; } section { margin-bottom: 32px; }
+        h2 { font-size: 1.15rem; margin-bottom: 12px; } .table-wrap { border: 1px solid #27426f; border-radius: 10px; overflow: auto; }
+        table { border-collapse: collapse; min-width: 760px; width: 100%; } th, td { border-bottom: 1px solid #223354; padding: 11px 13px; text-align: left; vertical-align: top; }
+        th { background: #162343; color: #9db1d1; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; } td { font-size: .875rem; }
+        tr:last-child td { border-bottom: 0; } .empty { color: #9db1d1; padding: 20px; }
+    </style>
+</head>
+<body>
+    <header><h1>BizStack Perks admin workspace</h1><nav><a href="/dashboard">Dashboard</a> · <a href="/client">Client registry</a> · <a href="/logout">Log out</a></nav></header>
+    <main>
+        <section><h2>Opt-in lead requests</h2><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Path</th><th>Interest</th><th>Amount</th><th>Source</th><th>Consent time</th><th>Status</th></tr></thead><tbody>{% for lead in leads %}<tr><td>{{ lead[0] }}</td><td>{{ lead[1] }}</td><td>{{ lead[2] }}</td><td>{{ lead[3] }}</td><td>{{ lead[4] }}</td><td>{{ lead[5] or "-" }}</td><td>{{ lead[6] }}</td><td>{{ lead[7] }}</td><td>{{ lead[8] }}</td></tr>{% else %}<tr><td class="empty" colspan="9">No opt-in lead requests yet.</td></tr>{% endfor %}</tbody></table></div></section>
+        <section><h2>Checkout activity</h2><div class="table-wrap"><table><thead><tr><th>Session</th><th>Status</th><th>Amount</th><th>Customer email</th><th>Updated</th></tr></thead><tbody>{% for payment in payments %}<tr><td>{{ payment[0] }}</td><td>{{ payment[1] }}</td><td>{% if payment[2] is not none %}{{ payment[3]|upper }} {{ "%.2f"|format(payment[2] / 100) }}{% else %}-{% endif %}</td><td>{{ payment[4] or "-" }}</td><td>{{ payment[5] }}</td></tr>{% else %}<tr><td class="empty" colspan="5">No checkout activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
+        <section><h2>Voice activity</h2><div class="table-wrap"><table><thead><tr><th>Call</th><th>Direction</th><th>Status</th><th>From</th><th>To</th><th>Message</th><th>Updated</th></tr></thead><tbody>{% for call in calls %}<tr><td>{{ call[0] }}</td><td>{{ call[1] or "-" }}</td><td>{{ call[2] or "-" }}</td><td>{{ call[3] or "-" }}</td><td>{{ call[4] or "-" }}</td><td>{{ call[5] or "-" }}</td><td>{{ call[6] }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No voice activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
+        <section><h2>Company profiles</h2><div class="table-wrap"><table><thead><tr><th>Company</th><th>Risk rating</th><th>Annual revenue</th><th>Created</th></tr></thead><tbody>{% for profile in profiles %}<tr><td>{{ profile[0] }}</td><td>{{ profile[1] or "-" }}</td><td>{% if profile[2] is not none %}${{ "%.2f"|format(profile[2]) }}{% else %}-{% endif %}</td><td>{{ profile[3] }}</td></tr>{% else %}<tr><td class="empty" colspan="4">No company profiles yet.</td></tr>{% endfor %}</tbody></table></div></section>
+    </main>
+</body>
+</html>

@@ -485,6 +485,41 @@ async def client_registry(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(request=request, name="client.html", context={"profiles": profiles})
 
 
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_workspace(request: Request, conn=Depends(get_db)):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={
+            "profiles": conn.execute(
+                "SELECT company_name, credit_risk_rating, annual_revenue, created_at FROM profiles ORDER BY created_at DESC LIMIT 100"
+            ).fetchall(),
+            "leads": conn.execute(
+                """
+                SELECT full_name, email, phone, application_type, requested_product, requested_amount,
+                       source, consented_at, status
+                FROM leads ORDER BY created_at DESC LIMIT 100
+                """
+            ).fetchall(),
+            "payments": conn.execute(
+                """
+                SELECT stripe_session_id, status, amount_total, currency, customer_email, updated_at
+                FROM payments ORDER BY updated_at DESC LIMIT 100
+                """
+            ).fetchall(),
+            "calls": conn.execute(
+                """
+                SELECT call_sid, direction, call_status, from_number, to_number, message, updated_at
+                FROM call_events ORDER BY updated_at DESC LIMIT 100
+                """
+            ).fetchall(),
+        },
+    )
+
+
 @app.post("/api/pipeline-load-trigger")
 async def add_profile(
     company_name: str = Form(...),
