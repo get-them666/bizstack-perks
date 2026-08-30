@@ -230,7 +230,6 @@
                 <a href="/apply?application_type=business">Business financing</a>
                 <a href="/apply?application_type=consumer">Consumer credit</a>
                 <a href="/affiliates">Partner offers</a>
-                <a href="/login">Dashboard Login</a>
             </div>
         </nav>
 
@@ -256,7 +255,7 @@
             </div>
 
             {% if not checkout_enabled %}
-            <p class="notice">Set STRIPE_SECRET_KEY and PRICE_ID to enable live checkout.</p>
+            <p class="notice">Checkout is temporarily unavailable. Please contact us to get started.</p>
             {% endif %}
 
             <div class="hero-points">
@@ -306,15 +305,14 @@
                 <p>Yes. Twilio Voice routes can answer inbound calls with TwiML and you can trigger outbound calls from the backend using your configured Twilio number.</p>
             </details>
             <details>
-                <summary>What do I need for production?</summary>
-                <p>Configure Stripe and Twilio environment variables, set PUBLIC_BASE_URL to your HTTPS domain, and point the webhook URLs at the deployed app.</p>
+                <summary>Is my information secure?</summary>
+                <p>Yes. Payments are processed securely through Stripe and we never store your card details. Your contact information is only used to follow up on your request.</p>
             </details>
         </section>
 
         <footer class="footer" id="contact">
             <span>Revenue-ready checkout and voice automation for BizStack Perks.</span>
             <span>
-                <a href="/login">Dashboard</a> ·
                 <a href="{{ support_phone_href }}">{{ support_phone_display }}</a>
             </span>
         </footer>
