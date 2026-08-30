@@ -3,12 +3,13 @@ import re
 import secrets
 import sqlite3
 import logging
+from datetime import datetime
 import json
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 
 import stripe
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -16,6 +17,22 @@ from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import Gather, VoiceResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLeadNetwork, store_leads_to_db
+from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
+from lead_analytics import LeadHotspotAnalyzer
+from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
+from voice_bot import VoiceBotResponseGenerator, create_voice_greeting, create_callback_confirmation, create_information_response, create_menu_fallback
+
+try:
+    from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
+except ImportError:
+    UnifiedFinancialDatabase = None
+    IntegratedMarketRecord = None
+
+logger = logging.getLogger(__name__)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "bizstack.db"))
@@ -40,8 +57,12 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
 
+# Lead source APIs
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+CENSUS_API_KEY = os.getenv("CENSUS_API_KEY", "")
+AFFILIATE_PARTNERS_CONFIG = os.getenv("AFFILIATE_PARTNERS_CONFIG", "[]")
+
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
-logger = logging.getLogger(__name__)
 
 
 def get_db():
@@ -323,6 +344,13 @@ def init_db() -> None:
         conn.commit()
     finally:
         conn.close()
+    
+    # Initialize affiliate manager to create necessary tables
+    conn = sqlite3.connect(DATABASE_PATH)
+    try:
+        AffiliateCommissionManager(conn)
+    finally:
+        conn.close()
 
 
 @asynccontextmanager
@@ -331,7 +359,59 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="BizStack Perks", lifespan=lifespan)
+app = FastAPI(
+    title="BizStack Perks",
+    description="Lead generation and monetization platform for service businesses",
+    version="2.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize lead source managers
+places_source = GooglePlacesLeadSource(GOOGLE_PLACES_API_KEY) if GOOGLE_PLACES_API_KEY else None
+census_analyzer = CensusLeadAnalyzer(CENSUS_API_KEY) if CENSUS_API_KEY else None
+sms_manager = TwilioSMSManager(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
+
+# Affiliate partners from config
+try:
+    affiliate_config = json.loads(AFFILIATE_PARTNERS_CONFIG)
+    if affiliate_config and isinstance(affiliate_config, list):
+        affiliate_network = AffiliateLeadNetwork(affiliate_config)
+    else:
+        affiliate_network = None
+except json.JSONDecodeError:
+    affiliate_network = None
+
+# Optional financial intelligence (if available)
+financial_intelligence_db = None
+if UnifiedFinancialDatabase is not None:
+    financial_intelligence_db = UnifiedFinancialDatabase("production_market_intelligence.db")
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "BizStack Perks Lead Generation"}
+
+
+@app.get("/api/config/features")
+def get_feature_config():
+    """Return enabled features based on environment config."""
+    return {
+        "stripe_checkout": stripe_ready(),
+        "twilio_sms": sms_manager.is_configured(),
+        "twilio_voice": twilio_ready(),
+        "google_places": places_source is not None,
+        "census_analytics": census_analyzer is not None,
+        "affiliate_network": affiliate_network is not None,
+        "financial_intelligence": financial_intelligence_db is not None,
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -428,11 +508,28 @@ async def application_received(request: Request, lead_id: Optional[int] = None):
 
 
 @app.get("/affiliates", response_class=HTMLResponse)
-async def affiliates(request: Request):
+async def affiliates(request: Request, conn=Depends(get_db)):
+    # Get partners from config + database partners
+    config_partners = affiliate_partners()
+    
+    # Optionally add database partners
+    try:
+        affiliate_mgr = AffiliateCommissionManager(conn)
+        db_partners = affiliate_mgr.list_active_partners()
+        # Combine and deduplicate by name
+        all_partners = {p["name"]: p for p in db_partners}
+        for p in config_partners:
+            if p["name"] not in all_partners:
+                all_partners[p["name"]] = p
+        partners_list = list(all_partners.values())
+    except Exception as e:
+        logger.warning(f"Error loading database partners: {e}")
+        partners_list = config_partners
+    
     return templates.TemplateResponse(
         request=request,
         name="affiliates.html",
-        context={"partners": affiliate_partners()},
+        context={"partners": partners_list},
     )
 
 
@@ -675,44 +772,130 @@ async def stripe_webhook(request: Request, conn=Depends(get_db)):
 @app.post("/twilio/voice/incoming")
 @app.post("/twilio/inbound")
 async def inbound_call():
+    """Handle inbound calls with AI-powered conversation bot."""
+    return xml_response(VoiceResponse(from_)(create_voice_greeting()))
+
+
+@app.post("/twilio/voice/process-input")
+async def process_voice_input(
+    SpeechResult: Optional[str] = Form(default=None),
+    Digits: Optional[str] = Form(default=None),
+    request: Request = None,
+    conn=Depends(get_db),
+):
+    """Process speech or DTMF input from caller and generate contextual response."""
+    user_input = (SpeechResult or Digits or "").strip()
+
+    if not user_input:
+        return xml_response(create_menu_fallback())
+
+    # Initialize bot
+    bot = VoiceBotResponseGenerator(OPENAI_API_KEY)
+    
+    try:
+        # Generate AI response
+        response_text = await bot.generate_response(user_input)
+    except Exception as e:
+        logger.error(f"Voice bot error: {e}")
+        response_text = bot._fallback_response(user_input, None)
+
     response = VoiceResponse()
-    gather = Gather(
-        input="speech dtmf",
-        action="/twilio/voice/menu",
-        method="POST",
-        num_digits=1,
-        timeout=5,
-        speech_timeout="auto",
-    )
-    gather.say(
-        "Welcome to BizStack Perks. Press 1 to hear the current offer, or press 2 to request a callback.",
-        voice="alice",
-    )
-    response.append(gather)
-    response.say("Sorry, we did not receive a selection. Goodbye.", voice="alice")
+    response.say(response_text, voice="alice", language="en-US")
+
+    # Prompt for callback if needed
+    if any(word in user_input.lower() for word in ["yes", "callback", "call back", "speak"]):
+        response.say(
+            "Perfect! We'll set up a callback within 24 hours. Please stay on the line for one quick question.",
+            voice="alice",
+        )
+        gather = Gather(
+            input="dtmf",
+            action="/twilio/voice/capture-callback",
+            method="POST",
+            timeout=5,
+            num_digits=1,
+        )
+        gather.say("Press 1 to confirm your callback, or 2 to end the call.", voice="alice")
+        response.append(gather)
+    else:
+        # Ask follow-up
+        gather = Gather(
+            input="speech",
+            action="/twilio/voice/process-input",
+            method="POST",
+            timeout=5,
+            speech_timeout="auto",
+        )
+        gather.say("Do you have any other questions?", voice="alice")
+        response.append(gather)
+
+    return xml_response(response)
+
+
+@app.post("/twilio/voice/capture-callback")
+async def capture_callback(
+    Digits: Optional[str] = Form(default=None),
+    From: Optional[str] = Form(default=None),
+    CallSid: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    """Confirm and record callback request."""
+    response = VoiceResponse()
+
+    if Digits == "1":
+        # Confirmed callback
+        phone = From or "unknown"
+        upsert_call_event(
+            conn,
+            call_sid=CallSid or "unknown",
+            direction="inbound-callback",
+            call_status="callback_requested",
+            from_number=phone,
+            to_number=TWILIO_PHONE_NUMBER,
+            message="Callback requested from inbound call",
+        )
+        response.say(
+            "Thank you! A specialist from BizStack Perks will reach out to you within 24 hours. Goodbye!",
+            voice="alice",
+        )
+    else:
+        response.say("Thank you for calling BizStack Perks. Goodbye!", voice="alice")
+
     response.hangup()
     return xml_response(response)
 
 
-@app.post("/twilio/voice/menu")
-@app.post("/twilio/handle-input")
-async def handle_input(Digits: Optional[str] = Form(default=None), SpeechResult: Optional[str] = Form(default=None)):
+@app.post("/twilio/voice/handle-dtmf")
+async def handle_dtmf(Digits: Optional[str] = Form(default=None)):
+    """Handle legacy DTMF menu navigation."""
     response = VoiceResponse()
-    choice = (Digits or (SpeechResult or "")).strip().lower()
 
-    if choice == "1" or "price" in choice or "offer" in choice:
+    if Digits == "1":
         response.say(
-            f"Our featured BizStack Perks plan starts at {OFFER_PRICE_DISPLAY}. "
-            "Complete checkout on the website to activate onboarding.",
+            f"Our entry plan starts at {OFFER_PRICE_DISPLAY} per month. "
+            f"You get lead discovery, SMS follow-ups, and analytics. "
+            f"Ready to get started?",
             voice="alice",
         )
-    elif choice == "2" or "callback" in choice or "agent" in choice or "help" in choice:
+    elif Digits == "2":
         response.say(
-            "Thanks. Please use the website contact options or trigger an outbound call from your dashboard to continue.",
+            "We automatically discover and send you qualified leads, handle SMS outreach, "
+            "and give you real-time conversion analytics. "
+            "Everything you need to scale.",
+            voice="alice",
+        )
+    elif Digits == "3":
+        response.say(
+            "We'll set up a callback for you. A specialist will reach out within 24 hours.",
+            voice="alice",
+        )
+    elif Digits == "4":
+        response.say(
+            "Visit bizstack-perks.com to learn more, sign up for a free trial, or schedule a demo. Goodbye!",
             voice="alice",
         )
     else:
-        response.say("I did not understand that selection. Please call back and try again.", voice="alice")
+        response.say("Invalid selection. Goodbye.", voice="alice")
 
     response.hangup()
     return xml_response(response)
@@ -779,3 +962,237 @@ async def trigger_outbound_call(
         message=payload.message,
     )
     return {"call_sid": call.sid, "status": getattr(call, "status", "queued")}
+
+
+
+
+
+# ============================================================================
+# NEW: SMS Messaging Endpoints
+# ============================================================================
+
+
+@app.post("/twilio/sms/inbound")
+async def inbound_sms(request: Request, conn=Depends(get_db)):
+    """Handle inbound SMS from leads."""
+    if TWILIO_AUTH_TOKEN:
+        validator = RequestValidator(TWILIO_AUTH_TOKEN)
+        form = await request.form()
+        if not validator.validate(
+            str(request.url),
+            dict(form),
+            request.headers.get("X-Twilio-Signature", ""),
+        ):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+    else:
+        form = await request.form()
+
+    response = handle_inbound_sms(
+        message_body=form.get("Body", ""),
+        from_phone=form.get("From", ""),
+        message_sid=form.get("MessageSid", ""),
+        conn=conn,
+    )
+    return Response(content=str(response), media_type="application/xml")
+
+
+@app.post("/api/sms/send")
+async def send_sms_to_lead(
+    lead_id: int = Form(...),
+    message: str = Form(...),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Send SMS to a lead (authenticated endpoint)."""
+    require_api_key_or_session(request, x_api_key)
+    if not sms_manager.is_configured():
+        raise HTTPException(status_code=503, detail="SMS not configured")
+
+    # Fetch lead
+    lead = conn.execute(
+        "SELECT id, phone, full_name FROM leads WHERE id = ?", (lead_id,)
+    ).fetchone()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    notif = SMSNotification(
+        lead_id=lead_id,
+        phone=lead["phone"],
+        message=message,
+    )
+
+    result = sms_manager.send_sms(notif, conn)
+    return result
+
+
+# ============================================================================
+# NEW: Lead Discovery & Analytics Endpoints
+# ============================================================================
+
+
+@app.post("/api/leads/discover")
+async def discover_leads_from_location(
+    location: str = Form(...),
+    category: str = Form(...),
+    radius_miles: int = Form(default=5),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    background_tasks: BackgroundTasks = None,
+    conn=Depends(get_db),
+):
+    """Discover leads from Google Places by location + category."""
+    require_api_key_or_session(request, x_api_key)
+    if not places_source:
+        raise HTTPException(status_code=503, detail="Google Places not configured")
+
+    radius_meters = radius_miles * 1609.34
+
+    try:
+        leads = await places_source.search_by_location_and_category(
+            location=location,
+            category=category,
+            radius=int(radius_meters),
+        )
+    except Exception as e:
+        logger.error(f"Lead discovery error: {e}")
+        raise HTTPException(status_code=500, detail="Lead discovery failed") from e
+
+    count = store_leads_to_db(conn, leads)
+
+    return {
+        "location": location,
+        "category": category,
+        "leads_found": len(leads),
+        "leads_stored": count,
+        "leads": [l.dict() for l in leads[:10]],  # Return first 10
+    }
+
+
+@app.get("/api/analytics/hotspots")
+async def get_lead_hotspots(
+    days: int = 30,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Get geographic hotspots with high lead density and conversion rates."""
+    require_api_key_or_session(request, x_api_key)
+
+    analyzer = LeadHotspotAnalyzer(conn)
+    hotspots = analyzer.get_location_hotspots(days_lookback=days)
+    recommendations = analyzer.recommend_ad_targets()
+
+    return {
+        "hotspots": hotspots,
+        "recommendations": recommendations,
+        "report_date": str(datetime.now().isoformat()),
+    }
+
+
+@app.get("/api/analytics/demand")
+async def get_product_demand(
+    days: int = 30,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Get product/service demand by location."""
+    require_api_key_or_session(request, x_api_key)
+
+    analyzer = LeadHotspotAnalyzer(conn)
+    demand = analyzer.get_product_demand_by_location(days_lookback=days)
+    quality = analyzer.get_lead_quality_by_source()
+    trends = analyzer.get_traffic_trends(days_lookback=days)
+
+    return {
+        "demand_by_location": demand,
+        "lead_quality_by_source": quality,
+        "traffic_trends": trends,
+    }
+
+
+@app.get("/api/analytics/trends")
+async def get_traffic_trends(
+    days: int = 30,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Get daily traffic and conversion trends."""
+    require_api_key_or_session(request, x_api_key)
+
+    analyzer = LeadHotspotAnalyzer(conn)
+    trends = analyzer.get_traffic_trends(days_lookback=days)
+
+    return {"trends": trends}
+
+
+# ============================================================================
+# NEW: Affiliate Management Endpoints
+# ============================================================================
+
+
+@app.post("/api/affiliates/partner")
+async def add_affiliate_partner(
+    name: str = Form(...),
+    contact_email: str = Form(...),
+    commission_percentage: float = Form(...),
+    payout_method: str = Form(...),
+    payout_account: str = Form(...),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Add a new affiliate partner."""
+    require_api_key_or_session(request, x_api_key)
+
+    partner = AffiliatePartner(
+        name=name,
+        contact_email=contact_email,
+        commission_percentage=commission_percentage,
+        payout_method=payout_method,
+        payout_account=payout_account,
+    )
+
+    affiliate_mgr = AffiliateCommissionManager(conn)
+    partner_id = affiliate_mgr.add_partner(partner)
+
+    return {"status": "created", "partner_id": partner_id, "partner": partner.dict()}
+
+
+@app.get("/api/affiliates/earnings/{partner_id}")
+async def get_affiliate_earnings(
+    partner_id: int,
+    days: Optional[int] = None,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Get earnings for an affiliate partner."""
+    require_api_key_or_session(request, x_api_key)
+
+    affiliate_mgr = AffiliateCommissionManager(conn)
+    earnings = affiliate_mgr.get_partner_earnings(partner_id, days_lookback=days)
+    partner = affiliate_mgr.get_partner(partner_id)
+
+    return {"partner": partner, "earnings": earnings}
+
+
+@app.get("/api/affiliates/payouts")
+async def get_pending_payouts(
+    min_amount: float = 50.0,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Get pending payouts ready for processing."""
+    require_api_key_or_session(request, x_api_key)
+
+    affiliate_mgr = AffiliateCommissionManager(conn)
+    batch = affiliate_mgr.generate_payout_batch(min_amount=min_amount)
+
+    return batch
+
+
+from datetime import datetime
