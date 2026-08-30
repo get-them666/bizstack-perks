@@ -773,7 +773,7 @@ async def stripe_webhook(request: Request, conn=Depends(get_db)):
 @app.post("/twilio/inbound")
 async def inbound_call():
     """Handle inbound calls with AI-powered conversation bot."""
-    return xml_response(VoiceResponse(from_)(create_voice_greeting()))
+    return Response(content=create_voice_greeting(), media_type="application/xml")
 
 
 @app.post("/twilio/voice/process-input")
@@ -805,7 +805,7 @@ async def process_voice_input(
     # Prompt for callback if needed
     if any(word in user_input.lower() for word in ["yes", "callback", "call back", "speak"]):
         response.say(
-            "Perfect! We'll set up a callback within 24 hours. Please stay on the line for one quick question.",
+            "Please stay on the line for one quick question.",
             voice="alice",
         )
         gather = Gather(
@@ -872,7 +872,7 @@ async def handle_dtmf(Digits: Optional[str] = Form(default=None)):
 
     if Digits == "1":
         response.say(
-            f"Our entry plan starts at {OFFER_PRICE_DISPLAY} per month. "
+            f"Our entry plan starts at {OFFER_PRICE_DISPLAY}. "
             f"You get lead discovery, SMS follow-ups, and analytics. "
             f"Ready to get started?",
             voice="alice",

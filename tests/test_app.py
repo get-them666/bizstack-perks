@@ -210,7 +210,7 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("application/xml", response.headers["content-type"])
         self.assertIn("Welcome to BizStack Perks", response.text)
-        self.assertIn("/twilio/voice/menu", response.text)
+        self.assertIn("/twilio/voice/process-input", response.text)
 
     def test_twilio_status_persists_call_events(self):
         validator = self.main.RequestValidator("auth-token")
