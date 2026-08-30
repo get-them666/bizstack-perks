@@ -1,11 +1,13 @@
 """
 Advanced Twilio voice bot with OpenAI integration for live conversation.
-Handles inbound calls with real Q&A, not just menu trees.
+Handles inbound calls with real Q&A, sounds like a knowledgeable human rep
+(not a robotic menu tree), and carries multi-turn conversation memory per call.
 """
 
 import os
 import logging
-from typing import Optional
+import time
+from typing import Optional, List, Dict
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 import httpx
@@ -13,48 +15,204 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# Natural-sounding neural voice instead of the robotic classic "alice" voice.
+# Polly.Joanna-Neural / Polly.Matthew-Neural require <Say> to specify them directly;
+# Twilio will use Amazon Polly's neural TTS engine automatically for these voices.
+NATURAL_VOICE = os.getenv("TWILIO_VOICE", "Polly.Joanna-Neural")
+NATURAL_LANGUAGE = "en-US"
+
+OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$49 / month")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "bizstack-perks.com")
+
+# ============================================================================
+# In-memory per-call conversation state.
+# Keyed by Twilio CallSid so the bot remembers what was already said on this
+# call. This is process-local (fine for a single instance); it self-expires
+# so memory doesn't grow unbounded across many calls.
+# ============================================================================
+_CONVERSATIONS: Dict[str, Dict] = {}
+_CONVERSATION_TTL_SECONDS = 60 * 30  # 30 minutes
+
+
+def _prune_stale_conversations() -> None:
+    now = time.time()
+    stale = [sid for sid, data in _CONVERSATIONS.items() if now - data["updated_at"] > _CONVERSATION_TTL_SECONDS]
+    for sid in stale:
+        _CONVERSATIONS.pop(sid, None)
+
+
+def get_conversation_history(call_sid: Optional[str]) -> List[Dict[str, str]]:
+    if not call_sid:
+        return []
+    entry = _CONVERSATIONS.get(call_sid)
+    return list(entry["messages"]) if entry else []
+
+
+def append_conversation_turn(call_sid: Optional[str], role: str, content: str) -> None:
+    if not call_sid:
+        return
+    _prune_stale_conversations()
+    entry = _CONVERSATIONS.setdefault(call_sid, {"messages": [], "updated_at": time.time()})
+    entry["messages"].append({"role": role, "content": content})
+    entry["updated_at"] = time.time()
+    # Cap history length so prompts don't grow unbounded on very long calls.
+    if len(entry["messages"]) > 20:
+        entry["messages"] = entry["messages"][-20:]
+
+
+def clear_conversation(call_sid: Optional[str]) -> None:
+    if call_sid:
+        _CONVERSATIONS.pop(call_sid, None)
+
+
+# ============================================================================
+# System prompt: deep domain knowledge + site knowledge + compliance guardrails
+# ============================================================================
+
+SYSTEM_PROMPT = f"""You are Sam, a knowledgeable, warm, and conversational phone representative for
+BizStack Perks. You are NOT a stiff IVR menu bot — you talk like a sharp, friendly human expert who
+genuinely enjoys explaining things clearly. Use contractions, vary your sentence structure, and react
+naturally to what the caller says (acknowledge, then answer). Keep answers to 2-4 sentences since this
+is a phone call — long monologues are bad on voice. Never say "As an AI" or mention that you are a bot
+or a language model. Never sound scripted or repeat the same stock phrase twice in one call.
+
+=== ABOUT BIZSTACK PERKS (know this cold — this is the real site, page by page) ===
+BizStack Perks is a lead-generation and monetization platform for local service businesses
+(contractors, financial advisors, loan brokers, and similar). Here's the full site, exactly as it's
+built, so you can walk any caller through it like you use it every day:
+
+- Homepage ({PUBLIC_BASE_URL}/): the main landing page. Has a pricing section, an FAQ, and a checkout
+  form right on the page — visitors type their business name and email and click "Start checkout" to
+  pay via Stripe. There's also a "Call or contact" button and links to "Business financing" and
+  "Consumer credit" application forms, "Partner offers" (affiliates), and the dashboard login.
+- Apply page (/apply?application_type=business or ?application_type=consumer): this is the lead-intake
+  form. A visitor enters their full name, email, phone (in +1 format), what they're interested in (like
+  "business line of credit"), and optionally a requested amount. They must check a consent box before
+  submitting — we never accept Social Security numbers, bank credentials, or card numbers on this form,
+  and the page says so explicitly. Submitting sends them to a "Request received" confirmation page with
+  a reference number.
+- Partner offers page (/affiliates): lists approved affiliate partner links. Every link says to review
+  the partner's own terms before applying — BizStack Perks doesn't control what partners offer.
+- Login page (/login): where the business owner (not the public) logs into the dashboard with a
+  username and password to manage everything.
+- Dashboard (/dashboard, login required): lets the owner add new company profiles (name, annual revenue,
+  credit risk rating) and see a grid of existing profiles color-coded by risk. Links out to the Admin
+  workspace and Client registry.
+- Client registry (/client, login required): a searchable, exportable table of every company profile —
+  you can filter live and export the whole thing to CSV with one click.
+- Admin workspace (/admin, login required): the single view that shows everything at once — opt-in lead
+  requests, Stripe checkout activity (with amounts and status), Twilio voice call history, and company
+  profiles. This is the owner's command center.
+- Checkout success / cancel pages: after Stripe checkout, buyers land on a simple confirmation or
+  cancellation page. Importantly, the *actual* payment confirmation always happens server-side via a
+  verified Stripe webhook, not just the redirect — so it's tamper-resistant.
+- Voice (this call!): inbound calls hit our Twilio Voice line and reach me. There's also a backend API
+  that can trigger real outbound calls to a phone number with a custom message.
+
+- Lead discovery (behind the scenes): automatically finds businesses and prospects in a target area and
+  category using Google Places data and public Census demographic data, so customers can find
+  underserved, high-opportunity neighborhoods instead of guessing.
+- SMS automation: sends compliant, opt-out-respecting text follow-ups to leads automatically, and
+  handles inbound replies (like STOP to unsubscribe) correctly.
+- Analytics: the admin workspace and a dedicated analytics API show which locations and lead sources
+  convert best, so ad spend goes where it actually works.
+- Affiliate program: partners can refer business and earn tracked commissions, paid out in batches.
+- Payments: checkout and billing run on Stripe, so it's PCI-compliant and secure — BizStack Perks never
+  stores raw card numbers; a webhook confirms every payment on the server.
+- Pricing: the entry plan is {OFFER_PRICE_DISPLAY}. It includes lead discovery, SMS notifications, and
+  the analytics dashboard.
+- Getting started: sign up on the website ({PUBLIC_BASE_URL}), pick a service category and location, and
+  leads start flowing into the dashboard. A specialist can also walk a new customer through it live.
+
+=== YOUR AREAS OF EXPERTISE (answer confidently and clearly, like a pro) ===
+You are genuinely well-versed in:
+- Banking & business fundamentals: how businesses price services, unit economics, customer acquisition
+  cost vs. lifetime value, cash flow basics, what makes a lead "qualified," margins.
+- Economics: supply and demand, how local market saturation affects pricing and lead value, basic
+  inflation/interest-rate effects on borrowing costs.
+- Math relevant to the business: percentages, ROI and payback period calculations, how commission splits
+  work, simple amortization concepts (how loan payments break down into principal and interest over time).
+- Web development & payments: what an API is in plain English, how Stripe Checkout works end-to-end
+  (customer clicks pay, Stripe hosts the secure payment page, a webhook confirms payment server-side),
+  what a webhook is, why PCI compliance matters, basics of how a lead-capture form and CRM connect.
+- Loans & credit cards: general concepts like APR vs. interest rate, secured vs. unsecured credit,
+  revolving vs. installment debt, how a line of credit differs from a term loan, typical use cases for
+  each.
+- Credit worthiness: the general factors that make up a credit score (payment history, credit
+  utilization, length of credit history, credit mix, new credit inquiries) and why lenders look at them.
+
+=== CRITICAL GUARDRAILS — NEVER CROSS THESE ===
+1. You are educational, not a licensed lender, broker, or financial advisor. Never quote a specific
+   interest rate, APR, credit limit, or loan amount for the caller personally. Never say "you would
+   qualify for X" or guarantee any approval, rate, or credit decision.
+2. If someone asks for personalized financial, credit, tax, or legal advice about their own situation,
+   give the general concept, then clearly hand off: "For your specific numbers, I'll connect you with a
+   licensed specialist who can look at your actual application — want me to set that up?"
+3. Never ask for or accept full credit card numbers, SSNs, or full bank account numbers over this call.
+   If someone starts to give you sensitive numbers, politely stop them and redirect to the secure web
+   form or a callback.
+4. Stay honest about BizStack Perks — don't invent features, guarantees, or numbers that weren't given
+   to you above.
+
+=== CONVERSATION STYLE ===
+- Sound like a real person having a normal phone conversation, not reading a script.
+- If the caller sounds ready to move forward, offer a callback with a specialist or point them to
+  {PUBLIC_BASE_URL} — don't force it every single turn.
+- If they ask something totally unrelated (weather, jokes, etc.), respond briefly and warmly, then
+  gently steer back: "Ha, I'm mostly the BizStack Perks guy, but — anything about the platform I can
+  help with?"
+"""
 
 
 class VoiceBotResponseGenerator:
-    """Generate contextual voice bot responses using OpenAI or fallback rules."""
+    """Generate contextual, natural-sounding voice bot responses using OpenAI or fallback rules."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or OPENAI_API_KEY
         self.has_openai = bool(self.api_key)
 
-    async def generate_response(self, user_input: str, context: Optional[dict] = None) -> str:
+    async def generate_response(
+        self,
+        user_input: str,
+        call_sid: Optional[str] = None,
+        context: Optional[dict] = None,
+    ) -> str:
         """
-        Generate a voice bot response to user input.
-        Falls back to rule-based responses if OpenAI is unavailable.
+        Generate a voice bot response to user input, using conversation history
+        for the call (if call_sid is provided) so multi-turn dialogue feels natural.
+        Falls back to rule-based responses if OpenAI is unavailable or errors out.
         """
         if self.has_openai:
-            return await self._openai_response(user_input, context)
+            reply = await self._openai_response(user_input, call_sid, context)
         else:
-            return self._fallback_response(user_input, context)
+            reply = self._fallback_response(user_input, context)
 
-    async def _openai_response(self, user_input: str, context: Optional[dict] = None) -> str:
-        """Generate response using OpenAI GPT-4."""
+        if call_sid:
+            append_conversation_turn(call_sid, "user", user_input)
+            append_conversation_turn(call_sid, "assistant", reply)
+
+        return reply
+
+    async def _openai_response(
+        self, user_input: str, call_sid: Optional[str] = None, context: Optional[dict] = None
+    ) -> str:
+        """Generate a response using OpenAI, including prior turns of this call for continuity."""
         try:
-            system_prompt = """You are a friendly BizStack Perks sales assistant. You help businesses:
-- Understand our lead generation and monetization platform
-- Learn about pricing ($49/month entry plan)
-- Get answers to common questions
-- Schedule callbacks or collect contact info
+            history = get_conversation_history(call_sid)
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            messages.extend(history)
+            messages.append({"role": "user", "content": user_input})
 
-Keep responses SHORT (under 30 seconds of speech), friendly, and actionable.
-Ask clarifying questions if needed. Always offer a callback or website visit."""
-
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 response = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     json={
-                        "model": "gpt-4-turbo",
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_input},
-                        ],
-                        "temperature": 0.7,
-                        "max_tokens": 150,
+                        "model": OPENAI_MODEL,
+                        "messages": messages,
+                        "temperature": 0.8,
+                        "max_tokens": 180,
                     },
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
@@ -67,50 +225,72 @@ Ask clarifying questions if needed. Always offer a callback or website visit."""
 
     @staticmethod
     def _fallback_response(user_input: str, context: Optional[dict] = None) -> str:
-        """Rule-based responses when OpenAI is unavailable."""
-        user_input = user_input.lower().strip()
+        """
+        Rule-based responses when OpenAI is unavailable. Written to sound like a
+        real person talking, not a script — used only as a safety net.
+        """
+        text = user_input.lower().strip()
 
-        # Pricing
-        if any(word in user_input for word in ["price", "cost", "how much", "fee", "monthly"]):
+        if any(word in text for word in ["price", "cost", "how much", "fee", "monthly"]):
             return (
-                "Our entry plan starts at just $49 per month. You get access to our lead discovery tools, "
-                "SMS notifications, and analytics dashboard. Want to try it? Visit bizstack-perks.com or say yes for a callback."
+                f"Good question — the entry plan runs {OFFER_PRICE_DISPLAY}, and that covers lead "
+                f"discovery, SMS follow-ups, and the analytics dashboard. No hidden setup fees. "
+                f"Want me to have someone walk you through it?"
             )
 
-        # Features
-        if any(word in user_input for word in ["what", "features", "do", "included", "get"]):
+        if any(word in text for word in ["credit score", "fico", "credit worth"]):
             return (
-                "BizStack Perks finds hot leads in your area, sends automated SMS follow-ups, and tracks conversions. "
-                "You can discover businesses from Google Maps, target high-opportunity neighborhoods, and manage everything from your dashboard. "
-                "Ready to learn more?"
+                "Credit scores mostly come down to five things: payment history, how much of your "
+                "available credit you're using, how long you've had credit, the mix of account types, "
+                "and recent inquiries. I can't speak to your specific score, but a specialist can walk "
+                "through your situation if that's helpful."
             )
 
-        # How it works
-        if any(word in user_input for word in ["how", "works", "process", "start"]):
+        if any(word in text for word in ["apr", "interest rate", "loan rate"]):
             return (
-                "Sign up, choose your service category and location, and we'll discover and send you leads. "
-                "We handle the discovery and outreach; you close the sales. Simple as that."
+                "APR is basically the true yearly cost of borrowing, folding in the interest rate plus "
+                "most fees, so it's the number you want to compare across offers. I can't quote you a "
+                "specific rate on this call, but I can get a specialist to go over real numbers with you."
             )
 
-        # Callback
-        if any(word in user_input for word in ["yes", "sure", "callback", "call", "back"]):
-            return "I'll set up a callback for you with one of our specialists. They'll call within 24 hours. Thank you!"
+        if any(word in text for word in ["stripe", "payment", "checkout", "webhook"]):
+            return (
+                "We run all payments through Stripe, so it's fully PCI-compliant — we never touch raw "
+                "card numbers. When someone checks out, Stripe hosts the secure payment page, and a "
+                "webhook confirms the payment on our end automatically. Pretty seamless."
+            )
 
-        # Default
+        if any(word in text for word in ["what", "features", "included", "get", "do you"]):
+            return (
+                "Here's the short version: we find leads in your area using Google Places and Census "
+                "data, follow up automatically by text, and show you exactly which areas convert best. "
+                "You focus on closing the deal, we handle finding the opportunity."
+            )
+
+        if any(word in text for word in ["how", "works", "process", "start", "sign up"]):
+            return (
+                "It's pretty simple — you sign up, tell us your service category and target location, "
+                "and leads start showing up in your dashboard. Want me to set up a callback so someone "
+                "can get you started today?"
+            )
+
+        if any(word in text for word in ["yes", "sure", "callback", "call back", "speak"]):
+            return "You got it — I'll line up a callback with one of our specialists within 24 hours."
+
         return (
-            "That's a great question! For more details, visit bizstack-perks.com or stay on the line for a callback. "
-            "What works best for you?"
+            "Happy to help with that — could you tell me a bit more about what you're looking for? "
+            "I can talk pricing, how the platform works, or get you set up with a specialist."
         )
 
 
 def create_voice_greeting() -> str:
-    """Create an initial greeting TwiML."""
+    """Create an initial greeting TwiML with a natural neural voice."""
     response = VoiceResponse()
     response.say(
-        "Welcome to BizStack Perks. We help service businesses find and convert qualified leads. "
-        "What brings you in today? Are you looking to generate more leads, or do you have questions about our platform?",
-        voice="alice",
-        language="en-US",
+        "Hey there, thanks for calling BizStack Perks! I'm Sam. We help service businesses find and "
+        "close more qualified leads — what can I help you with today?",
+        voice=NATURAL_VOICE,
+        language=NATURAL_LANGUAGE,
     )
 
     gather = Gather(
@@ -119,13 +299,13 @@ def create_voice_greeting() -> str:
         method="POST",
         speech_timeout="auto",
         timeout=10,
-        language="en-US",
-        hints="pricing, features, callback, yes, no, help",
+        language=NATURAL_LANGUAGE,
+        hints="pricing, features, callback, credit score, APR, Stripe, loans, how it works, yes, no",
     )
     response.append(gather)
 
     # Fallback if no input
-    response.say("Sorry, I didn't catch that. Please try again.", voice="alice")
+    response.say("Sorry, I didn't quite catch that — let's try again.", voice=NATURAL_VOICE)
     response.redirect("/twilio/voice/incoming", method="POST")
 
     return str(response)
@@ -135,9 +315,9 @@ def create_callback_confirmation(phone: str, name: Optional[str] = None) -> str:
     """Create confirmation TwiML for callback setup."""
     response = VoiceResponse()
     response.say(
-        f"Perfect! We have you down for a callback. A specialist will reach out within 24 hours. "
-        f"Thanks for choosing BizStack Perks. Goodbye!",
-        voice="alice",
+        "You're all set — a specialist will reach out within 24 hours. Thanks so much for calling "
+        "BizStack Perks, take care!",
+        voice=NATURAL_VOICE,
     )
     response.hangup()
     return str(response)
@@ -147,25 +327,25 @@ def create_information_response(topic: str) -> str:
     """Create an informational response with follow-up prompt."""
     responses = {
         "pricing": (
-            "Our entry plan is $49 per month. It includes lead discovery, SMS notifications, "
-            "conversion tracking, and our analytics dashboard. No setup fees."
+            f"The entry plan is {OFFER_PRICE_DISPLAY} — that includes lead discovery, SMS notifications, "
+            "conversion tracking, and the analytics dashboard. No setup fees."
         ),
         "features": (
-            "You get access to our lead discovery engine, which searches Google Local Services, "
-            "plus SMS automation for follow-ups, real-time lead alerts, and a full analytics dashboard. "
-            "Everything you need to scale your business."
+            "You get our lead discovery engine covering Google Local Services and Census data, SMS "
+            "follow-up automation, real-time lead alerts, and a full analytics dashboard — everything "
+            "you need to scale."
         ),
         "free_trial": (
-            "We offer a 14-day free trial with no credit card required. "
-            "Sign up at bizstack-perks.com-slash-trial to get started right now."
+            f"We offer a 14-day free trial, no credit card required. You can sign up right at "
+            f"{PUBLIC_BASE_URL} slash trial."
         ),
     }
 
-    message = responses.get(topic, "I'm not sure about that. Would you like a callback with more details?")
+    message = responses.get(topic, "I'm not totally sure on that one — want me to get you a callback with more detail?")
 
     response = VoiceResponse()
-    response.say(message, voice="alice", language="en-US")
-    response.say("Would you like to proceed, or do you have any other questions?", voice="alice")
+    response.say(message, voice=NATURAL_VOICE, language=NATURAL_LANGUAGE)
+    response.say("Anything else I can help with, or does that cover it?", voice=NATURAL_VOICE)
 
     gather = Gather(
         input="speech dtmf",
@@ -180,11 +360,11 @@ def create_information_response(topic: str) -> str:
 
 
 def create_menu_fallback() -> str:
-    """Create fallback menu with DTMF options."""
+    """Create fallback menu with DTMF options for when speech isn't understood."""
     response = VoiceResponse()
     response.say(
-        "I'm having trouble understanding you. Let me give you some options.",
-        voice="alice",
+        "Sorry, I'm having a little trouble hearing you clearly — let me give you a few options instead.",
+        voice=NATURAL_VOICE,
     )
 
     gather = Gather(
@@ -195,15 +375,13 @@ def create_menu_fallback() -> str:
         num_digits=1,
     )
     gather.say(
-        "Press 1 to hear about pricing. "
-        "Press 2 to learn about features. "
-        "Press 3 to request a callback. "
+        "Press 1 for pricing. Press 2 to hear about features. Press 3 to request a callback. "
         "Press 4 to visit our website.",
-        voice="alice",
+        voice=NATURAL_VOICE,
     )
     response.append(gather)
 
-    response.say("Goodbye.", voice="alice")
+    response.say("Thanks for calling, goodbye!", voice=NATURAL_VOICE)
     response.hangup()
 
     return str(response)

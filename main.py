@@ -23,7 +23,7 @@ from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLe
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
 from lead_analytics import LeadHotspotAnalyzer
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
-from voice_bot import VoiceBotResponseGenerator, create_voice_greeting, create_callback_confirmation, create_information_response, create_menu_fallback
+from voice_bot import VoiceBotResponseGenerator, create_voice_greeting, create_callback_confirmation, create_information_response, create_menu_fallback, NATURAL_VOICE
 
 try:
     from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
@@ -207,7 +207,7 @@ def twilio_ready() -> bool:
 
 def create_outbound_twiml(message: str) -> str:
     response = VoiceResponse()
-    response.say(message, voice="alice")
+    response.say(message, voice=NATURAL_VOICE)
     response.hangup()
     return str(response)
 
@@ -780,6 +780,7 @@ async def inbound_call():
 async def process_voice_input(
     SpeechResult: Optional[str] = Form(default=None),
     Digits: Optional[str] = Form(default=None),
+    CallSid: Optional[str] = Form(default=None),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -793,20 +794,20 @@ async def process_voice_input(
     bot = VoiceBotResponseGenerator(OPENAI_API_KEY)
     
     try:
-        # Generate AI response
-        response_text = await bot.generate_response(user_input)
+        # Generate AI response (call_sid gives the bot memory of this call)
+        response_text = await bot.generate_response(user_input, call_sid=CallSid)
     except Exception as e:
         logger.error(f"Voice bot error: {e}")
         response_text = bot._fallback_response(user_input, None)
 
     response = VoiceResponse()
-    response.say(response_text, voice="alice", language="en-US")
+    response.say(response_text, voice=NATURAL_VOICE, language="en-US")
 
     # Prompt for callback if needed
     if any(word in user_input.lower() for word in ["yes", "callback", "call back", "speak"]):
         response.say(
             "Please stay on the line for one quick question.",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
         gather = Gather(
             input="dtmf",
@@ -815,7 +816,7 @@ async def process_voice_input(
             timeout=5,
             num_digits=1,
         )
-        gather.say("Press 1 to confirm your callback, or 2 to end the call.", voice="alice")
+        gather.say("Press 1 to confirm your callback, or 2 to end the call.", voice=NATURAL_VOICE)
         response.append(gather)
     else:
         # Ask follow-up
@@ -826,7 +827,7 @@ async def process_voice_input(
             timeout=5,
             speech_timeout="auto",
         )
-        gather.say("Do you have any other questions?", voice="alice")
+        gather.say("Do you have any other questions?", voice=NATURAL_VOICE)
         response.append(gather)
 
     return xml_response(response)
@@ -856,10 +857,10 @@ async def capture_callback(
         )
         response.say(
             "Thank you! A specialist from BizStack Perks will reach out to you within 24 hours. Goodbye!",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
     else:
-        response.say("Thank you for calling BizStack Perks. Goodbye!", voice="alice")
+        response.say("Thank you for calling BizStack Perks. Goodbye!", voice=NATURAL_VOICE)
 
     response.hangup()
     return xml_response(response)
@@ -875,27 +876,27 @@ async def handle_dtmf(Digits: Optional[str] = Form(default=None)):
             f"Our entry plan starts at {OFFER_PRICE_DISPLAY}. "
             f"You get lead discovery, SMS follow-ups, and analytics. "
             f"Ready to get started?",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
     elif Digits == "2":
         response.say(
             "We automatically discover and send you qualified leads, handle SMS outreach, "
             "and give you real-time conversion analytics. "
             "Everything you need to scale.",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
     elif Digits == "3":
         response.say(
             "We'll set up a callback for you. A specialist will reach out within 24 hours.",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
     elif Digits == "4":
         response.say(
             "Visit bizstack-perks.com to learn more, sign up for a free trial, or schedule a demo. Goodbye!",
-            voice="alice",
+            voice=NATURAL_VOICE,
         )
     else:
-        response.say("Invalid selection. Goodbye.", voice="alice")
+        response.say("Invalid selection. Goodbye.", voice=NATURAL_VOICE)
 
     response.hangup()
     return xml_response(response)
