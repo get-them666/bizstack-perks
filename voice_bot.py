@@ -95,8 +95,14 @@ built, so you can walk any caller through it like you use it every day:
   a reference number.
 - Partner offers page (/affiliates): lists approved affiliate partner links. Every link says to review
   the partner's own terms before applying — BizStack Perks doesn't control what partners offer.
-- Login page (/login): where the business owner (not the public) logs into the dashboard with a
-  username and password to manage everything.
+- Customer portal login (/portal/login): this is for EXISTING PAYING CUSTOMERS — they log in with just
+  their phone number and a text-message verification code (no password to remember). Once in, they see
+  their own leads and can manage billing (update card, view invoices, cancel) through a secure Stripe
+  billing portal link. If a caller says they're already a customer and want to see their leads or manage
+  billing, point them here — NOT to the owner's login below.
+- Login page (/login): this is ONLY for the business owner/staff running BizStack Perks internally — not
+  for customers or the public. Don't direct callers here; if someone asks about the owner's dashboard,
+  it's not something you'd walk a caller through.
 - Dashboard (/dashboard, login required): lets the owner add new company profiles (name, annual revenue,
   credit risk rating) and see a grid of existing profiles color-coded by risk. Links out to the Admin
   workspace and Client registry.

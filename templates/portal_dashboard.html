@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Account - BizStack Perks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at top, #15254f 0%, #0b1020 55%);
+            color: #f5f7fb;
+            min-height: 100vh;
+        }
+        .page { max-width: 960px; margin: 0 auto; padding: 32px 20px 56px; }
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 22px;
+            margin-bottom: 24px;
+            background: rgba(16, 25, 52, 0.88);
+            border: 1px solid rgba(122, 195, 255, 0.18);
+            border-radius: 18px;
+        }
+        .brand { font-weight: 800; }
+        .nav a { color: #9db1d1; text-decoration: none; margin-left: 18px; }
+        .card {
+            background: rgba(16, 25, 52, 0.88);
+            border: 1px solid rgba(122, 195, 255, 0.18);
+            border-radius: 18px;
+            padding: 26px;
+            margin-bottom: 20px;
+        }
+        h1 { font-size: 1.4rem; margin-bottom: 4px; }
+        .muted { color: #9db1d1; }
+        .status-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+        .status-active { background: rgba(53, 208, 143, 0.15); color: #7fe6bc; border: 1px solid rgba(53, 208, 143, 0.35); }
+        .status-inactive { background: rgba(255, 91, 91, 0.15); color: #ffb3b3; border: 1px solid rgba(255, 91, 91, 0.35); }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { text-align: left; padding: 12px 10px; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        th { color: #9db1d1; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.04em; }
+        .empty { color: #7288a8; padding: 30px 0; text-align: center; }
+        .button {
+            display: inline-flex;
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 0;
+            background: linear-gradient(135deg, #4fd1ff, #1198ff);
+            color: #03111d;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .lead-status { padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(79, 209, 255, 0.12); color: #4fd1ff; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <nav class="nav">
+            <div class="brand">⚡ BizStack Perks — My Account</div>
+            <div>
+                <a href="/portal/logout">Log out</a>
+            </div>
+        </nav>
+
+        <div class="card">
+            <h1>Welcome{% if customer.business_name %}, {{ customer.business_name }}{% endif %}</h1>
+            <p class="muted">Account: {{ customer.email or customer.phone }}</p>
+            <span class="status-pill {% if customer.subscription_status == 'active' %}status-active{% else %}status-inactive{% endif %}">
+                {{ customer.subscription_status | upper }}
+            </span>
+        </div>
+
+        <div class="card">
+            <h1>Manage billing</h1>
+            <p class="muted">Update your payment method, view invoices, or cancel your subscription.</p>
+            <div style="height: 14px;"></div>
+            <form method="post" action="/portal/billing">
+                <button class="button" type="submit">Open billing portal</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h1>Your leads</h1>
+            <p class="muted">Leads discovered and matched to your account.</p>
+            {% if leads %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Interest</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Received</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lead in leads %}
+                    <tr>
+                        <td>{{ lead.full_name }}</td>
+                        <td>{{ lead.requested_product }}</td>
+                        <td>{{ lead.source }}</td>
+                        <td><span class="lead-status">{{ lead.status }}</span></td>
+                        <td>{{ lead.created_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No leads yet. New matches will show up here automatically.</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

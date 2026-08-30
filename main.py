@@ -24,6 +24,19 @@ from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
 from lead_analytics import LeadHotspotAnalyzer
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
 from voice_bot import VoiceBotResponseGenerator, create_voice_greeting, create_callback_confirmation, create_information_response, create_menu_fallback, NATURAL_VOICE
+from customer_portal import (
+    init_customer_tables,
+    provision_customer_from_checkout,
+    mark_subscription_status,
+    get_customer_by_id,
+    get_customer_by_phone,
+    get_customer_leads,
+    generate_otp,
+    verify_otp,
+    create_portal_session_token,
+    get_customer_by_session_token,
+    clear_portal_session,
+)
 
 try:
     from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
@@ -168,6 +181,21 @@ def record_checkout_session(conn: sqlite3.Connection, session_data: dict, event_
         customer_email=customer_details.get("email") or session_data.get("customer_email"),
         raw_event_id=event_id,
     )
+
+    # Auto-provision a customer portal account once payment is actually confirmed.
+    # This only runs on paid/complete statuses so unpaid or canceled sessions never
+    # create an account.
+    if payment_status in ("paid", "complete"):
+        email = customer_details.get("email") or session_data.get("customer_email")
+        metadata = session_data.get("metadata") or {}
+        business_name = metadata.get("business_name") if isinstance(metadata, dict) else None
+        provision_customer_from_checkout(
+            conn,
+            email=email,
+            business_name=business_name,
+            stripe_customer_id=session_data.get("customer"),
+            stripe_subscription_id=session_data.get("subscription"),
+        )
 
 
 def upsert_call_event(
@@ -349,6 +377,7 @@ def init_db() -> None:
     conn = sqlite3.connect(DATABASE_PATH)
     try:
         AffiliateCommissionManager(conn)
+        init_customer_tables(conn)
     finally:
         conn.close()
 
@@ -1037,12 +1066,17 @@ async def discover_leads_from_location(
     location: str = Form(...),
     category: str = Form(...),
     radius_miles: int = Form(default=5),
+    customer_id: Optional[int] = Form(default=None),
     request: Request = None,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     background_tasks: BackgroundTasks = None,
     conn=Depends(get_db),
 ):
-    """Discover leads from Google Places by location + category."""
+    """Discover leads from Google Places by location + category.
+
+    If customer_id is provided, discovered leads are assigned to that paying
+    customer and will appear in their customer portal.
+    """
     require_api_key_or_session(request, x_api_key)
     if not places_source:
         raise HTTPException(status_code=503, detail="Google Places not configured")
@@ -1059,7 +1093,7 @@ async def discover_leads_from_location(
         logger.error(f"Lead discovery error: {e}")
         raise HTTPException(status_code=500, detail="Lead discovery failed") from e
 
-    count = store_leads_to_db(conn, leads)
+    count = store_leads_to_db(conn, leads, customer_id=customer_id)
 
     return {
         "location": location,
@@ -1196,4 +1230,146 @@ async def get_pending_payouts(
     return batch
 
 
-from datetime import datetime
+# ============================================================================
+# Customer Portal (separate from admin auth -- customers only ever see their
+# own data, never the admin dashboard/admin/client registry views)
+# ============================================================================
+
+PORTAL_SESSION_COOKIE = "portal_session_token"
+
+
+def get_portal_customer(request: Request, conn) -> Optional[sqlite3.Row]:
+    token = request.cookies.get(PORTAL_SESSION_COOKIE)
+    if not token:
+        return None
+    return get_customer_by_session_token(conn, token)
+
+
+@app.get("/portal/login", response_class=HTMLResponse)
+async def portal_login_page(request: Request, error: Optional[str] = None):
+    return templates.TemplateResponse(
+        request=request,
+        name="portal_login.html",
+        context={"error": error, "code_sent": False, "phone": ""},
+    )
+
+
+@app.post("/portal/request-code")
+async def portal_request_code(request: Request, phone: str = Form(...), conn=Depends(get_db)):
+    phone = phone.strip()
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+        return templates.TemplateResponse(
+            request=request,
+            name="portal_login.html",
+            context={"error": "Enter a valid phone number in +1XXXXXXXXXX format.", "code_sent": False, "phone": ""},
+        )
+
+    customer = get_customer_by_phone(conn, phone)
+    if not customer:
+        # Don't reveal whether the phone number exists (avoid account enumeration).
+        # Always show the "code sent" screen either way.
+        logger.info("Portal login requested for unknown phone (no account created)")
+    else:
+        code = generate_otp(phone)
+        if sms_manager.is_configured():
+            try:
+                sms_manager.client.messages.create(
+                    body=f"Your BizStack Perks login code is {code}. It expires in 10 minutes.",
+                    from_=sms_manager.from_number,
+                    to=phone,
+                )
+            except Exception as e:
+                logger.error(f"Failed to send portal OTP SMS: {e}")
+        else:
+            # No Twilio configured (e.g. local dev) -- log the code so the flow is testable.
+            logger.warning(f"SMS not configured; portal OTP for {phone} is: {code}")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="portal_login.html",
+        context={"error": None, "code_sent": True, "phone": phone},
+    )
+
+
+@app.post("/portal/verify")
+async def portal_verify_code(
+    request: Request, phone: str = Form(...), code: str = Form(...), conn=Depends(get_db)
+):
+    phone = phone.strip()
+    if not verify_otp(phone, code):
+        return templates.TemplateResponse(
+            request=request,
+            name="portal_login.html",
+            context={"error": "That code is invalid or expired. Please try again.", "code_sent": False, "phone": ""},
+        )
+
+    customer = get_customer_by_phone(conn, phone)
+    if not customer:
+        return templates.TemplateResponse(
+            request=request,
+            name="portal_login.html",
+            context={"error": "We couldn't find an account for that number.", "code_sent": False, "phone": ""},
+        )
+
+    token = create_portal_session_token(conn, customer["id"])
+    response = RedirectResponse(url="/portal", status_code=303)
+    response.set_cookie(
+        key=PORTAL_SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=normalize_base_url(request).startswith("https://"),
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,  # 7 days
+    )
+    return response
+
+
+@app.get("/portal/logout")
+async def portal_logout(request: Request, conn=Depends(get_db)):
+    customer = get_portal_customer(request, conn)
+    if customer:
+        clear_portal_session(conn, customer["id"])
+    response = RedirectResponse(url="/portal/login", status_code=303)
+    response.delete_cookie(PORTAL_SESSION_COOKIE)
+    return response
+
+
+@app.get("/portal", response_class=HTMLResponse)
+async def customer_portal(request: Request, conn=Depends(get_db)):
+    customer = get_portal_customer(request, conn)
+    if not customer:
+        return RedirectResponse(url="/portal/login", status_code=303)
+
+    leads = get_customer_leads(conn, customer["id"])
+    return templates.TemplateResponse(
+        request=request,
+        name="portal_dashboard.html",
+        context={"customer": customer, "leads": leads},
+    )
+
+
+@app.post("/portal/billing")
+async def portal_billing_redirect(request: Request, conn=Depends(get_db)):
+    """Generate a Stripe Customer Portal session so the customer can manage
+    their own billing (update card, view invoices, cancel) without ever
+    touching the admin backend."""
+    customer = get_portal_customer(request, conn)
+    if not customer:
+        return RedirectResponse(url="/portal/login", status_code=303)
+
+    if not stripe_ready() or not customer["stripe_customer_id"]:
+        return RedirectResponse(url="/portal?error=Billing+portal+is+not+available+yet", status_code=303)
+
+    try:
+        stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
+        portal_session = stripe_client.billing_portal.sessions.create(
+            params={
+                "customer": customer["stripe_customer_id"],
+                "return_url": f"{normalize_base_url(request)}/portal",
+            }
+        )
+        session_data = portal_session.to_dict() if hasattr(portal_session, "to_dict") else portal_session
+        return RedirectResponse(url=session_data["url"], status_code=303)
+    except Exception as exc:
+        logger.warning(f"Stripe billing portal session error: {exc}")
+        return RedirectResponse(url="/portal?error=Unable+to+open+billing+portal", status_code=303)

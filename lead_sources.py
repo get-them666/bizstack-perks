@@ -289,8 +289,12 @@ class AffiliateLeadNetwork:
             return []
 
 
-def store_leads_to_db(conn: sqlite3.Connection, leads: List[LeadSource]) -> int:
-    """Store fetched leads into the database. Returns count inserted."""
+def store_leads_to_db(conn: sqlite3.Connection, leads: List[LeadSource], customer_id: Optional[int] = None) -> int:
+    """Store fetched leads into the database. Returns count inserted.
+
+    If customer_id is provided, discovered leads are tagged to that paying
+    customer so they show up in that customer's portal view.
+    """
     cursor = conn.cursor()
     count = 0
 
@@ -307,8 +311,8 @@ def store_leads_to_db(conn: sqlite3.Connection, leads: List[LeadSource]) -> int:
                     """
                     INSERT INTO leads (
                         full_name, email, phone, application_type, requested_product,
-                        source, consent_text, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        source, consent_text, status, customer_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         lead.name,
@@ -319,6 +323,7 @@ def store_leads_to_db(conn: sqlite3.Connection, leads: List[LeadSource]) -> int:
                         f"{lead.source_type}:{lead.source_name}",
                         f"Auto-discovered from {lead.source_name} - Confidence: {lead.confidence_score}",
                         "discovered",
+                        customer_id,
                     ),
                 )
                 count += 1
