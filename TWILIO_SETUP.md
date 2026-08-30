@@ -62,15 +62,16 @@ Once upgraded, your inbound calls will:
 # Example: +1-555-0000-000
 
 # The bot will say:
-# "Welcome to BizStack Perks. We help service businesses find and convert qualified leads. 
-#  What brings you in today? Are you looking to generate more leads, or do you have 
-#  questions about our platform?"
+# "Hey there, thanks for calling BizStack Perks! I'm Sam. We help service businesses find and
+#  close more qualified leads -- what can I help you with today?"
 
 # Try saying:
 #   - "pricing"
 #   - "features"
 #   - "yes, callback"
 #   - "how does it work"
+#   - "what's a credit score based on"
+#   - "how does Stripe checkout work"
 ```
 
 ---
@@ -111,6 +112,14 @@ curl -X POST http://localhost:8000/api/sms/send \
   -F "lead_id=1" \
   -F "message=Hi! We found a great opportunity for your business."
 ```
+
+### Customer portal login codes depend on this too
+
+The customer portal (`/portal/login`) sends a 6-digit login code by SMS. Until Twilio is
+upgraded and `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` are all set
+in your environment, the app falls back to **logging** the code instead of texting it --
+fine for local testing, but real customers won't receive anything. Confirming these three
+variables are set (see `.env.example`) is part of finishing this upgrade.
 
 ---
 

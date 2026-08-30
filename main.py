@@ -30,6 +30,7 @@ from customer_portal import (
     mark_subscription_status,
     get_customer_by_id,
     get_customer_by_phone,
+    get_customer_by_email,
     get_customer_leads,
     generate_otp,
     verify_otp,
@@ -37,6 +38,7 @@ from customer_portal import (
     get_customer_by_session_token,
     clear_portal_session,
 )
+from email_notifier import send_portal_login_code, email_configured
 
 try:
     from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
@@ -1250,65 +1252,101 @@ async def portal_login_page(request: Request, error: Optional[str] = None):
     return templates.TemplateResponse(
         request=request,
         name="portal_login.html",
-        context={"error": error, "code_sent": False, "phone": ""},
+        context={"error": error, "code_sent": False, "identifier": "", "channel": "phone"},
     )
 
 
 @app.post("/portal/request-code")
-async def portal_request_code(request: Request, phone: str = Form(...), conn=Depends(get_db)):
-    phone = phone.strip()
-    if not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
-        return templates.TemplateResponse(
-            request=request,
-            name="portal_login.html",
-            context={"error": "Enter a valid phone number in +1XXXXXXXXXX format.", "code_sent": False, "phone": ""},
-        )
+async def portal_request_code(
+    request: Request,
+    identifier: str = Form(...),
+    channel: str = Form(default="phone"),
+    conn=Depends(get_db),
+):
+    """Send a login code via phone (SMS) or email, based on the selected channel."""
+    identifier = identifier.strip()
 
-    customer = get_customer_by_phone(conn, phone)
-    if not customer:
-        # Don't reveal whether the phone number exists (avoid account enumeration).
-        # Always show the "code sent" screen either way.
-        logger.info("Portal login requested for unknown phone (no account created)")
-    else:
-        code = generate_otp(phone)
-        if sms_manager.is_configured():
-            try:
-                sms_manager.client.messages.create(
-                    body=f"Your BizStack Perks login code is {code}. It expires in 10 minutes.",
-                    from_=sms_manager.from_number,
-                    to=phone,
-                )
-            except Exception as e:
-                logger.error(f"Failed to send portal OTP SMS: {e}")
+    if channel == "email":
+        if "@" not in identifier or "." not in identifier:
+            return templates.TemplateResponse(
+                request=request,
+                name="portal_login.html",
+                context={"error": "Enter a valid email address.", "code_sent": False, "identifier": "", "channel": "email"},
+            )
+        identifier = identifier.lower()
+        customer = get_customer_by_email(conn, identifier)
+        if not customer:
+            # Don't reveal whether the account exists (avoid account enumeration).
+            logger.info("Portal login requested for unknown email (no account created)")
         else:
-            # No Twilio configured (e.g. local dev) -- log the code so the flow is testable.
-            logger.warning(f"SMS not configured; portal OTP for {phone} is: {code}")
+            code = generate_otp(identifier)
+            if email_configured():
+                if not send_portal_login_code(identifier, code):
+                    logger.error("Failed to send portal OTP email to %s", identifier)
+            else:
+                # No SMTP configured (e.g. local dev) -- log the code so the flow is testable.
+                logger.warning(f"Email not configured; portal OTP for {identifier} is: {code}")
+    else:
+        channel = "phone"
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", identifier):
+            return templates.TemplateResponse(
+                request=request,
+                name="portal_login.html",
+                context={"error": "Enter a valid phone number in +1XXXXXXXXXX format.", "code_sent": False, "identifier": "", "channel": "phone"},
+            )
+
+        customer = get_customer_by_phone(conn, identifier)
+        if not customer:
+            # Don't reveal whether the phone number exists (avoid account enumeration).
+            # Always show the "code sent" screen either way.
+            logger.info("Portal login requested for unknown phone (no account created)")
+        else:
+            code = generate_otp(identifier)
+            if sms_manager.is_configured():
+                try:
+                    sms_manager.client.messages.create(
+                        body=f"Your BizStack Perks login code is {code}. It expires in 10 minutes.",
+                        from_=sms_manager.from_number,
+                        to=identifier,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send portal OTP SMS: {e}")
+            else:
+                # No Twilio configured (e.g. local dev) -- log the code so the flow is testable.
+                logger.warning(f"SMS not configured; portal OTP for {identifier} is: {code}")
 
     return templates.TemplateResponse(
         request=request,
         name="portal_login.html",
-        context={"error": None, "code_sent": True, "phone": phone},
+        context={"error": None, "code_sent": True, "identifier": identifier, "channel": channel},
     )
 
 
 @app.post("/portal/verify")
 async def portal_verify_code(
-    request: Request, phone: str = Form(...), code: str = Form(...), conn=Depends(get_db)
+    request: Request,
+    identifier: str = Form(...),
+    code: str = Form(...),
+    channel: str = Form(default="phone"),
+    conn=Depends(get_db),
 ):
-    phone = phone.strip()
-    if not verify_otp(phone, code):
+    identifier = identifier.strip()
+    if channel == "email":
+        identifier = identifier.lower()
+
+    if not verify_otp(identifier, code):
         return templates.TemplateResponse(
             request=request,
             name="portal_login.html",
-            context={"error": "That code is invalid or expired. Please try again.", "code_sent": False, "phone": ""},
+            context={"error": "That code is invalid or expired. Please try again.", "code_sent": False, "identifier": "", "channel": channel},
         )
 
-    customer = get_customer_by_phone(conn, phone)
+    customer = get_customer_by_email(conn, identifier) if channel == "email" else get_customer_by_phone(conn, identifier)
     if not customer:
         return templates.TemplateResponse(
             request=request,
             name="portal_login.html",
-            context={"error": "We couldn't find an account for that number.", "code_sent": False, "phone": ""},
+            context={"error": "We couldn't find an account for that login.", "code_sent": False, "identifier": "", "channel": channel},
         )
 
     token = create_portal_session_token(conn, customer["id"])

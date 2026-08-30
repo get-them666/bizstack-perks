@@ -25,7 +25,30 @@
             max-width: 420px;
         }
         h1 { font-size: 1.5rem; margin-bottom: 8px; }
-        .subtitle { color: #9db1d1; margin-bottom: 28px; font-size: 0.95rem; }
+        .subtitle { color: #9db1d1; margin-bottom: 24px; font-size: 0.95rem; }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 22px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            padding: 4px;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #9db1d1;
+            transition: all 0.2s ease;
+        }
+        .tab.active {
+            background: linear-gradient(135deg, #4fd1ff, #1198ff);
+            color: #03111d;
+        }
         label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; color: #9db1d1; text-transform: uppercase; letter-spacing: 0.04em; }
         input {
             width: 100%;
@@ -75,28 +98,62 @@
 <body>
     <main class="card">
         <h1>Customer portal</h1>
-        <p class="subtitle">Log in with your phone number to view your leads and manage your account.</p>
+        <p class="subtitle">Log in to view your leads and manage your account.</p>
 
         {% if error %}
         <div class="error">{{ error }}</div>
         {% endif %}
 
         {% if code_sent %}
-        <div class="notice">We texted you a 6-digit code. Enter it below to log in.</div>
+        <div class="notice">
+            {% if channel == "email" %}We emailed you a 6-digit code.{% else %}We texted you a 6-digit code.{% endif %}
+            Enter it below to log in.
+        </div>
         <form method="post" action="/portal/verify">
-            <input type="hidden" name="phone" value="{{ phone }}">
+            <input type="hidden" name="identifier" value="{{ identifier }}">
+            <input type="hidden" name="channel" value="{{ channel }}">
             <label for="code">Verification code</label>
             <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autofocus required>
             <button type="submit">Verify &amp; log in</button>
             <p class="hint">Didn't get a code? <a href="/portal/login">Try again</a></p>
         </form>
         {% else %}
-        <form method="post" action="/portal/request-code">
-            <label for="phone">Phone number</label>
-            <input type="tel" id="phone" name="phone" placeholder="+15551234567" autofocus required>
+        <div class="tabs">
+            <div class="tab active" id="tab-phone" onclick="switchTab('phone')">Phone</div>
+            <div class="tab" id="tab-email" onclick="switchTab('email')">Email</div>
+        </div>
+        <form method="post" action="/portal/request-code" id="login-form">
+            <input type="hidden" name="channel" id="channel-input" value="phone">
+            <label id="identifier-label" for="identifier">Phone number</label>
+            <input type="text" id="identifier" name="identifier" placeholder="+15551234567" autofocus required>
             <button type="submit">Send login code</button>
-            <p class="hint">Use the phone number you signed up with.</p>
+            <p class="hint" id="identifier-hint">Use the phone number you signed up with.</p>
         </form>
+        <script>
+            function switchTab(channel) {
+                document.getElementById("tab-phone").classList.toggle("active", channel === "phone");
+                document.getElementById("tab-email").classList.toggle("active", channel === "email");
+                document.getElementById("channel-input").value = channel;
+
+                const identifierInput = document.getElementById("identifier");
+                const label = document.getElementById("identifier-label");
+                const hint = document.getElementById("identifier-hint");
+
+                if (channel === "email") {
+                    identifierInput.type = "email";
+                    identifierInput.placeholder = "you@example.com";
+                    label.textContent = "Email address";
+                    hint.textContent = "Use the email you signed up with.";
+                } else {
+                    identifierInput.type = "text";
+                    identifierInput.placeholder = "+15551234567";
+                    label.textContent = "Phone number";
+                    hint.textContent = "Use the phone number you signed up with.";
+                }
+                identifierInput.value = "";
+                identifierInput.focus();
+            }
+        </script>
         {% endif %}
 
         <p class="hint" style="margin-top: 24px;"><a href="/">Back to homepage</a></p>
