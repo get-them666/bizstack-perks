@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLeadNetwork, store_leads_to_db
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
 from lead_analytics import LeadHotspotAnalyzer
+from writeup_generator import generate_targeting_writeup
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
 from voice_bot import (
     VoiceBotResponseGenerator,
@@ -86,6 +87,7 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER"
 # Lead source APIs
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 CENSUS_API_KEY = os.getenv("CENSUS_API_KEY", "")
+FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 AFFILIATE_PARTNERS_CONFIG = os.getenv("AFFILIATE_PARTNERS_CONFIG", "[]")
 
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -482,6 +484,7 @@ def get_feature_config():
         "twilio_voice": twilio_ready(),
         "google_places": places_source is not None,
         "census_analytics": census_analyzer is not None,
+        "fred_banking_data": bool(FRED_API_KEY),
         "affiliate_network": affiliate_network is not None,
         "financial_intelligence": financial_intelligence_db is not None,
     }
@@ -1422,6 +1425,47 @@ async def get_traffic_trends(
     trends = analyzer.get_traffic_trends(days_lookback=days)
 
     return {"trends": trends}
+
+
+@app.post("/api/targeting/writeup")
+async def create_targeting_writeup(
+    state: str = Form(...),
+    service_category: str = Form(...),
+    county_fips: Optional[str] = Form(default=None),
+    business_name: Optional[str] = Form(default=None),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Generate a client-ready targeting write-up combining public Census
+    demographic data and Federal Reserve (FRED) public banking/economic
+    indicators for a given state/county and service category.
+
+    Requires CENSUS_API_KEY and FRED_API_KEY to be configured; both are
+    free, official government APIs (no scraping, no personal financial
+    data). Returns structured data plus a ready-to-send narrative text.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    if not CENSUS_API_KEY:
+        raise HTTPException(status_code=503, detail="CENSUS_API_KEY is not configured")
+    if not FRED_API_KEY:
+        raise HTTPException(status_code=503, detail="FRED_API_KEY is not configured")
+
+    try:
+        writeup = await generate_targeting_writeup(
+            state=state,
+            service_category=service_category,
+            census_api_key=CENSUS_API_KEY,
+            fred_api_key=FRED_API_KEY,
+            county_fips=county_fips,
+            business_name=business_name,
+        )
+    except Exception as e:
+        logger.error(f"Targeting write-up generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Unable to generate write-up right now") from e
+
+    return writeup
 
 
 # ============================================================================

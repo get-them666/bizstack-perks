@@ -174,6 +174,54 @@ class CensusLeadAnalyzer:
             logger.error(f"Census analysis error: {e}")
             return []
 
+    async def get_area_demographic_profile(self, state: str, county_fips: str = None) -> dict:
+        """
+        Pull a richer demographic snapshot for a specific area (or all counties
+        in a state if county_fips is omitted), suitable for a client write-up:
+        population, median income, median age, and housing units. All figures
+        come from the public American Community Survey (ACS) 5-year estimates.
+        """
+        if not self.api_key:
+            logger.warning("Census API key not configured")
+            return {}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                url = f"{self.base_url}/2021/acs/acs5"
+                # B01003_001E = total population, B19013_001E = median household income,
+                # B01002_001E = median age, B25001_001E = total housing units
+                params = {
+                    "get": "NAME,B01003_001E,B19013_001E,B01002_001E,B25001_001E",
+                    "for": f"county:{county_fips}" if county_fips else "county:*",
+                    "in": f"state:{self._state_to_fips(state)}",
+                    "key": self.api_key,
+                }
+
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+
+                if len(data) < 2:
+                    return {}
+
+                def parse_row(row):
+                    name, population, median_income, median_age, housing_units, *_ = row
+                    return {
+                        "name": name,
+                        "population": int(population) if population and population != "null" else None,
+                        "median_household_income": int(median_income) if median_income and median_income != "null" else None,
+                        "median_age": float(median_age) if median_age and median_age != "null" else None,
+                        "housing_units": int(housing_units) if housing_units and housing_units != "null" else None,
+                    }
+
+                rows = [parse_row(row) for row in data[1:]]
+                if county_fips:
+                    return rows[0] if rows else {}
+                return {"counties": rows}
+        except Exception as e:
+            logger.error(f"Census demographic profile error: {e}")
+            return {}
+
     @staticmethod
     def _state_to_fips(state: str) -> str:
         """Convert state abbreviation to FIPS code."""
