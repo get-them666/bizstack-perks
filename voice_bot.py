@@ -1,10 +1,13 @@
 """
 Advanced Twilio voice bot with OpenAI integration for live conversation.
-Handles inbound calls with real Q&A, sounds like a knowledgeable human rep
-(not a robotic menu tree), and carries multi-turn conversation memory per call.
+Handles inbound and outbound calls with real Q&A, sounds like a knowledgeable
+human rep (not a robotic menu tree), carries multi-turn conversation memory
+per call, and can CLOSE a sale live on the call by detecting buying intent
+and triggering a real Stripe checkout link sent by SMS.
 """
 
 import os
+import re
 import logging
 import time
 from typing import Optional, List, Dict
@@ -34,6 +37,23 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "bizstack-perks.com")
 # ============================================================================
 _CONVERSATIONS: Dict[str, Dict] = {}
 _CONVERSATION_TTL_SECONDS = 60 * 30  # 30 minutes
+
+# Phrases that signal the caller is ready to buy right now. Checked in
+# addition to whatever the LLM says, so closing works even in fallback mode
+# (no OpenAI key) or if the model doesn't literally say "yes."
+CLOSING_INTENT_PHRASES = [
+    "sign me up", "sign up", "let's do it", "lets do it", "i'm interested", "im interested",
+    "i want to start", "how do i start", "how do i sign up", "get me started", "get started",
+    "yes let's", "yes lets", "okay let's", "okay lets", "sounds good let's", "i'll take it",
+    "ill take it", "where do i pay", "send me the link", "text me the link", "i'm in", "im in",
+    "let's go", "lets go", "yeah let's try", "yeah lets try", "set me up",
+]
+
+
+def detect_closing_intent(user_input: str) -> bool:
+    """Check whether the caller's speech signals they're ready to buy now."""
+    text = user_input.lower().strip()
+    return any(phrase in text for phrase in CLOSING_INTENT_PHRASES)
 
 
 def _prune_stale_conversations() -> None:
@@ -67,8 +87,39 @@ def clear_conversation(call_sid: Optional[str]) -> None:
         _CONVERSATIONS.pop(call_sid, None)
 
 
+def get_call_state(call_sid: Optional[str]) -> Dict:
+    """Get/create a small state dict for this call (e.g. captured business name)."""
+    if not call_sid:
+        return {}
+    _prune_stale_conversations()
+    entry = _CONVERSATIONS.setdefault(call_sid, {"messages": [], "updated_at": time.time()})
+    return entry.setdefault("state", {})
+
+
+def extract_business_name(user_input: str) -> Optional[str]:
+    """
+    Best-effort extraction of a business name from a spoken reply like
+    "it's called Joe's Plumbing" or "Joe's Plumbing". Not perfect NLP --
+    just strips common filler phrases so the captured name is usable.
+    """
+    text = user_input.strip()
+    if not text:
+        return None
+
+    fillers = [
+        r"^(it'?s\s+called\s+)", r"^(it'?s\s+)", r"^(the name is\s+)", r"^(my business is\s+)",
+        r"^(we'?re\s+called\s+)", r"^(called\s+)", r"^(um+,?\s*)", r"^(uh+,?\s*)",
+    ]
+    for pattern in fillers:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+
+    text = text.strip().strip(".").strip()
+    return text[:120] if text else None
+
+
 # ============================================================================
 # System prompt: deep domain knowledge + site knowledge + compliance guardrails
+# + closing behavior
 # ============================================================================
 
 SYSTEM_PROMPT = f"""You are Sam, a knowledgeable, warm, and conversational phone representative for
@@ -162,10 +213,31 @@ You are genuinely well-versed in:
 4. Stay honest about BizStack Perks — don't invent features, guarantees, or numbers that weren't given
    to you above.
 
+=== YOU ARE A CLOSER — THIS IS THE MOST IMPORTANT PART OF YOUR JOB ===
+Your #1 goal on every call is to get the caller signed up and paying TODAY, on this call, without
+handing them off to a human unless they explicitly ask for one or the conversation genuinely requires
+it (a guardrail situation above). You are not just an FAQ bot — you are a real salesperson.
+
+- Be proactive: after answering 1-2 questions, ASK for the close. "Want me to get you set up right now?
+  I can text you the signup link before we even hang up." Don't wait for them to bring it up.
+- The moment the caller says anything that sounds like a yes — "sure", "let's do it", "sign me up",
+  "okay I'm interested", "how do I start", "yeah let's try it" — treat that as a green light to close.
+  Ask for their business name if you don't already have it: "Awesome, let's get you going — what's the
+  business name I should put on the account?" Once you have a name (or if they skip it), confirm:
+  "Perfect — I'm texting you the secure signup link right now to this number. You'll get a text in a
+  few seconds." The system automatically detects this closing language and sends the real Stripe
+  checkout link by SMS behind the scenes, so speak naturally as if you're actually doing it live.
+- Do NOT default to "I'll set up a callback with a specialist" as your first move — that's a fallback
+  for when someone has a complex personalized question (see guardrails above), not your default close.
+  You can close simple {OFFER_PRICE_DISPLAY} signups yourself, live, on the call.
+- If they hesitate or ask "is this legit" / "how do I know this works", reassure them briefly (secure
+  Stripe checkout, no contract, cancel anytime) and ask again if they want to start.
+- Only offer a human callback when: they explicitly ask for a person, the guardrails above require it
+  (personalized financial/credit/legal advice), or they say no / not interested (in which case, thank
+  them warmly and let the call end naturally — don't be pushy after a clear no).
+
 === CONVERSATION STYLE ===
 - Sound like a real person having a normal phone conversation, not reading a script.
-- If the caller sounds ready to move forward, offer a callback with a specialist or point them to
-  {PUBLIC_BASE_URL} — don't force it every single turn.
 - If they ask something totally unrelated (weather, jokes, etc.), respond briefly and warmly, then
   gently steer back: "Ha, I'm mostly the BizStack Perks guy, but — anything about the platform I can
   help with?"
@@ -237,11 +309,17 @@ class VoiceBotResponseGenerator:
         """
         text = user_input.lower().strip()
 
+        if detect_closing_intent(user_input):
+            return (
+                "Awesome, let's get you going! What's the business name I should put on the account? "
+                "I'll text you the secure signup link right after."
+            )
+
         if any(word in text for word in ["price", "cost", "how much", "fee", "monthly"]):
             return (
                 f"Good question — the entry plan runs {OFFER_PRICE_DISPLAY}, and that covers lead "
-                f"discovery, SMS follow-ups, and the analytics dashboard. No hidden setup fees. "
-                f"Want me to have someone walk you through it?"
+                f"discovery, SMS follow-ups, and the analytics dashboard. No hidden setup fees, no "
+                f"contract. Want me to text you the signup link right now so you can get started?"
             )
 
         if any(word in text for word in ["credit score", "fico", "credit worth"]):
@@ -270,22 +348,26 @@ class VoiceBotResponseGenerator:
             return (
                 "Here's the short version: we find leads in your area using Google Places and Census "
                 "data, follow up automatically by text, and show you exactly which areas convert best. "
-                "You focus on closing the deal, we handle finding the opportunity."
+                "You focus on closing the deal, we handle finding the opportunity. Want me to get you "
+                "set up right now?"
             )
 
         if any(word in text for word in ["how", "works", "process", "start", "sign up"]):
             return (
                 "It's pretty simple — you sign up, tell us your service category and target location, "
-                "and leads start showing up in your dashboard. Want me to set up a callback so someone "
-                "can get you started today?"
+                "and leads start showing up in your dashboard. Want me to text you the signup link right "
+                "now so you can get started today?"
             )
 
-        if any(word in text for word in ["yes", "sure", "callback", "call back", "speak"]):
+        if any(word in text for word in ["no", "not interested", "not now", "maybe later"]):
+            return "No worries at all! Thanks so much for calling, and feel free to reach out anytime."
+
+        if any(word in text for word in ["callback", "call back", "speak to someone", "human", "person"]):
             return "You got it — I'll line up a callback with one of our specialists within 24 hours."
 
         return (
             "Happy to help with that — could you tell me a bit more about what you're looking for? "
-            "I can talk pricing, how the platform works, or get you set up with a specialist."
+            "I can talk pricing, how the platform works, or get you signed up right now."
         )
 
 
@@ -306,13 +388,44 @@ def create_voice_greeting() -> str:
         speech_timeout="auto",
         timeout=10,
         language=NATURAL_LANGUAGE,
-        hints="pricing, features, callback, credit score, APR, Stripe, loans, how it works, yes, no",
+        hints="pricing, features, callback, credit score, APR, Stripe, loans, how it works, sign me up, yes, no",
     )
     response.append(gather)
 
     # Fallback if no input
     response.say("Sorry, I didn't quite catch that — let's try again.", voice=NATURAL_VOICE)
     response.redirect("/twilio/voice/incoming", method="POST")
+
+    return str(response)
+
+
+def create_outbound_sales_greeting() -> str:
+    """
+    Create the greeting used for OUTBOUND sales calls (e.g. calling a lead
+    proactively) -- slightly different framing since we initiated the call.
+    """
+    response = VoiceResponse()
+    response.say(
+        "Hi, this is Sam calling from BizStack Perks — we help local service businesses get a steady "
+        "stream of qualified leads, and I wanted to give you a quick call about it. Do you have a "
+        "minute?",
+        voice=NATURAL_VOICE,
+        language=NATURAL_LANGUAGE,
+    )
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/process-input",
+        method="POST",
+        speech_timeout="auto",
+        timeout=10,
+        language=NATURAL_LANGUAGE,
+        hints="pricing, features, sign me up, yes, no, not interested",
+    )
+    response.append(gather)
+
+    response.say("Sorry, I didn't quite catch that — let's try again.", voice=NATURAL_VOICE)
+    response.hangup()
 
     return str(response)
 

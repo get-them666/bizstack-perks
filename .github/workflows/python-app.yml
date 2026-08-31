@@ -36,7 +36,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest tests/ -v
+        python -m pytest tests/ -v
     - name: Compile-check standalone scripts
       run: |
         python -m py_compile main.py lead_sources.py sms_manager.py lead_analytics.py affiliate_manager.py voice_bot.py verify_links.py test_dial.py

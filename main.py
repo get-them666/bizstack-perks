@@ -23,7 +23,18 @@ from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLe
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
 from lead_analytics import LeadHotspotAnalyzer
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
-from voice_bot import VoiceBotResponseGenerator, create_voice_greeting, create_callback_confirmation, create_information_response, create_menu_fallback, NATURAL_VOICE
+from voice_bot import (
+    VoiceBotResponseGenerator,
+    create_voice_greeting,
+    create_callback_confirmation,
+    create_information_response,
+    create_menu_fallback,
+    create_outbound_sales_greeting,
+    NATURAL_VOICE,
+    detect_closing_intent,
+    extract_business_name,
+    get_call_state,
+)
 from customer_portal import (
     init_customer_tables,
     provision_customer_from_checkout,
@@ -251,6 +262,37 @@ def affiliate_partners() -> list[dict[str, str]]:
 
     if not isinstance(partners, list):
         logger.warning("AFFILIATE_PARTNERS_JSON must be an array")
+        return []
+
+    return [
+        {"name": partner["name"], "url": partner["url"], "description": partner.get("description", "")}
+        for partner in partners
+        if isinstance(partner, dict)
+        and isinstance(partner.get("name"), str)
+        and isinstance(partner.get("url"), str)
+        and partner["url"].startswith(("https://", "http://"))
+    ]
+
+
+def load_perks_json_partners() -> list[dict[str, str]]:
+    """Load the curated affiliate list from data/perks.json.
+
+    This is the file verify_links.py checks, and is the source of truth for
+    the /affiliates page. Update data/perks.json to add, remove, or change
+    affiliate links -- no redeploy or environment variable edit needed.
+    """
+    perks_path = os.path.join(BASE_DIR, "data", "perks.json")
+    try:
+        with open(perks_path, encoding="utf-8") as f:
+            partners = json.load(f)
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        logger.warning("data/perks.json contains invalid JSON")
+        return []
+
+    if not isinstance(partners, list):
+        logger.warning("data/perks.json must be a JSON array")
         return []
 
     return [
@@ -540,23 +582,30 @@ async def application_received(request: Request, lead_id: Optional[int] = None):
 
 @app.get("/affiliates", response_class=HTMLResponse)
 async def affiliates(request: Request, conn=Depends(get_db)):
-    # Get partners from config + database partners
+    # Primary source: data/perks.json (curated list, checked by verify_links.py).
+    # Update that file to change what's shown here -- no redeploy needed.
+    perks_json_partners = load_perks_json_partners()
+
+    # Legacy/optional source: AFFILIATE_PARTNERS_JSON environment variable.
     config_partners = affiliate_partners()
-    
-    # Optionally add database partners
+
+    # Merge, preferring perks.json entries when names collide.
+    all_partners = {p["name"]: p for p in config_partners}
+    for p in perks_json_partners:
+        all_partners[p["name"]] = p
+
+    # Optionally add database-tracked commission partners too.
     try:
         affiliate_mgr = AffiliateCommissionManager(conn)
         db_partners = affiliate_mgr.list_active_partners()
-        # Combine and deduplicate by name
-        all_partners = {p["name"]: p for p in db_partners}
-        for p in config_partners:
+        for p in db_partners:
             if p["name"] not in all_partners:
                 all_partners[p["name"]] = p
-        partners_list = list(all_partners.values())
     except Exception as e:
         logger.warning(f"Error loading database partners: {e}")
-        partners_list = config_partners
-    
+
+    partners_list = list(all_partners.values())
+
     return templates.TemplateResponse(
         request=request,
         name="affiliates.html",
@@ -699,18 +748,22 @@ async def delete_profile(profile_id: int, request: Request, conn=Depends(get_db)
     return {"status": "deleted"}
 
 
-@app.post("/api/checkout/create")
-async def create_checkout_session(
-    request: Request,
-    email: Optional[str] = Form(default=None),
-    business_name: Optional[str] = Form(default=None),
-    conn=Depends(get_db),
-):
+def build_checkout_session(
+    conn: sqlite3.Connection,
+    base_url: str,
+    email: Optional[str] = None,
+    business_name: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Create a Stripe Checkout session and record it as a pending payment.
+    Shared by the web checkout route and the voice bot's in-call closing flow.
+    Returns the session_data dict (with a "url" to send the customer to), or
+    None if Stripe isn't configured or the session couldn't be created.
+    """
     if not stripe_ready():
-        return RedirectResponse(url="/?error=Checkout+is+not+configured+yet", status_code=303)
+        return None
 
     stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
-    base_url = normalize_base_url(request)
     metadata = {}
     if business_name and business_name.strip():
         metadata["business_name"] = business_name.strip()[:120]
@@ -729,7 +782,7 @@ async def create_checkout_session(
     except stripe.InvalidRequestError as exc:
         if not (exc.param or "").startswith("line_items[0]"):
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
-            return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
+            return None
 
         logger.warning("Configured Stripe Price ID cannot be used; using the configured $49 checkout item")
         checkout_params["line_items"] = [
@@ -752,10 +805,10 @@ async def create_checkout_session(
                 fallback_error.code,
                 fallback_error.param,
             )
-            return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
+            return None
     except stripe.error.StripeError as exc:
         logger.warning("Stripe Checkout failed: code=%s param=%s", exc.code, exc.param)
-        return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
+        return None
 
     session_data = session.to_dict() if hasattr(session, "to_dict") else session
     record_checkout_session(
@@ -773,6 +826,19 @@ async def create_checkout_session(
             "customer_details": {"email": (email or "").strip() or None},
         },
     )
+    return session_data
+
+
+@app.post("/api/checkout/create")
+async def create_checkout_session(
+    request: Request,
+    email: Optional[str] = Form(default=None),
+    business_name: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    session_data = build_checkout_session(conn, normalize_base_url(request), email=email, business_name=business_name)
+    if not session_data:
+        return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
     return RedirectResponse(url=session_data["url"], status_code=303)
 
 
@@ -812,18 +878,65 @@ async def process_voice_input(
     SpeechResult: Optional[str] = Form(default=None),
     Digits: Optional[str] = Form(default=None),
     CallSid: Optional[str] = Form(default=None),
+    From: Optional[str] = Form(default=None),
     request: Request = None,
     conn=Depends(get_db),
 ):
-    """Process speech or DTMF input from caller and generate contextual response."""
+    """Process speech or DTMF input from caller and generate contextual response.
+
+    This is also where the bot CLOSES: if the caller's state shows we're mid-close
+    (awaiting a business name) or their speech signals buying intent, we create a
+    real Stripe checkout session and text them the link right on the call.
+    """
     user_input = (SpeechResult or Digits or "").strip()
 
     if not user_input:
         return xml_response(create_menu_fallback())
 
+    call_state = get_call_state(CallSid)
+    caller_phone = From or call_state.get("phone")
+    if caller_phone:
+        call_state["phone"] = caller_phone
+
+    # If we already asked for the business name last turn, this turn's input IS the name.
+    if call_state.get("awaiting_business_name"):
+        business_name = extract_business_name(user_input) or "New BizStack Perks Customer"
+        call_state["awaiting_business_name"] = False
+        return xml_response(_close_and_send_checkout_link(conn, request, call_state, business_name, CallSid))
+
+    # CLOSING PATH: caller signaled they're ready to buy right now. Handle this
+    # BEFORE generating a full bot response, so we don't say "let's get you
+    # going" twice (once from the bot's own reply, once from this flow).
+    if detect_closing_intent(user_input):
+        response = VoiceResponse()
+
+        if not caller_phone:
+            # Shouldn't normally happen (Twilio always sends From), but fail safe.
+            response.say(
+                "I couldn't get your callback number for the link -- let's set you up with a specialist instead.",
+                voice=NATURAL_VOICE,
+            )
+            response.hangup()
+            return xml_response(response)
+
+        call_state["awaiting_business_name"] = True
+        response.say(
+            "Awesome, let's get you going! What's the business name I should put on the account?",
+            voice=NATURAL_VOICE,
+        )
+        gather = Gather(
+            input="speech",
+            action="/twilio/voice/process-input",
+            method="POST",
+            timeout=8,
+            speech_timeout="auto",
+        )
+        response.append(gather)
+        return xml_response(response)
+
     # Initialize bot
     bot = VoiceBotResponseGenerator(OPENAI_API_KEY)
-    
+
     try:
         # Generate AI response (call_sid gives the bot memory of this call)
         response_text = await bot.generate_response(user_input, call_sid=CallSid)
@@ -834,8 +947,8 @@ async def process_voice_input(
     response = VoiceResponse()
     response.say(response_text, voice=NATURAL_VOICE, language="en-US")
 
-    # Prompt for callback if needed
-    if any(word in user_input.lower() for word in ["yes", "callback", "call back", "speak"]):
+    # Prompt for a human callback if that's what they asked for
+    if any(word in user_input.lower() for word in ["callback", "call back", "speak to someone", "human", "person"]):
         response.say(
             "Please stay on the line for one quick question.",
             voice=NATURAL_VOICE,
@@ -862,6 +975,97 @@ async def process_voice_input(
         response.append(gather)
 
     return xml_response(response)
+
+
+def _close_and_send_checkout_link(
+    conn: sqlite3.Connection,
+    request: Request,
+    call_state: dict,
+    business_name: str,
+    call_sid: Optional[str],
+) -> VoiceResponse:
+    """
+    Create a real Stripe checkout session for this caller and text them the
+    link. Also creates a tracked lead record so the sale shows up in the
+    admin dashboard and analytics even before they pay.
+    """
+    response = VoiceResponse()
+    caller_phone = call_state.get("phone")
+
+    # Track this as a lead regardless of whether checkout succeeds, so every
+    # in-call closing attempt is visible in the admin dashboard.
+    try:
+        conn.execute(
+            """
+            INSERT INTO leads (
+                full_name, email, phone, application_type, requested_product,
+                source, consent_text, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                business_name,
+                f"voice-lead-{call_sid or 'unknown'}@bizstack-perks.local",
+                caller_phone or "unknown",
+                "business",
+                "BizStack Perks Entry Plan",
+                "voice-bot-outbound" if call_state.get("is_outbound") else "voice-bot-inbound",
+                "Verbal consent given on recorded call; caller requested signup link by SMS.",
+                "closing",
+            ),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to record in-call lead: {e}")
+
+    session_data = build_checkout_session(
+        conn,
+        normalize_base_url(request),
+        business_name=business_name,
+    )
+
+    if not session_data:
+        response.say(
+            "I'm having trouble generating your signup link right now -- I'll have a specialist "
+            "text it to you shortly instead. Thanks for your patience!",
+            voice=NATURAL_VOICE,
+        )
+        response.hangup()
+        return response
+
+    checkout_url = session_data["url"]
+
+    sms_sent = False
+    if caller_phone and sms_manager.is_configured():
+        try:
+            sms_manager.client.messages.create(
+                body=(
+                    f"Thanks for calling BizStack Perks! Here's your secure signup link for "
+                    f"{business_name}: {checkout_url}"
+                ),
+                from_=sms_manager.from_number,
+                to=caller_phone,
+            )
+            sms_sent = True
+        except Exception as e:
+            logger.error(f"Failed to send closing SMS: {e}")
+
+    if sms_sent:
+        response.say(
+            f"Perfect! I just texted the secure signup link to your number for {business_name}. "
+            f"Just tap it, complete checkout, and you're all set. Thanks so much for calling "
+            f"BizStack Perks!",
+            voice=NATURAL_VOICE,
+        )
+    else:
+        spoken_site = PUBLIC_BASE_URL or "our website"
+        response.say(
+            f"Your signup link is ready at {spoken_site}. I was not able to text it just now, "
+            f"but a specialist will follow up with the link shortly. Thanks for calling BizStack Perks!",
+            voice=NATURAL_VOICE,
+        )
+
+    response.hangup()
+    return response
 
 
 @app.post("/twilio/voice/capture-callback")
@@ -992,6 +1196,49 @@ async def trigger_outbound_call(
         from_number=TWILIO_PHONE_NUMBER,
         to_number=payload.to_number,
         message=payload.message,
+    )
+    return {"call_sid": call.sid, "status": getattr(call, "status", "queued")}
+
+
+@app.post("/api/twilio/voice/outbound-sales")
+async def trigger_outbound_sales_call(
+    payload: OutboundCallRequest,
+    request: Request,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """
+    Place an outbound sales call that connects to the FULL conversational
+    closing bot (not a static one-line message like /api/twilio/voice/outbound).
+    The bot will greet the lead, answer questions, and attempt to close the
+    sale live on the call -- same closing flow as inbound calls.
+    """
+    require_api_key_or_session(request, x_api_key)
+    if not twilio_ready():
+        raise HTTPException(status_code=503, detail="Twilio voice is not configured")
+
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+    try:
+        call = client.calls.create(
+            to=payload.to_number,
+            from_=TWILIO_PHONE_NUMBER,
+            twiml=create_outbound_sales_greeting(),
+            status_callback=f"{normalize_base_url(request)}/twilio/voice/status",
+            status_callback_method="POST",
+            status_callback_event=["initiated", "ringing", "answered", "completed"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to place outbound sales call") from exc
+
+    upsert_call_event(
+        conn,
+        call_sid=call.sid,
+        direction="outbound-sales",
+        call_status=getattr(call, "status", "queued"),
+        from_number=TWILIO_PHONE_NUMBER,
+        to_number=payload.to_number,
+        message="Outbound sales call -- full conversational closing bot",
     )
     return {"call_sid": call.sid, "status": getattr(call, "status", "queued")}
 
