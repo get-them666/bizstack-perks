@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DATA_PATH = Path(__file__).parent / "data" / "perks.json"
+DATA_PATH = Path(__file__).parent / "perks.json"  # NOT under data/ -- that path is volume-mounted on Railway
 USER_AGENT = "Mozilla/5.0 (BizStackPerks Link Verifier)"
 
 

@@ -30,11 +30,11 @@ untitled text*
 .DS_Store
 .icloud
 
-# Ignore the data/ directory by default (runtime/local storage)...
+# Ignore the data/ directory (runtime/local storage). Note: this path is
+# also volume-mounted on Railway in production, so nothing meant to ship
+# with the app (like perks.json, which lives at the repo root instead)
+# should ever be placed here.
 data/*
-# ...EXCEPT the curated affiliate links file, which is source-controlled
-# so it deploys with the app and is checked by verify_links.py in CI.
-!data/perks.json
 
 # Google Drive sync artifacts (if the repo is ever inside a synced folder)
 .tmp.driveupload/

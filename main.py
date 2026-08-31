@@ -281,7 +281,7 @@ def load_perks_json_partners() -> list[dict[str, str]]:
     the /affiliates page. Update data/perks.json to add, remove, or change
     affiliate links -- no redeploy or environment variable edit needed.
     """
-    perks_path = os.path.join(BASE_DIR, "data", "perks.json")
+    perks_path = os.path.join(BASE_DIR, "perks.json")  # NOT under data/ -- that path is volume-mounted on Railway and would shadow this file
     try:
         with open(perks_path, encoding="utf-8") as f:
             partners = json.load(f)
