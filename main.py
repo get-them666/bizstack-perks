@@ -23,6 +23,9 @@ from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLe
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
 from lead_analytics import LeadHotspotAnalyzer
 from writeup_generator import generate_targeting_writeup
+from business_signals import NewsSignalScanner, OpenDataPermitScanner, deduplicate_signals
+from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
+from outreach_generator import generate_outreach_email, generate_bulk_outreach
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
 from voice_bot import (
     VoiceBotResponseGenerator,
@@ -88,6 +91,9 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER"
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 CENSUS_API_KEY = os.getenv("CENSUS_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
+SENDER_COMPANY_NAME = os.getenv("SENDER_COMPANY_NAME", "BizStack Perks")
+SENDER_PHYSICAL_ADDRESS = os.getenv("SENDER_PHYSICAL_ADDRESS", "")
 AFFILIATE_PARTNERS_CONFIG = os.getenv("AFFILIATE_PARTNERS_CONFIG", "[]")
 
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -415,6 +421,15 @@ def init_db() -> None:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outreach_unsubscribes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business_identifier TEXT UNIQUE NOT NULL,
+                unsubscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         conn.commit()
     finally:
         conn.close()
@@ -712,6 +727,43 @@ async def targeting_writeup_page(request: Request):
         return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
 
     return templates.TemplateResponse(request=request, name="targeting_writeup.html", context={})
+
+
+@app.get("/admin/outreach", response_class=HTMLResponse)
+async def outreach_page(request: Request):
+    """
+    Backend tool for scanning public business expansion signals, comparing
+    local bank rates, and generating outreach emails. Login-protected, same
+    pattern as the other backend pages -- not public/customer facing.
+    """
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    return templates.TemplateResponse(request=request, name="outreach.html", context={})
+
+
+@app.get("/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe_page(request: Request, business: Optional[str] = None, conn=Depends(get_db)):
+    """
+    Public unsubscribe endpoint, linked from every outreach email as
+    required by the CAN-SPAM Act. No login required -- anyone with the
+    link can opt out immediately, no confirmation loop.
+    """
+    if business:
+        try:
+            conn.execute(
+                "INSERT INTO outreach_unsubscribes (business_identifier) VALUES (?) ON CONFLICT(business_identifier) DO NOTHING",
+                (business,),
+            )
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to record unsubscribe for {business}: {e}")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="unsubscribe.html",
+        context={"business": business},
+    )
 
 
 @app.post("/api/pipeline-load-trigger")
@@ -1480,6 +1532,119 @@ async def create_targeting_writeup(
         raise HTTPException(status_code=502, detail="Unable to generate write-up right now") from e
 
     return writeup
+
+
+# ============================================================================
+# NEW: Business Signal Scanning + Outreach Generation
+# ============================================================================
+
+
+@app.post("/api/signals/scan")
+async def scan_business_signals(
+    location: str = Form(...),
+    industry: Optional[str] = Form(default=None),
+    days_back: int = Form(default=30),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Scan public news for businesses showing expansion/loan-seeking signals
+    in a given location. Uses NewsAPI (free tier) -- a legitimate public
+    news aggregator, not scraping of any bank or private data source.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    if not NEWSAPI_KEY:
+        raise HTTPException(status_code=503, detail="NEWSAPI_KEY is not configured")
+
+    scanner = NewsSignalScanner(NEWSAPI_KEY)
+    try:
+        signals = await scanner.scan_for_signals(location=location, industry=industry, days_back=days_back)
+    except Exception as e:
+        logger.error(f"Business signal scan failed: {e}")
+        raise HTTPException(status_code=502, detail="Unable to scan for signals right now") from e
+
+    deduped = deduplicate_signals(signals)
+    return {"location": location, "industry": industry, "signal_count": len(deduped), "signals": [s.dict() for s in deduped]}
+
+
+@app.get("/api/bank-rates")
+async def get_bank_rates(
+    region: Optional[str] = None,
+    loan_type: Optional[str] = None,
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Get curated local bank loan rates for a region/loan type. This reads
+    from a manually-maintained rate sheet (bank_rates.json) rather than
+    scraping bank websites -- see local_bank_rates.py for why.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    rates = get_best_rates_for_region(region=region, loan_type=loan_type, limit=10)
+    stale = check_rate_staleness()
+
+    return {
+        "rates": format_rates_for_display(rates),
+        "stale_entries_needing_review": len(stale),
+    }
+
+
+@app.post("/api/outreach/generate")
+async def generate_outreach(
+    business_name: str = Form(...),
+    signal_type: str = Form(default="news"),
+    signal_summary: str = Form(...),
+    source_name: str = Form(default="Public source"),
+    location: Optional[str] = Form(default=None),
+    region: Optional[str] = Form(default=None),
+    loan_type: Optional[str] = Form(default=None),
+    sender_name: str = Form(...),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Generate a personalized, CAN-SPAM-compliant outreach email for a
+    business showing a public expansion/loan-seeking signal, referencing
+    real local bank rate comparisons.
+
+    Requires SENDER_PHYSICAL_ADDRESS to be configured -- CAN-SPAM requires
+    a real physical mailing address in every commercial email.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    if not SENDER_PHYSICAL_ADDRESS:
+        raise HTTPException(
+            status_code=503,
+            detail="SENDER_PHYSICAL_ADDRESS is not configured (required by CAN-SPAM for commercial email)",
+        )
+
+    from business_signals import BusinessSignal
+
+    signal = BusinessSignal(
+        business_name=business_name,
+        signal_type=signal_type,
+        signal_summary=signal_summary,
+        source_name=source_name,
+        location=location,
+        confidence_score=0.6,
+    )
+
+    base_url = normalize_base_url(request)
+    unsubscribe_url = f"{base_url}/unsubscribe?business={business_name.replace(' ', '-').lower()}"
+
+    email = generate_outreach_email(
+        signal=signal,
+        sender_name=sender_name,
+        sender_company=SENDER_COMPANY_NAME,
+        sender_physical_address=SENDER_PHYSICAL_ADDRESS,
+        unsubscribe_url=unsubscribe_url,
+        region=region,
+        loan_type=loan_type,
+    )
+
+    return email
 
 
 # ============================================================================

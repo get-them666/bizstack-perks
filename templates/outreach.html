@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outreach pipeline - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; }
+        header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 1000px; padding: 24px; }
+        .intro { color: #9db1d1; font-size: 0.9rem; margin-bottom: 24px; }
+        .card { background: #101934; border: 1px solid #27426f; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .card h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 16px; }
+        label { display: block; font-weight: bold; font-size: 0.85rem; color: #9db1d1; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .field { margin-bottom: 18px; }
+        .row { display: flex; gap: 16px; flex-wrap: wrap; }
+        .row .field { flex: 1; min-width: 160px; }
+        input, textarea {
+            width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #27426f;
+            background: #0d1730; color: #f5f7fb; font-size: 0.95rem; font-family: inherit;
+        }
+        textarea { resize: vertical; min-height: 60px; }
+        input:focus, textarea:focus { outline: none; border-color: #4fd1ff; }
+        .hint { color: #7288a8; font-size: 0.8rem; margin-top: 4px; }
+        button {
+            background: #4fd1ff; border: 0; border-radius: 8px; color: #03111d; cursor: pointer;
+            font-weight: bold; padding: 12px 22px; font-size: 0.95rem;
+        }
+        button:hover { background: #3bc0f0; }
+        button:disabled { background: #2a4258; color: #7288a8; cursor: not-allowed; }
+        .error {
+            background: rgba(255, 91, 91, 0.12); border: 1px solid rgba(255, 91, 91, 0.3);
+            color: #ffb3b3; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.9rem;
+        }
+        .signal-list { list-style: none; padding: 0; margin: 0; }
+        .signal-item {
+            background: #0d1730; border: 1px solid #27426f; border-radius: 8px; padding: 14px;
+            margin-bottom: 10px; font-size: 0.9rem; display: flex; justify-content: space-between;
+            align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .signal-name { font-weight: bold; }
+        .signal-summary { color: #9db1d1; font-size: 0.85rem; }
+        .use-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 14px; font-size: 0.85rem; }
+        .use-btn:hover { background: #30363d; }
+        pre#email-output {
+            background: #0d1730; border: 1px solid #27426f; border-radius: 8px; padding: 20px;
+            white-space: pre-wrap; word-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem; line-height: 1.5; color: #e6edf7; max-height: 500px; overflow-y: auto;
+        }
+        .loading { color: #9db1d1; font-size: 0.9rem; }
+        .rate-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .rate-table th, .rate-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #27426f; }
+        .rate-table th { color: #9db1d1; text-transform: uppercase; font-size: 0.7rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Outreach pipeline</h1>
+        <nav>
+            <a href="/dashboard">Dashboard</a> ·
+            <a href="/admin">Admin workspace</a> ·
+            <a href="/admin/targeting">Targeting write-ups</a> ·
+            <a href="/logout">Log out</a>
+        </nav>
+    </header>
+    <main>
+        <p class="intro">
+            Find businesses showing public signals of expansion or loan-seeking activity, compare
+            real local bank rates, and generate personalized outreach emails &mdash; every email
+            includes the required physical address and unsubscribe link (CAN-SPAM compliant).
+        </p>
+
+        <!-- Step 1: Scan for signals -->
+        <div class="card">
+            <h2>1. Scan for business signals</h2>
+            <div id="scan-error" class="error" style="display:none;"></div>
+            <form id="scan-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" placeholder="Chesapeake, VA" required>
+                    </div>
+                    <div class="field">
+                        <label for="industry">Industry (optional)</label>
+                        <input type="text" id="industry" name="industry" placeholder="construction">
+                    </div>
+                </div>
+                <p class="hint">Searches public news (via NewsAPI) for recent expansion/loan-seeking mentions.</p>
+                <button type="submit" id="scan-btn">Scan for signals</button>
+            </form>
+            <div id="scan-loading" class="loading" style="display:none;">Scanning&hellip;</div>
+            <ul id="signal-results" class="signal-list" style="margin-top: 16px;"></ul>
+        </div>
+
+        <!-- Step 2: Bank rates -->
+        <div class="card">
+            <h2>2. Local bank rates</h2>
+            <div id="rates-error" class="error" style="display:none;"></div>
+            <form id="rates-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="rates-region">Region (state code)</label>
+                        <input type="text" id="rates-region" name="region" placeholder="VA" maxlength="2">
+                    </div>
+                </div>
+                <button type="submit" id="rates-btn">Load rates</button>
+            </form>
+            <div id="rates-output" style="margin-top: 16px;"></div>
+        </div>
+
+        <!-- Step 3: Generate outreach -->
+        <div class="card">
+            <h2>3. Generate outreach email</h2>
+            <div id="outreach-error" class="error" style="display:none;"></div>
+            <form id="outreach-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="business_name">Business name</label>
+                        <input type="text" id="business_name" name="business_name" required>
+                    </div>
+                    <div class="field">
+                        <label for="signal_type">Signal type</label>
+                        <input type="text" id="signal_type" name="signal_type" value="news">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="signal_summary">Signal summary</label>
+                    <textarea id="signal_summary" name="signal_summary" placeholder="What did you find? (e.g. headline, permit description)" required></textarea>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="source_name">Source name</label>
+                        <input type="text" id="source_name" name="source_name" placeholder="Local News Network">
+                    </div>
+                    <div class="field">
+                        <label for="location_field">Location</label>
+                        <input type="text" id="location_field" name="location">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="region">Region (state code)</label>
+                        <input type="text" id="region" name="region" maxlength="2" placeholder="VA">
+                    </div>
+                    <div class="field">
+                        <label for="sender_name">Your name</label>
+                        <input type="text" id="sender_name" name="sender_name" required>
+                    </div>
+                </div>
+                <button type="submit" id="outreach-btn">Generate email</button>
+            </form>
+            <div id="outreach-loading" class="loading" style="display:none;">Generating&hellip;</div>
+            <div id="email-result" style="display:none; margin-top: 16px;">
+                <pre id="email-output"></pre>
+                <button type="button" id="copy-email-btn" class="use-btn" style="margin-top: 10px;">Copy to clipboard</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Step 1: Scan for signals
+        document.getElementById("scan-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const errorBox = document.getElementById("scan-error");
+            const loading = document.getElementById("scan-loading");
+            const results = document.getElementById("signal-results");
+            errorBox.style.display = "none";
+            results.innerHTML = "";
+            loading.style.display = "block";
+
+            try {
+                const formData = new FormData(e.target);
+                const response = await fetch("/api/signals/scan", { method: "POST", body: formData, credentials: "same-origin" });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: "Request failed" }));
+                    throw new Error(err.detail || "Scan failed");
+                }
+                const data = await response.json();
+                if (data.signals.length === 0) {
+                    results.innerHTML = "<li class=\"signal-item\">No signals found for this location right now.</li>";
+                }
+                data.signals.forEach((signal) => {
+                    const li = document.createElement("li");
+                    li.className = "signal-item";
+                    li.innerHTML = `
+                        <div>
+                            <div class="signal-name">${signal.business_name}</div>
+                            <div class="signal-summary">${signal.signal_summary} &mdash; ${signal.source_name}</div>
+                        </div>
+                        <button type="button" class="use-btn" data-name="${signal.business_name}" data-summary="${signal.signal_summary.replace(/"/g, '&quot;')}" data-source="${signal.source_name}" data-type="${signal.signal_type}" data-location="${signal.location || ''}">Use for outreach</button>
+                    `;
+                    results.appendChild(li);
+                });
+
+                results.querySelectorAll(".use-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        document.getElementById("business_name").value = btn.dataset.name;
+                        document.getElementById("signal_summary").value = btn.dataset.summary;
+                        document.getElementById("source_name").value = btn.dataset.source;
+                        document.getElementById("signal_type").value = btn.dataset.type;
+                        document.getElementById("location_field").value = btn.dataset.location;
+                        document.getElementById("outreach-form").scrollIntoView({ behavior: "smooth" });
+                    });
+                });
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.style.display = "block";
+            } finally {
+                loading.style.display = "none";
+            }
+        });
+
+        // Step 2: Load rates
+        document.getElementById("rates-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const errorBox = document.getElementById("rates-error");
+            const output = document.getElementById("rates-output");
+            errorBox.style.display = "none";
+            output.innerHTML = "Loading&hellip;";
+
+            try {
+                const region = document.getElementById("rates-region").value;
+                const response = await fetch(`/api/bank-rates?region=${encodeURIComponent(region)}`, { credentials: "same-origin" });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: "Request failed" }));
+                    throw new Error(err.detail || "Failed to load rates");
+                }
+                const data = await response.json();
+                if (data.rates.length === 0) {
+                    output.innerHTML = "<p class=\"hint\">No rates on file for this region yet. Add entries to bank_rates.json.</p>";
+                    return;
+                }
+                let html = '<table class="rate-table"><thead><tr><th>Bank</th><th>Loan type</th><th>APR</th><th>Range</th><th>Verified</th></tr></thead><tbody>';
+                data.rates.forEach((r) => {
+                    html += `<tr><td>${r.bank_name}</td><td>${r.loan_type}</td><td>${r.apr_range}</td><td>${r.loan_range}</td><td>${r.last_verified}</td></tr>`;
+                });
+                html += "</tbody></table>";
+                if (data.stale_entries_needing_review > 0) {
+                    html += `<p class="hint" style="margin-top:10px;">${data.stale_entries_needing_review} entries need review (not verified recently).</p>`;
+                }
+                output.innerHTML = html;
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.style.display = "block";
+                output.innerHTML = "";
+            }
+        });
+
+        // Step 3: Generate outreach email
+        document.getElementById("outreach-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const errorBox = document.getElementById("outreach-error");
+            const loading = document.getElementById("outreach-loading");
+            const resultBox = document.getElementById("email-result");
+            const output = document.getElementById("email-output");
+            errorBox.style.display = "none";
+            resultBox.style.display = "none";
+            loading.style.display = "block";
+
+            try {
+                const formData = new FormData(e.target);
+                const response = await fetch("/api/outreach/generate", { method: "POST", body: formData, credentials: "same-origin" });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: "Request failed" }));
+                    throw new Error(err.detail || "Generation failed");
+                }
+                const data = await response.json();
+                output.textContent = `Subject: ${data.subject}\n\n${data.body}`;
+                resultBox.style.display = "block";
+            } catch (err) {
+                errorBox.textContent = err.message;
+                errorBox.style.display = "block";
+            } finally {
+                loading.style.display = "none";
+            }
+        });
+
+        document.getElementById("copy-email-btn").addEventListener("click", () => {
+            const text = document.getElementById("email-output").textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById("copy-email-btn");
+                btn.textContent = "Copied!";
+                setTimeout(() => { btn.textContent = "Copy to clipboard"; }, 1500);
+            });
+        });
+    </script>
+</body>
+</html>

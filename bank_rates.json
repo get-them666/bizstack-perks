@@ -1,0 +1,14 @@
+[
+  {
+    "bank_name": "Example Placeholder — replace with real researched rates",
+    "loan_type": "business_term_loan",
+    "apr_low": 7.0,
+    "apr_high": 12.0,
+    "min_loan_amount": 10000,
+    "max_loan_amount": 500000,
+    "notes": "This is placeholder data. Manually verify current rates on the bank's own published rate page before using in outreach, then update last_verified.",
+    "source_url": "https://example-bank.com/business-loans",
+    "last_verified": "2026-01-01",
+    "region": "VA"
+  }
+]
