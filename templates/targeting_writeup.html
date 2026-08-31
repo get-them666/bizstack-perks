@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Targeting write-ups - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; }
+        header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 900px; padding: 24px; }
+        .intro { color: #9db1d1; font-size: 0.9rem; margin-bottom: 24px; }
+        .card { background: #101934; border: 1px solid #27426f; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        label { display: block; font-weight: bold; font-size: 0.85rem; color: #9db1d1; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .field { margin-bottom: 18px; }
+        .row { display: flex; gap: 16px; flex-wrap: wrap; }
+        .row .field { flex: 1; min-width: 160px; }
+        input, select {
+            width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #27426f;
+            background: #0d1730; color: #f5f7fb; font-size: 0.95rem;
+        }
+        input:focus, select:focus { outline: none; border-color: #4fd1ff; }
+        .hint { color: #7288a8; font-size: 0.8rem; margin-top: 4px; }
+        button {
+            background: #4fd1ff; border: 0; border-radius: 8px; color: #03111d; cursor: pointer;
+            font-weight: bold; padding: 12px 22px; font-size: 0.95rem;
+        }
+        button:hover { background: #3bc0f0; }
+        button:disabled { background: #2a4258; color: #7288a8; cursor: not-allowed; }
+        .error {
+            background: rgba(255, 91, 91, 0.12); border: 1px solid rgba(255, 91, 91, 0.3);
+            color: #ffb3b3; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.9rem;
+        }
+        .result-card { display: none; }
+        .result-card.visible { display: block; }
+        pre#writeup-output {
+            background: #0d1730; border: 1px solid #27426f; border-radius: 8px; padding: 20px;
+            white-space: pre-wrap; word-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem; line-height: 1.5; color: #e6edf7; max-height: 600px; overflow-y: auto;
+        }
+        .result-actions { display: flex; gap: 10px; margin-top: 14px; }
+        .result-actions button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        .result-actions button:hover { background: #30363d; }
+        .loading { color: #9db1d1; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Targeting write-ups</h1>
+        <nav>
+            <a href="/dashboard">Dashboard</a> ·
+            <a href="/admin">Admin workspace</a> ·
+            <a href="/client">Client registry</a> ·
+            <a href="/logout">Log out</a>
+        </nav>
+    </header>
+    <main>
+        <p class="intro">
+            Generate a market opportunity brief combining public Census demographics and Federal Reserve (FRED)
+            banking/economic indicators for a specific state, county, and service category. Use this to research
+            and pitch prospective clients &mdash; every figure is sourced from an official public government dataset.
+        </p>
+
+        <div class="card">
+            <div id="config-error" class="error" style="display:none;"></div>
+
+            <form id="writeup-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="state">State (2-letter code)</label>
+                        <input type="text" id="state" name="state" placeholder="TX" maxlength="2" required>
+                    </div>
+                    <div class="field">
+                        <label for="county_fips">County FIPS (optional)</label>
+                        <input type="text" id="county_fips" name="county_fips" placeholder="201">
+                        <p class="hint">Leave blank for a state-wide overview of top counties.</p>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="service_category">Service category</label>
+                    <input type="text" id="service_category" name="service_category" placeholder="plumbing services" required>
+                </div>
+                <div class="field">
+                    <label for="business_name">Prospect business name (optional)</label>
+                    <input type="text" id="business_name" name="business_name" placeholder="Joe's Plumbing">
+                </div>
+                <button type="submit" id="generate-btn">Generate write-up</button>
+            </form>
+        </div>
+
+        <div id="loading" class="loading" style="display:none;">Generating write-up&hellip;</div>
+        <div id="error-box" class="error" style="display:none;"></div>
+
+        <div id="result-card" class="card result-card">
+            <pre id="writeup-output"></pre>
+            <div class="result-actions">
+                <button type="button" id="copy-btn">Copy to clipboard</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const form = document.getElementById("writeup-form");
+        const generateBtn = document.getElementById("generate-btn");
+        const loading = document.getElementById("loading");
+        const errorBox = document.getElementById("error-box");
+        const resultCard = document.getElementById("result-card");
+        const output = document.getElementById("writeup-output");
+        const copyBtn = document.getElementById("copy-btn");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            errorBox.style.display = "none";
+            resultCard.classList.remove("visible");
+            loading.style.display = "block";
+            generateBtn.disabled = true;
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch("/api/targeting/writeup", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "same-origin",
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: "Request failed" }));
+                    throw new Error(err.detail || `Request failed (${response.status})`);
+                }
+
+                const data = await response.json();
+                output.textContent = data.narrative_text;
+                resultCard.classList.add("visible");
+            } catch (err) {
+                errorBox.textContent = err.message || "Something went wrong generating the write-up.";
+                errorBox.style.display = "block";
+            } finally {
+                loading.style.display = "none";
+                generateBtn.disabled = false;
+            }
+        });
+
+        copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(output.textContent).then(() => {
+                copyBtn.textContent = "Copied!";
+                setTimeout(() => { copyBtn.textContent = "Copy to clipboard"; }, 1500);
+            });
+        });
+    </script>
+</body>
+</html>

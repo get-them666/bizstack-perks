@@ -700,6 +700,20 @@ async def admin_workspace(request: Request, conn=Depends(get_db)):
     )
 
 
+@app.get("/admin/targeting", response_class=HTMLResponse)
+async def targeting_writeup_page(request: Request):
+    """
+    Backend tool for generating client targeting write-ups (Census demographics
+    + FRED public banking data). Login-protected, same as /dashboard, /admin,
+    and /client -- this is an internal sales research tool, not a customer or
+    public-facing feature.
+    """
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    return templates.TemplateResponse(request=request, name="targeting_writeup.html", context={})
+
+
 @app.post("/api/pipeline-load-trigger")
 async def add_profile(
     company_name: str = Form(...),
