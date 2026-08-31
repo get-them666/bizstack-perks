@@ -32,9 +32,9 @@ FRED_SERIES = {
     "mortgage_30yr": "MORTGAGE30US",           # 30-Year Fixed Rate Mortgage Average
     "fed_funds_rate": "FEDFUNDS",               # Effective Federal Funds Rate
     "prime_rate": "MPRIME",                     # Bank Prime Loan Rate
-    "business_loans": "BUSLOANS",               # Commercial & Industrial Loans, All Banks
+    "business_loans": "BUSLOANS",               # Commercial & Industrial Loans, All Banks (Billions $)
     "delinquency_rate_business": "DRBLACBS",    # Delinquency Rate on Business Loans
-    "consumer_credit": "TOTALSL",                # Total Consumer Credit Outstanding
+    "consumer_credit": "TOTALSL",                # Total Consumer Credit Outstanding (Millions $)
     "unemployment_rate": "UNRATE",               # National Unemployment Rate
     "small_business_optimism": "USSLIND",        # Leading Index (small biz proxy)
 }
@@ -134,9 +134,9 @@ def format_lending_snapshot_for_display(snapshot: Dict[str, Any]) -> List[Dict[s
         "mortgage_30yr": ("30-Year Mortgage Rate", "%"),
         "fed_funds_rate": ("Federal Funds Rate", "%"),
         "prime_rate": ("Bank Prime Loan Rate", "%"),
-        "business_loans": ("Commercial & Industrial Loans (Billions $)", "$B"),
+        "business_loans": ("Commercial & Industrial Loans", "$B"),
         "delinquency_rate_business": ("Business Loan Delinquency Rate", "%"),
-        "consumer_credit": ("Total Consumer Credit Outstanding (Billions $)", "$B"),
+        "consumer_credit": ("Total Consumer Credit Outstanding", "$M"),
         "unemployment_rate": ("National Unemployment Rate", "%"),
         "small_business_optimism": ("Leading Economic Index", "index"),
     }
@@ -146,8 +146,34 @@ def format_lending_snapshot_for_display(snapshot: Dict[str, Any]) -> List[Dict[s
         label, unit = labels.get(key, (key, ""))
         formatted.append({
             "label": label,
-            "value": data.get("value", "N/A"),
+            "value": _format_fred_value(data.get("value"), unit),
             "unit": unit,
             "as_of": data.get("date", "N/A"),
         })
     return formatted
+
+
+def _format_fred_value(raw_value: Optional[str], unit: str) -> str:
+    """
+    FRED returns raw numeric strings, sometimes with long trailing decimals
+    (e.g. "3.6300000000") that look unprofessional in a client-facing
+    document. Round to sensible precision and add thousands separators for
+    large dollar figures.
+    """
+    if raw_value in (None, "", "."):
+        return "N/A"
+
+    try:
+        num = float(raw_value)
+    except (TypeError, ValueError):
+        return str(raw_value)
+
+    if unit == "%":
+        return f"{num:.2f}"
+    if unit == "$B":
+        return f"{num:,.1f}"
+    if unit == "$M":
+        return f"{num:,.0f}"
+    if unit == "index":
+        return f"{num:.2f}"
+    return f"{num:,.2f}"

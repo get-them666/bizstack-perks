@@ -139,7 +139,16 @@ def _build_narrative(
         for item in lending_display:
             value = item["value"]
             unit = item["unit"]
-            display_value = f"{value}{unit}" if unit == "%" else f"{unit} {value}" if unit == "$B" else value
+            if unit == "%":
+                display_value = f"{value}%"
+            elif unit == "$B":
+                display_value = f"${value} billion"
+            elif unit == "$M":
+                display_value = f"${value} million"
+            elif unit == "index":
+                display_value = f"{value} (index)"
+            else:
+                display_value = value
             lines.append(f"• {item['label']}: {display_value} (as of {item['as_of']})")
         lines.append("")
 
