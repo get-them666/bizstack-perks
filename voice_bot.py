@@ -382,19 +382,22 @@ def create_voice_greeting() -> str:
     )
 
     gather = Gather(
-        input="speech",
+        input="speech dtmf",
         action="/twilio/voice/process-input",
         method="POST",
         speech_timeout="auto",
         timeout=10,
+        num_digits=1,
         language=NATURAL_LANGUAGE,
         hints="pricing, features, callback, credit score, APR, Stripe, loans, how it works, sign me up, yes, no",
     )
     response.append(gather)
 
-    # Fallback if no input
-    response.say("Sorry, I didn't quite catch that — let's try again.", voice=NATURAL_VOICE)
-    response.redirect("/twilio/voice/incoming", method="POST")
+    # If we get here, Gather timed out with no speech or DTMF at all.
+    # Drop into the DTMF menu instead of re-playing the full greeting --
+    # looping the greeting on every silent/failed Gather is what caused
+    # calls to feel stuck repeating themselves.
+    response.redirect("/twilio/voice/handle-dtmf-menu", method="POST")
 
     return str(response)
 

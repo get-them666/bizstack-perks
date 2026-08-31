@@ -873,6 +873,18 @@ async def inbound_call():
     return Response(content=create_voice_greeting(), media_type="application/xml")
 
 
+@app.post("/twilio/voice/handle-dtmf-menu")
+async def handle_dtmf_menu_entry():
+    """
+    Reached when the initial greeting's Gather times out with no speech or
+    DTMF at all (e.g. bad connection, silent caller). Drops into a simple
+    DTMF menu instead of looping the full greeting again -- looping back to
+    /twilio/voice/incoming here is what caused calls to feel stuck repeating
+    the same greeting over and over.
+    """
+    return xml_response(create_menu_fallback())
+
+
 @app.post("/twilio/voice/process-input")
 async def process_voice_input(
     SpeechResult: Optional[str] = Form(default=None),

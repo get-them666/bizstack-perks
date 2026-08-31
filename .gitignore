@@ -1,6 +1,9 @@
 # Ignore local database states
 bizstack.db
 bizstack.db-journal
+data/*.db
+data/*.db-journal
+*.db
 
 # Ignore background automated data storage vaults
 storage_vault/
@@ -11,44 +14,28 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+node_modules/
 
-# Ignore text editor state files
+# Ignore secrets and environment files
+.env
+.env.local
+.env.production
+
+# Ignore logs
+*.log
+api_server.log
+
+# Ignore editor/OS state files
 untitled text*
 .DS_Store
-.env
-.env
-*.log
-.env
-
-.env
-data/
-*.db
-.DS_Store
-
-.env
-data/
-*.db
-.DS_Store
-.env
-data/
-*.db
-*.log
-__pycache__/
-venv/
-.DS_Store
-
-# --- BACKEND PERSISTENCE & SYSTEM CACHE ---
-node_modules/
-.env
-.env.production
-.env.local
-__pycache__/
-*.pyc
-api_server.log
-data/*.db
-data/*.db-journal
-
-# --- BACKGROUND CLOUD CLIENT OVERRIDES ---
-.tmp.driveupload/
-.DS_Store
 .icloud
+
+# Ignore the data/ directory by default (runtime/local storage)...
+data/*
+# ...EXCEPT the curated affiliate links file, which is source-controlled
+# so it deploys with the app and is checked by verify_links.py in CI.
+!data/perks.json
+
+# Google Drive sync artifacts (if the repo is ever inside a synced folder)
+.tmp.driveupload/
+.tmp.drivedownload/
