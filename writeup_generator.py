@@ -77,7 +77,11 @@ def _build_narrative(
     """Generate a professional, client-ready narrative from the raw data."""
     lines: List[str] = []
 
-    greeting_target = business_name or "your business"
+    category_lower = service_category.lower()
+    is_financial_category = any(
+        term in category_lower for term in ["loan", "credit", "lend", "financ", "mortgage"]
+    )
+
     lines.append(f"MARKET OPPORTUNITY BRIEF — {service_category.title()} in {state}")
     lines.append("=" * 60)
     lines.append("")
@@ -104,7 +108,20 @@ def _build_narrative(
 
         # Simple opportunity framing based on income + population
         if income and pop:
-            if income < 65000:
+            if is_financial_category:
+                if income < 65000:
+                    affordability_note = (
+                        "This area's household income sits below the national median, which often "
+                        f"means demand for accessible {service_category} with clear terms and fast "
+                        "approval tends to outweigh demand for premium, high-minimum products."
+                    )
+                else:
+                    affordability_note = (
+                        "This area's household income is above-average, suggesting prospects here can "
+                        f"qualify for a wider range of {service_category} products, including larger "
+                        "loan sizes or premium terms."
+                    )
+            elif income < 65000:
                 affordability_note = (
                     "This area's household income sits below the national median, which often "
                     "means residents are more price-sensitive but also underserved by premium "
@@ -152,15 +169,30 @@ def _build_narrative(
             lines.append(f"• {item['label']}: {display_value} (as of {item['as_of']})")
         lines.append("")
 
-        # Contextual note about rates and lending appetite
+        # Contextual note about rates and lending appetite -- phrased
+        # differently depending on whether this is a financial-services
+        # pitch (loans, credit, lending) vs. a general home/local service.
         prime_rate_entry = next((i for i in lending_display if "Prime" in i["label"]), None)
         if prime_rate_entry:
-            lines.append(
-                f"With the current bank prime rate at {prime_rate_entry['value']}%, financing costs "
-                f"for {greeting_target} customers are a real factor in purchase decisions — "
-                f"positioning your offer around value and flexible terms can be a meaningful "
-                f"differentiator right now."
-            )
+            if business_name:
+                audience_phrase = f"prospects considering {business_name}"
+            else:
+                audience_phrase = "local prospects"
+
+            if is_financial_category:
+                lines.append(
+                    f"With the current bank prime rate at {prime_rate_entry['value']}%, borrowing costs "
+                    f"are top of mind for {audience_phrase} right now. Businesses and consumers alike are "
+                    f"actively comparing rates and terms, which makes this a strong window to lead with "
+                    f"clear, competitive terms and fast approval turnaround as your differentiator."
+                )
+            else:
+                lines.append(
+                    f"With the current bank prime rate at {prime_rate_entry['value']}%, financing costs are "
+                    f"a real factor in how {audience_phrase} make purchase decisions right now — "
+                    f"positioning your offer around value and flexible payment terms can be a meaningful "
+                    f"differentiator."
+                )
             lines.append("")
 
     lines.append("=" * 60)
