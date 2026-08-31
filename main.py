@@ -275,10 +275,10 @@ def affiliate_partners() -> list[dict[str, str]]:
 
 
 def load_perks_json_partners() -> list[dict[str, str]]:
-    """Load the curated affiliate list from data/perks.json.
+    """Load the curated affiliate list from perks.json (repo root).
 
     This is the file verify_links.py checks, and is the source of truth for
-    the /affiliates page. Update data/perks.json to add, remove, or change
+    the /affiliates page. Update perks.json to add, remove, or change
     affiliate links -- no redeploy or environment variable edit needed.
     """
     perks_path = os.path.join(BASE_DIR, "perks.json")  # NOT under data/ -- that path is volume-mounted on Railway and would shadow this file
@@ -288,11 +288,11 @@ def load_perks_json_partners() -> list[dict[str, str]]:
     except FileNotFoundError:
         return []
     except json.JSONDecodeError:
-        logger.warning("data/perks.json contains invalid JSON")
+        logger.warning("perks.json contains invalid JSON")
         return []
 
     if not isinstance(partners, list):
-        logger.warning("data/perks.json must be a JSON array")
+        logger.warning("perks.json must be a JSON array")
         return []
 
     return [
@@ -582,7 +582,7 @@ async def application_received(request: Request, lead_id: Optional[int] = None):
 
 @app.get("/affiliates", response_class=HTMLResponse)
 async def affiliates(request: Request, conn=Depends(get_db)):
-    # Primary source: data/perks.json (curated list, checked by verify_links.py).
+    # Primary source: perks.json (curated list, checked by verify_links.py).
     # Update that file to change what's shown here -- no redeploy needed.
     perks_json_partners = load_perks_json_partners()
 
