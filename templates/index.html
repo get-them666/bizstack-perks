@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BizStack Perks - Launch Your Revenue & Voice Ops</title>
+    <title>BizStack Perks - Find and Close Local Business Leads</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -240,11 +240,12 @@
             <div class="alert">{{ error }}</div>
             {% endif %}
 
-            <div class="eyebrow">Monetize + automate</div>
-            <h1>Turn your business perks site into a paid, voice-enabled experience.</h1>
+            <div class="eyebrow">Lead generation, automated</div>
+            <h1>Find, close, and manage local business leads — automatically.</h1>
             <p class="hero-copy">
-                BizStack Perks helps you capture revenue with Stripe Checkout, onboard buyers faster,
-                and support inbound or outbound call flows through Twilio Voice.
+                BizStack Perks finds businesses actively expanding or seeking financing, calls and texts
+                them with an AI voice assistant that can answer questions and close a signup live on the
+                call, and gives you a portal to track every lead from first contact to paid customer.
             </p>
 
             <div class="cta-row">
@@ -262,34 +263,38 @@
 
             <div class="hero-points">
                 <div class="point">
-                    <strong>Reliable payments</strong>
-                    Webhook-backed Stripe confirmation keeps fulfillment off fragile redirects.
+                    <strong>AI voice assistant</strong>
+                    Answers calls, explains pricing and features, and can close a signup on the spot by
+                    texting a secure payment link mid-call.
                 </div>
                 <div class="point">
-                    <strong>Voice automation</strong>
-                    Answer inbound calls and launch outbound follow-ups from your backend.
+                    <strong>Lead discovery</strong>
+                    Finds businesses showing public signals of growth or financing needs using Census
+                    demographic data, Federal Reserve economic indicators, and public business news.
                 </div>
                 <div class="point">
-                    <strong>Fast launch</strong>
-                    Keep your dashboard, lead capture, and conversion paths in one deployable app.
+                    <strong>Customer portal</strong>
+                    Every lead and customer gets a simple phone or email login — no password to
+                    remember — to check status and manage billing.
                 </div>
             </div>
         </section>
 
         <section class="grid" id="pricing">
             <div class="section">
-                <h2>What buyers get</h2>
+                <h2>What you get</h2>
                 <ul>
-                    <li>Hosted checkout flow wired to a real backend route</li>
-                    <li>Payment confirmation recorded after verified Stripe webhook delivery</li>
-                    <li>Inbound voice greeting plus simple Twilio call menu</li>
-                    <li>Backend endpoint to trigger outbound voice calls securely</li>
+                    <li>AI phone assistant that answers calls, handles objections, and can close a sale live by texting a secure checkout link</li>
+                    <li>Automated lead discovery using public Census, Federal Reserve, and business news data — no cold-calling lists to buy</li>
+                    <li>Market opportunity write-ups combining real demographic and economic data for any location you're targeting</li>
+                    <li>A self-service customer portal with phone/email login (no password) to track leads and manage billing</li>
+                    <li>SMS follow-ups, opt-out handling, and a full admin dashboard to see every lead, call, and payment in one place</li>
                 </ul>
             </div>
             <div class="section">
                 <div class="price-card">
                     <div class="price">{{ offer_price_display }}</div>
-                    <p>Launch offer for payment, onboarding, and voice workflow activation.</p>
+                    <p>Full access to lead discovery, the AI voice assistant, SMS follow-ups, and your customer portal.</p>
                     <div style="height: 14px;"></div>
                     <button class="button button-primary" type="submit" form="checkout-form">Buy now</button>
                 </div>
@@ -299,12 +304,16 @@
         <section class="faq" id="faq">
             <h2>Frequently asked questions</h2>
             <details open>
-                <summary>How is payment confirmed?</summary>
-                <p>Checkout redirects the buyer back to the site, but fulfillment is confirmed only after the Stripe webhook is verified server-side.</p>
+                <summary>What does BizStack Perks actually do?</summary>
+                <p>We help you find and close local business leads. Our system spots businesses showing public signs of growth or financing needs, our AI phone assistant talks to prospects and can close a signup live on the call, and everything gets tracked in your dashboard and their customer portal.</p>
             </details>
             <details>
-                <summary>Can the bot receive and make calls?</summary>
-                <p>Yes. Twilio Voice routes can answer inbound calls with TwiML and you can trigger outbound calls from the backend using your configured Twilio number.</p>
+                <summary>How does the AI phone assistant work?</summary>
+                <p>It answers your business line, understands speech or touch-tone input, can explain pricing and features, and if a caller wants to sign up, it collects their business name and texts them a secure Stripe checkout link before the call even ends.</p>
+            </details>
+            <details>
+                <summary>How is payment confirmed?</summary>
+                <p>Checkout redirects the buyer back to the site, but fulfillment is confirmed only after the Stripe webhook is verified server-side.</p>
             </details>
             <details>
                 <summary>Is my information secure?</summary>
@@ -313,7 +322,7 @@
         </section>
 
         <footer class="footer" id="contact">
-            <span>Revenue-ready checkout and voice automation for BizStack Perks.</span>
+            <span>Lead generation and AI-powered sales automation for local service businesses.</span>
             <span>
                 <a href="{{ support_phone_href }}">{{ support_phone_display }}</a>
             </span>

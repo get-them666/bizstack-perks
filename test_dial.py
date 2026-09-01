@@ -5,7 +5,7 @@ def execute_production_phone_test():
     # 3. Pull current active credentials from your .env file
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    twilio_number = os.getenv("TWILIO_NUMBER", "+17578446730")
+    twilio_number = os.getenv("TWILIO_NUMBER", os.getenv("SIGNALWIRE_PHONE_NUMBER", "+17578469275"))
     
     # 4. Assign target destination configurations
     target_destination_phone = "+12526655891"
