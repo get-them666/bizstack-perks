@@ -67,32 +67,56 @@ def provision_customer_from_checkout(
     phone: Optional[str] = None,
 ) -> Optional[int]:
     """
-    Create or update a customer record after a successful Stripe checkout/payment.
-    Returns the customer's internal id, or None if there isn't enough info
-    (e.g. no email and no phone) to create an account.
+    Create or update a customer record after a successful Stripe checkout/payment,
+    OR a free self-service signup (see /signup). Returns the customer's internal
+    id, or None if there isn't enough info (e.g. no email and no phone) to
+    create an account.
+
+    Works correctly whether email, phone, or both are provided -- upserts on
+    whichever identifier is present (email takes priority if both are given
+    and an existing row matches either).
     """
     if not email and not phone:
         logger.warning("Cannot provision customer without email or phone")
         return None
 
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO customers (business_name, email, phone, stripe_customer_id, stripe_subscription_id, subscription_status)
-        VALUES (?, ?, ?, ?, ?, 'active')
-        ON CONFLICT(email) DO UPDATE SET
-            business_name = COALESCE(excluded.business_name, customers.business_name),
-            stripe_customer_id = COALESCE(excluded.stripe_customer_id, customers.stripe_customer_id),
-            stripe_subscription_id = COALESCE(excluded.stripe_subscription_id, customers.stripe_subscription_id),
-            subscription_status = 'active',
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (business_name, email, phone, stripe_customer_id, stripe_subscription_id),
-    )
-    conn.commit()
 
-    row = conn.execute("SELECT id FROM customers WHERE email = ?", (email,)).fetchone()
-    return row["id"] if row else None
+    # Look for an existing customer by whichever identifier(s) we have.
+    existing = None
+    if email:
+        existing = conn.execute("SELECT id FROM customers WHERE email = ?", (email,)).fetchone()
+    if not existing and phone:
+        existing = conn.execute("SELECT id FROM customers WHERE phone = ?", (phone,)).fetchone()
+
+    if existing:
+        customer_id = existing["id"]
+        cursor.execute(
+            """
+            UPDATE customers SET
+                business_name = COALESCE(?, business_name),
+                email = COALESCE(?, email),
+                phone = COALESCE(?, phone),
+                stripe_customer_id = COALESCE(?, stripe_customer_id),
+                stripe_subscription_id = COALESCE(?, stripe_subscription_id),
+                subscription_status = 'active',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (business_name, email, phone, stripe_customer_id, stripe_subscription_id, customer_id),
+        )
+    else:
+        cursor.execute(
+            """
+            INSERT INTO customers (business_name, email, phone, stripe_customer_id, stripe_subscription_id, subscription_status)
+            VALUES (?, ?, ?, ?, ?, 'active')
+            """,
+            (business_name, email, phone, stripe_customer_id, stripe_subscription_id),
+        )
+        customer_id = cursor.lastrowid
+
+    conn.commit()
+    return customer_id
 
 
 def mark_subscription_status(

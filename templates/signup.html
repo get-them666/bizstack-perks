@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign up - BizStack Perks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at top, #15254f 0%, #0b1020 55%);
+            color: #f5f7fb;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            background: rgba(16, 25, 52, 0.9);
+            border: 1px solid rgba(122, 195, 255, 0.18);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 440px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .subtitle { color: #9db1d1; margin-bottom: 24px; font-size: 0.95rem; }
+        label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; color: #9db1d1; text-transform: uppercase; letter-spacing: 0.04em; }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.04);
+            color: #f5f7fb;
+            font-size: 1rem;
+            margin-bottom: 18px;
+        }
+        input:focus { outline: none; border-color: #4fd1ff; }
+        button {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: 0;
+            background: linear-gradient(135deg, #4fd1ff, #1198ff);
+            color: #03111d;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button:hover { transform: translateY(-1px); }
+        .error {
+            background: rgba(255, 91, 91, 0.12);
+            border: 1px solid rgba(255, 91, 91, 0.26);
+            color: #ffb3b3;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        .notice {
+            background: rgba(53, 208, 143, 0.12);
+            border: 1px solid rgba(53, 208, 143, 0.3);
+            color: #7fe6bc;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        .hint { color: #7288a8; font-size: 0.85rem; margin-top: 4px; }
+        a { color: #4fd1ff; text-decoration: none; }
+        .consent { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 20px; font-size: 0.85rem; color: #9db1d1; }
+        .consent input { width: auto; margin: 0; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <h1>Create your account</h1>
+        <p class="subtitle">Free to sign up &mdash; no payment required. You can add billing later from your account.</p>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if created %}
+        <div class="notice">Account created! You can now log in at <a href="/portal/login">the customer portal</a> using the phone number or email you just entered.</div>
+        {% else %}
+        <form method="post" action="/signup">
+            <label for="business_name">Business name</label>
+            <input type="text" id="business_name" name="business_name" placeholder="Acme Plumbing Co" required>
+
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" placeholder="you@example.com">
+
+            <label for="phone">Phone (E.164 format)</label>
+            <input type="tel" id="phone" name="phone" placeholder="+15551234567">
+            <p class="hint" style="margin-top: -12px; margin-bottom: 18px;">Provide at least one of email or phone &mdash; you'll use it to log in.</p>
+
+            <label class="consent">
+                <input type="checkbox" name="consent" value="accepted" required>
+                <span>{{ consent_text }}</span>
+            </label>
+
+            <button type="submit">Create account</button>
+        </form>
+        {% endif %}
+
+        <p class="hint" style="margin-top: 24px;"><a href="/">Back to homepage</a> &middot; <a href="/portal/login">Already have an account? Log in</a></p>
+    </main>
+</body>
+</html>

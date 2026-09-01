@@ -1801,6 +1801,80 @@ def get_portal_customer(request: Request, conn) -> Optional[sqlite3.Row]:
     return get_customer_by_session_token(conn, token)
 
 
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_page(request: Request, error: Optional[str] = None, created: bool = False):
+    """
+    Public, free, self-service signup for the customer portal. No payment
+    required to create an account -- billing can be added later via
+    /portal/billing. This exists so customers (and testers) don't need to
+    complete a Stripe checkout just to create a portal login.
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="signup.html",
+        context={"error": error, "created": created, "consent_text": LEAD_CONSENT_TEXT},
+    )
+
+
+@app.post("/signup")
+async def process_signup(
+    request: Request,
+    business_name: str = Form(...),
+    email: Optional[str] = Form(default=None),
+    phone: Optional[str] = Form(default=None),
+    consent: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    """Create a free customer portal account -- no Stripe checkout required."""
+    email = (email or "").strip().lower() or None
+    phone = (phone or "").strip() or None
+
+    if consent != "accepted":
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={"error": "Please accept the consent notice to continue.", "created": False, "consent_text": LEAD_CONSENT_TEXT},
+        )
+
+    if not email and not phone:
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={"error": "Provide at least an email or phone number.", "created": False, "consent_text": LEAD_CONSENT_TEXT},
+        )
+
+    if phone and not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={"error": "Enter a valid phone number in +1XXXXXXXXXX format.", "created": False, "consent_text": LEAD_CONSENT_TEXT},
+        )
+
+    customer_id = provision_customer_from_checkout(
+        conn,
+        email=email,
+        business_name=business_name.strip()[:120],
+        stripe_customer_id=None,
+        phone=phone,
+    )
+
+    if phone and customer_id:
+        link_phone_to_customer(conn, customer_id, phone)
+
+    if not customer_id:
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context={"error": "Unable to create account right now. Please try again.", "created": False, "consent_text": LEAD_CONSENT_TEXT},
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="signup.html",
+        context={"error": None, "created": True, "consent_text": LEAD_CONSENT_TEXT},
+    )
+
+
 @app.get("/portal/login", response_class=HTMLResponse)
 async def portal_login_page(request: Request, error: Optional[str] = None):
     return templates.TemplateResponse(

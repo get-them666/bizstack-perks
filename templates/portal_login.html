@@ -127,7 +127,7 @@
             <label id="identifier-label" for="identifier">Phone number</label>
             <input type="text" id="identifier" name="identifier" placeholder="+15551234567" autofocus required>
             <button type="submit">Send login code</button>
-            <p class="hint" id="identifier-hint">Use the phone number on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href="/#pricing">get started here</a>.</p>
+            <p class="hint" id="identifier-hint">Use the phone number on your BizStack Perks account.</p>
         </form>
         <script>
             function switchTab(channel) {
@@ -143,12 +143,12 @@
                     identifierInput.type = "email";
                     identifierInput.placeholder = "you@example.com";
                     label.textContent = "Email address";
-                    hint.innerHTML = "Use the email on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href='/#pricing'>get started here</a>.";
+                    hint.textContent = "Use the email on your BizStack Perks account.";
                 } else {
                     identifierInput.type = "text";
                     identifierInput.placeholder = "+15551234567";
                     label.textContent = "Phone number";
-                    hint.innerHTML = "Use the phone number on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href='/#pricing'>get started here</a>.";
+                    hint.textContent = "Use the phone number on your BizStack Perks account.";
                 }
                 identifierInput.value = "";
                 identifierInput.focus();
@@ -156,7 +156,7 @@
         </script>
         {% endif %}
 
-        <p class="hint" style="margin-top: 24px;"><a href="/">Back to homepage</a></p>
+        <p class="hint" style="margin-top: 24px;">New here? <a href="/signup">Create a free account</a> &middot; <a href="/">Back to homepage</a></p>
     </main>
 </body>
 </html>
