@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Draft Review - BizStack Perks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at top, #0f1f4a 0%, #07101e 60%);
+            color: #f0f4fb;
+            min-height: 100vh;
+            padding: 32px 20px;
+        }
+        .container { max-width: 780px; margin: 0 auto; }
+        .back-link { display: inline-block; color: #4fc8ff; font-size: 0.88rem; margin-bottom: 20px; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+
+        h1 { font-size: 1.7rem; margin-bottom: 6px; }
+        .subtitle { color: #8faac8; font-size: 0.9rem; margin-bottom: 28px; }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .meta-card {
+            background: rgba(14, 24, 50, 0.75);
+            border: 1px solid rgba(110, 175, 240, 0.14);
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+        .meta-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #5e80a0; margin-bottom: 4px; }
+        .meta-value { font-size: 0.95rem; font-weight: 600; color: #d8eaff; }
+        .meta-value.rate { color: #4fc8ff; font-size: 1.1rem; }
+        .meta-value.good { color: #35d08f; }
+        .meta-value.warn { color: #fac850; }
+        .meta-value.bad  { color: #f87171; }
+
+        .section-card {
+            background: rgba(14, 24, 50, 0.85);
+            border: 1px solid rgba(110, 175, 240, 0.14);
+            border-radius: 16px;
+            padding: 24px 28px;
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #4fc8ff;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(110, 175, 240, 0.1);
+        }
+
+        .rate-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.88rem;
+        }
+        .rate-row:last-child { border-bottom: 0; }
+        .rate-name { color: #8faac8; }
+        .rate-val { font-weight: 700; color: #d8eaff; }
+        .rate-trend { font-size: 0.78rem; margin-left: 8px; }
+        .trend-up { color: #f87171; }
+        .trend-down { color: #35d08f; }
+        .trend-flat { color: #8faac8; }
+
+        .email-draft {
+            background: rgba(6, 14, 32, 0.9);
+            border: 1px solid rgba(110, 175, 240, 0.16);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .email-meta { margin-bottom: 16px; }
+        .email-meta-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+        .email-meta-label { color: #5e80a0; min-width: 60px; }
+        .email-meta-val { color: #c0d4ef; font-weight: 600; }
+        .email-subject { font-size: 1rem; font-weight: 700; color: #f0f4fb; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .email-body {
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: #c8dcf0;
+            white-space: pre-wrap;
+        }
+
+        .actions { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+        .btn {
+            padding: 12px 22px;
+            border-radius: 10px;
+            border: 0;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: linear-gradient(135deg, #4fc8ff, #1178ee); color: #03111d; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,200,255,0.25); }
+        .btn-edit {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #9db1d1;
+        }
+        .btn-edit:hover { border-color: #4fc8ff; color: #f0f4fb; }
+        .btn-discard { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: #ffa8a8; }
+        .btn-discard:hover { background: rgba(248,113,113,0.18); }
+
+        .edit-area {
+            display: none;
+            margin-top: 16px;
+        }
+        .edit-area textarea {
+            width: 100%;
+            min-height: 320px;
+            background: rgba(6,14,32,0.9);
+            border: 1px solid rgba(110,175,240,0.2);
+            border-radius: 10px;
+            padding: 16px;
+            color: #c8dcf0;
+            font-size: 0.88rem;
+            line-height: 1.7;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .edit-area textarea:focus { outline: none; border-color: #4fc8ff; }
+
+        .census-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .census-table th, .census-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .census-table th { color: #5e80a0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .census-table td { color: #c0d4ef; }
+
+        .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+        .tag-score-good { background: rgba(53,208,143,0.15); color: #35d08f; border: 1px solid rgba(53,208,143,0.3); }
+        .tag-score-ok { background: rgba(250,200,80,0.15); color: #fac850; border: 1px solid rgba(250,200,80,0.3); }
+        .tag-score-bad { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+
+        .notice { font-size: 0.78rem; color: #4e6580; margin-top: 10px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <a href="/admin/pipeline" class="back-link">← Pipeline queue</a>
+
+    <h1>Draft Email Review</h1>
+    <p class="subtitle">Review the AI-generated analysis and email draft below before sending. You can edit the body before approving.</p>
+
+    <!-- Client snapshot -->
+    <div class="meta-grid">
+        <div class="meta-card">
+            <div class="meta-label">Client</div>
+            <div class="meta-value">{{ draft.client_name }}</div>
+        </div>
+        <div class="meta-card">
+            <div class="meta-label">Product</div>
+            <div class="meta-value">{{ draft.product_type_display }}</div>
+        </div>
+        <div class="meta-card">
+            <div class="meta-label">Requested Amount</div>
+            <div class="meta-value">{% if draft.requested_amount %}${{ "{:,.0f}".format(draft.requested_amount) }}{% else %}—{% endif %}</div>
+        </div>
+        <div class="meta-card">
+            <div class="meta-label">Location</div>
+            <div class="meta-value">{{ draft.state }}{% if draft.zip_code %} {{ draft.zip_code }}{% endif %}</div>
+        </div>
+        <div class="meta-card">
+            <div class="meta-label">Credit Score Range</div>
+            <div class="meta-value
+                {% if draft.credit_tier == 'good' %}good
+                {% elif draft.credit_tier == 'fair' %}warn
+                {% elif draft.credit_tier == 'poor' %}bad{% endif %}">
+                {{ draft.credit_score_range or "Unknown" }}
+                &nbsp;<span class="tag tag-score-{{ draft.credit_tier or 'ok' }}">{{ draft.credit_tier_label or "—" }}</span>
+            </div>
+        </div>
+        <div class="meta-card">
+            <div class="meta-label">Pipeline Status</div>
+            <div class="meta-value warn">Pending Review</div>
+        </div>
+    </div>
+
+    <!-- Live rate data -->
+    <div class="section-card">
+        <div class="section-title">📊 Live Federal Reserve &amp; Rate Data (FRED)</div>
+        {% if draft.fred_data %}
+        {% for key, item in draft.fred_data.items() %}
+        <div class="rate-row">
+            <span class="rate-name">{{ item.label }}</span>
+            <span class="rate-val">
+                {{ item.value }}
+                {% if item.trend == 'up' %}<span class="rate-trend trend-up">↑ rising</span>
+                {% elif item.trend == 'down' %}<span class="rate-trend trend-down">↓ falling</span>
+                {% else %}<span class="rate-trend trend-flat">→ stable</span>{% endif %}
+            </span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color: #56728f; font-size: 0.88rem;">FRED API key not configured — rate data unavailable. Set FRED_API_KEY to enable.</p>
+        {% endif %}
+        <p class="notice">Source: Federal Reserve Bank of St. Louis (FRED). Data reflects latest published values.</p>
+    </div>
+
+    <!-- Census area data -->
+    <div class="section-card">
+        <div class="section-title">🗺 Area Demographics (US Census — {{ draft.state }})</div>
+        {% if draft.census_data %}
+        <table class="census-table">
+            <thead><tr><th>Metric</th><th>Value</th><th>Context</th></tr></thead>
+            <tbody>
+            {% for row in draft.census_data %}
+            <tr>
+                <td>{{ row.label }}</td>
+                <td><strong>{{ row.value }}</strong></td>
+                <td style="color: #56728f;">{{ row.context }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #56728f; font-size: 0.88rem;">Census API key not configured — demographic data unavailable. Set CENSUS_API_KEY to enable.</p>
+        {% endif %}
+        <p class="notice">Source: US Census Bureau ACS 5-Year Estimates.</p>
+    </div>
+
+    <!-- Email draft -->
+    <div class="section-card">
+        <div class="section-title">✉ Email Draft</div>
+        <div class="email-draft">
+            <div class="email-meta">
+                <div class="email-meta-row">
+                    <span class="email-meta-label">To:</span>
+                    <span class="email-meta-val">{{ draft.client_name }} &lt;{{ draft.client_email }}&gt;</span>
+                </div>
+                <div class="email-meta-row">
+                    <span class="email-meta-label">From:</span>
+                    <span class="email-meta-val">BizStack Perks (via your SMTP)</span>
+                </div>
+            </div>
+            <div class="email-subject">Subject: {{ draft.email_subject }}</div>
+            <div class="email-body" id="email-preview">{{ draft.email_body }}</div>
+        </div>
+
+        <div class="edit-area" id="edit-area">
+            <textarea id="email-body-edit" name="email_body">{{ draft.email_body }}</textarea>
+        </div>
+
+        <div class="actions">
+            <form method="post" action="/api/pipeline/send/{{ draft.id }}" style="display:contents;">
+                <input type="hidden" name="email_body" id="send-body-field" value="{{ draft.email_body }}">
+                <button type="submit" class="btn btn-primary">✓ Approve &amp; Send Email</button>
+            </form>
+            <button type="button" class="btn btn-edit" onclick="toggleEdit()">✏ Edit Draft</button>
+            <form method="post" action="/api/pipeline/discard/{{ draft.id }}" style="display:contents;">
+                <button type="submit" class="btn btn-discard"
+                        onclick="return confirm('Discard this draft? This cannot be undone.')">
+                    ✕ Discard Draft
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let editOpen = false;
+function toggleEdit() {
+    editOpen = !editOpen;
+    document.getElementById('edit-area').style.display = editOpen ? 'block' : 'none';
+    document.querySelector('.btn-edit').textContent = editOpen ? '× Cancel Edit' : '✏ Edit Draft';
+
+    if (editOpen) {
+        document.getElementById('email-preview').style.display = 'none';
+    } else {
+        // Save edits back to preview + send field
+        const edited = document.getElementById('email-body-edit').value;
+        document.getElementById('email-preview').textContent = edited;
+        document.getElementById('send-body-field').value = edited;
+        document.getElementById('email-preview').style.display = 'block';
+    }
+}
+// Keep send field in sync with edits on the fly
+document.getElementById('email-body-edit')?.addEventListener('input', function() {
+    document.getElementById('send-body-field').value = this.value;
+});
+</script>
+</body>
+</html>

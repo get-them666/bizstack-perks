@@ -20,7 +20,7 @@ from twilio.twiml.voice_response import Gather, VoiceResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLeadNetwork, store_leads_to_db
-from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms
+from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms, handle_inbound_sms_async
 from lead_analytics import LeadHotspotAnalyzer
 from writeup_generator import generate_targeting_writeup
 from business_signals import NewsSignalScanner, OpenDataPermitScanner, deduplicate_signals
@@ -55,6 +55,28 @@ from customer_portal import (
     link_phone_to_customer,
 )
 from email_notifier import send_portal_login_code, email_configured
+from intake_pipeline import (
+    init_pipeline_tables,
+    run_intake_pipeline,
+    get_pipeline_item,
+    get_pipeline_queue,
+    mark_pipeline_sent,
+    mark_pipeline_discarded,
+    PRODUCT_DISPLAY,
+    classify_credit_tier,
+)
+from inbound_email import (
+    init_inbound_email_tables,
+    start_imap_background_poller,
+    route_inbound_email,
+    store_inbound_email,
+    parse_sendgrid_inbound,
+    parse_postmark_inbound,
+    parse_mailgun_inbound,
+    get_inbound_emails,
+    imap_configured,
+    process_inbound_and_draft_reply,
+)
 
 try:
     from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
@@ -466,6 +488,8 @@ def init_db() -> None:
     try:
         AffiliateCommissionManager(conn)
         init_customer_tables(conn)
+        init_pipeline_tables(conn)
+        init_inbound_email_tables(conn)
     finally:
         conn.close()
 
@@ -473,6 +497,14 @@ def init_db() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    # Start IMAP background poller if credentials are configured.
+    # Polls for new inbound emails every IMAP_POLL_INTERVAL_SECONDS (default 60).
+    import asyncio as _asyncio
+    _asyncio.create_task(
+        start_imap_background_poller(
+            lambda: sqlite3.connect(DATABASE_PATH)
+        )
+    )
     yield
 
 
@@ -615,7 +647,34 @@ async def submit_lead(
         ),
     )
     conn.commit()
-    return RedirectResponse(url=f"/application/received?lead_id={cursor.lastrowid}", status_code=303)
+    lead_id = cursor.lastrowid
+
+    # Bot auto-text: confirm receipt and open the conversation
+    if sms_manager.is_configured() and phone.strip():
+        first_name = full_name.strip().split()[0] if full_name.strip() else "there"
+        product_label = requested_product.strip() or application_type
+        amount_str = f" for ${requested_amount:,.0f}" if requested_amount else ""
+        intro_msg = (
+            f"Hi {first_name}! This is Sam at BizStack Perks — we just received your "
+            f"{product_label} request{amount_str}. I'll be your point of contact. "
+            f"Got questions? Just reply here. Reply STOP to opt out."
+        )
+        try:
+            sms_manager.client.messages.create(
+                body=intro_msg,
+                from_=sms_manager.from_number,
+                to=phone.strip(),
+            )
+            conn.execute(
+                "INSERT INTO message_events (lead_id, direction, channel, to_number, body) VALUES (?,?,?,?,?)",
+                (lead_id, "outbound", "sms", phone.strip(), intro_msg),
+            )
+            conn.commit()
+            logger.info("Lead follow-up SMS sent to %s (lead #%s)", phone.strip(), lead_id)
+        except Exception as exc:
+            logger.warning("Lead follow-up SMS failed: %s", exc)
+
+    return RedirectResponse(url=f"/application/received?lead_id={lead_id}", status_code=303)
 
 
 @app.get("/application/received", response_class=HTMLResponse)
@@ -1406,7 +1465,7 @@ async def trigger_outbound_sales_call(
 
 @app.post("/twilio/sms/inbound")
 async def inbound_sms(request: Request, conn=Depends(get_db)):
-    """Handle inbound SMS from leads."""
+    """Handle inbound SMS from leads — powered by Sam (OpenAI) when configured."""
     if TWILIO_AUTH_TOKEN:
         validator = RequestValidator(TWILIO_AUTH_TOKEN)
         form = await request.form()
@@ -1419,7 +1478,8 @@ async def inbound_sms(request: Request, conn=Depends(get_db)):
     else:
         form = await request.form()
 
-    response = handle_inbound_sms(
+    # Use the async AI-powered handler directly (no thread gymnastics needed inside FastAPI)
+    response = await handle_inbound_sms_async(
         message_body=form.get("Body", ""),
         from_phone=form.get("From", ""),
         message_sid=form.get("MessageSid", ""),
@@ -1893,6 +1953,8 @@ async def portal_request_code(
 ):
     """Send a login code via phone (SMS) or email, based on the selected channel."""
     identifier = identifier.strip()
+    delivery_error: Optional[str] = None
+    code_sent = False
 
     if channel == "email":
         if "@" not in identifier or "." not in identifier:
@@ -1905,15 +1967,28 @@ async def portal_request_code(
         customer = get_customer_by_email(conn, identifier)
         if not customer:
             # Don't reveal whether the account exists (avoid account enumeration).
-            logger.info("Portal login requested for unknown email (no account created)")
+            # Show a neutral success screen so attackers can't probe valid emails.
+            logger.info("Portal login requested for unknown email (no account)")
+            code_sent = True  # neutral — no code was generated
         else:
             code = generate_otp(identifier)
             if email_configured():
-                if not send_portal_login_code(identifier, code):
+                sent = send_portal_login_code(identifier, code)
+                if sent:
+                    code_sent = True
+                else:
                     logger.error("Failed to send portal OTP email to %s", identifier)
+                    delivery_error = (
+                        "We couldn't deliver the login code to that email address right now. "
+                        "Please check the address and try again, or switch to phone login."
+                    )
             else:
-                # No SMTP configured (e.g. local dev) -- log the code so the flow is testable.
+                # SMTP not configured — show a real error instead of a phantom success.
                 logger.warning(f"Email not configured; portal OTP for {identifier} is: {code}")
+                delivery_error = (
+                    "Email delivery is not configured on this server. "
+                    "Please use phone login, or contact the site administrator to set up SMTP."
+                )
     else:
         channel = "phone"
         if not re.fullmatch(r"\+[1-9]\d{7,14}", identifier):
@@ -1925,9 +2000,9 @@ async def portal_request_code(
 
         customer = get_customer_by_phone(conn, identifier)
         if not customer:
-            # Don't reveal whether the phone number exists (avoid account enumeration).
-            # Always show the "code sent" screen either way.
-            logger.info("Portal login requested for unknown phone (no account created)")
+            # Same neutral treatment — don't reveal whether the number exists.
+            logger.info("Portal login requested for unknown phone (no account)")
+            code_sent = True
         else:
             code = generate_otp(identifier)
             if sms_manager.is_configured():
@@ -1937,16 +2012,31 @@ async def portal_request_code(
                         from_=sms_manager.from_number,
                         to=identifier,
                     )
+                    code_sent = True
                 except Exception as e:
                     logger.error(f"Failed to send portal OTP SMS: {e}")
+                    delivery_error = (
+                        f"We couldn't send the login code via SMS right now ({type(e).__name__}). "
+                        "Please try again in a moment, or switch to email login."
+                    )
             else:
-                # No Twilio configured (e.g. local dev) -- log the code so the flow is testable.
+                # SMS not configured — show a real error instead of phantom success.
                 logger.warning(f"SMS not configured; portal OTP for {identifier} is: {code}")
+                delivery_error = (
+                    "SMS delivery is not configured on this server. "
+                    "Please use email login, or contact the site administrator to set up Twilio/SignalWire."
+                )
 
     return templates.TemplateResponse(
         request=request,
         name="portal_login.html",
-        context={"error": None, "code_sent": True, "identifier": identifier, "channel": channel},
+        context={
+            "error": None,
+            "delivery_error": delivery_error,
+            "code_sent": code_sent and not delivery_error,
+            "identifier": identifier if not delivery_error else "",
+            "channel": channel,
+        },
     )
 
 
@@ -2039,3 +2129,402 @@ async def portal_billing_redirect(request: Request, conn=Depends(get_db)):
     except Exception as exc:
         logger.warning(f"Stripe billing portal session error: {exc}")
         return RedirectResponse(url="/portal?error=Unable+to+open+billing+portal", status_code=303)
+
+
+# =============================================================================
+# Client Intake Pipeline — form → FRED + Census → email draft → admin review
+# =============================================================================
+
+@app.get("/admin/pipeline/new", response_class=HTMLResponse)
+async def pipeline_intake_form(request: Request):
+    """Show the client intake form."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+    return templates.TemplateResponse(request=request, name="intake_pipeline.html", context={})
+
+
+@app.post("/api/pipeline/intake")
+async def pipeline_submit_intake(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    client_name: str = Form(...),
+    client_email: str = Form(...),
+    client_phone: Optional[str] = Form(default=None),
+    business_name: Optional[str] = Form(default=None),
+    state: str = Form(...),
+    zip_code: Optional[str] = Form(default=None),
+    product_type: str = Form(...),
+    requested_amount: Optional[float] = Form(default=None),
+    loan_purpose: Optional[str] = Form(default=None),
+    desired_term_months: Optional[int] = Form(default=None),
+    credit_score_range: str = Form(...),
+    annual_income_revenue: Optional[float] = Form(default=None),
+    years_in_business: Optional[str] = Form(default=None),
+    monthly_debt_payments: Optional[float] = Form(default=None),
+    collateral_available: Optional[str] = Form(default=None),
+    bankruptcy_history: Optional[str] = Form(default=None),
+    notes: Optional[str] = Form(default=None),
+    urgency: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    """Process intake form: pull FRED + Census data, generate email draft, redirect to review."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    # Basic validation
+    if not client_name.strip() or "@" not in client_email:
+        return templates.TemplateResponse(
+            request=request,
+            name="intake_pipeline.html",
+            context={"error": "Please enter a valid client name and email address."},
+        )
+    if not product_type:
+        return templates.TemplateResponse(
+            request=request,
+            name="intake_pipeline.html",
+            context={"error": "Please select a product type."},
+        )
+    if not credit_score_range:
+        return templates.TemplateResponse(
+            request=request,
+            name="intake_pipeline.html",
+            context={"error": "Please select a credit score range."},
+        )
+
+    try:
+        item_id = await run_intake_pipeline(
+            conn=conn,
+            client_name=client_name.strip(),
+            client_email=client_email.strip().lower(),
+            client_phone=(client_phone or "").strip() or None,
+            business_name=(business_name or "").strip() or None,
+            state=state.upper(),
+            zip_code=(zip_code or "").strip() or None,
+            product_type=product_type,
+            requested_amount=requested_amount,
+            loan_purpose=(loan_purpose or "").strip() or None,
+            desired_term_months=desired_term_months,
+            credit_score_range=credit_score_range,
+            annual_income_revenue=annual_income_revenue,
+            years_in_business=years_in_business or None,
+            monthly_debt_payments=monthly_debt_payments,
+            collateral_available=collateral_available or None,
+            bankruptcy_history=bankruptcy_history or None,
+            notes=(notes or "").strip() or None,
+            urgency=urgency or None,
+        )
+    except Exception as exc:
+        logger.error(f"Pipeline intake error: {exc}")
+        return templates.TemplateResponse(
+            request=request,
+            name="intake_pipeline.html",
+            context={"error": f"Pipeline failed: {exc}. Please try again."},
+        )
+
+    return RedirectResponse(url=f"/admin/pipeline/review/{item_id}", status_code=303)
+
+
+@app.get("/admin/pipeline", response_class=HTMLResponse)
+async def pipeline_queue_view(request: Request, message: Optional[str] = None, conn=Depends(get_db)):
+    """Show all pipeline items in admin queue."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    raw_items = get_pipeline_queue(conn)
+    items = []
+    for row in raw_items:
+        tier, _ = classify_credit_tier(row["credit_score_range"] or "")
+        items.append({
+            "id": row["id"],
+            "client_name": row["client_name"],
+            "client_email": row["client_email"],
+            "product_type_display": PRODUCT_DISPLAY.get(row["product_type"], row["product_type"]),
+            "requested_amount": row["requested_amount"],
+            "state": row["state"],
+            "credit_score_range": row["credit_score_range"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+        })
+
+    return templates.TemplateResponse(
+        request=request,
+        name="pipeline_queue.html",
+        context={"pipeline_items": items, "message": message},
+    )
+
+
+@app.get("/admin/pipeline/review/{item_id}", response_class=HTMLResponse)
+async def pipeline_review(request: Request, item_id: int, conn=Depends(get_db)):
+    """Show the draft review page for a specific pipeline item."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    row = get_pipeline_item(conn, item_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Pipeline item not found")
+
+    import json
+    fred_data = json.loads(row["fred_snapshot_json"] or "{}")
+    census_data = json.loads(row["census_snapshot_json"] or "[]")
+
+    tier, tier_label = classify_credit_tier(row["credit_score_range"] or "")
+
+    draft = {
+        "id": row["id"],
+        "client_name": row["client_name"],
+        "client_email": row["client_email"],
+        "business_name": row["business_name"],
+        "product_type_display": PRODUCT_DISPLAY.get(row["product_type"], row["product_type"]),
+        "requested_amount": row["requested_amount"],
+        "state": row["state"],
+        "zip_code": row["zip_code"],
+        "credit_score_range": row["credit_score_range"],
+        "credit_tier": tier,
+        "credit_tier_label": tier_label,
+        "email_subject": row["email_subject"],
+        "email_body": row["email_body"],
+        "status": row["status"],
+        "fred_data": fred_data,
+        "census_data": census_data,
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="pipeline_draft_review.html",
+        context={"draft": draft},
+    )
+
+
+@app.post("/api/pipeline/send/{item_id}")
+async def pipeline_send_email(
+    request: Request,
+    item_id: int,
+    email_body: str = Form(...),
+    conn=Depends(get_db),
+):
+    """Approve and send the pipeline email draft to the client."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    row = get_pipeline_item(conn, item_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Pipeline item not found")
+
+    from email_notifier import send_email, email_configured
+
+    if not email_configured():
+        return RedirectResponse(
+            url=f"/admin/pipeline/review/{item_id}?error=SMTP+not+configured",
+            status_code=303,
+        )
+
+    success = send_email(
+        to_email=row["client_email"],
+        subject=row["email_subject"],
+        body_text=email_body or row["email_body"],
+    )
+
+    if success:
+        mark_pipeline_sent(conn, item_id)
+        return RedirectResponse(
+            url=f"/admin/pipeline?message=Email+sent+to+{row['client_email']}",
+            status_code=303,
+        )
+    else:
+        return RedirectResponse(
+            url=f"/admin/pipeline/review/{item_id}?error=Failed+to+send+email",
+            status_code=303,
+        )
+
+
+@app.post("/api/pipeline/discard/{item_id}")
+async def pipeline_discard(request: Request, item_id: int, conn=Depends(get_db)):
+    """Discard a pipeline draft."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    mark_pipeline_discarded(conn, item_id)
+    return RedirectResponse(url="/admin/pipeline?message=Draft+discarded", status_code=303)
+
+
+# =============================================================================
+# Inbound Email — webhook receiver + admin inbox view
+# =============================================================================
+
+@app.post("/api/email/inbound")
+async def inbound_email_webhook(request: Request, conn=Depends(get_db)):
+    """
+    Receive inbound emails from email providers via webhook.
+
+    Supports three providers — auto-detected by Content-Type and payload shape:
+      • SendGrid Inbound Parse  → multipart/form-data
+      • Postmark Inbound        → application/json  (has 'MessageID' key)
+      • Mailgun Routes/Receive  → multipart/form-data (has 'body-plain' key)
+
+    Point your provider's inbound webhook at:
+        POST https://your-domain/api/email/inbound
+
+    No auth required from the provider (rely on IP allowlisting or a shared
+    secret checked below). All received emails are stored in inbound_emails
+    and routed automatically (unsubscribe / pipeline reply / lead / customer).
+    """
+    content_type = request.headers.get("content-type", "")
+
+    # Optional shared-secret verification (set INBOUND_EMAIL_WEBHOOK_SECRET)
+    from inbound_email import INBOUND_WEBHOOK_SECRET
+    if INBOUND_WEBHOOK_SECRET:
+        provided = (
+            request.headers.get("X-Webhook-Secret")
+            or request.headers.get("X-Inbound-Secret")
+            or ""
+        )
+        if not secrets.compare_digest(provided, INBOUND_WEBHOOK_SECRET):
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+    parsed = None
+    try:
+        if "application/json" in content_type:
+            # Postmark
+            data = await request.json()
+            parsed = parse_postmark_inbound(data)
+        else:
+            # SendGrid or Mailgun (both use multipart/form-data)
+            form = await request.form()
+            form_data = dict(form)
+            if "body-plain" in form_data:
+                parsed = parse_mailgun_inbound(form_data)
+            else:
+                parsed = parse_sendgrid_inbound(form_data)
+    except Exception as exc:
+        logger.error("Inbound email webhook parse error: %s", exc)
+        # Return 200 so the provider doesn't keep retrying
+        return JSONResponse({"status": "parse_error", "detail": str(exc)})
+
+    if not parsed or not parsed.get("from_email"):
+        return JSONResponse({"status": "ignored", "reason": "no sender"})
+
+    result = await process_inbound_and_draft_reply(conn, parsed)
+
+    logger.info(
+        "Inbound email from %s → route=%s sent=%s subject=%s",
+        parsed["from_email"], result.get("route"), result.get("sent"),
+        parsed.get("subject", "")[:60],
+    )
+    return JSONResponse({"status": "ok", "route": result.get("route"), "auto_sent": result.get("sent")})
+
+
+@app.post("/api/email/imap-poll")
+async def trigger_imap_poll(
+    request: Request,
+    x_api_key: Optional[str] = Header(default=None),
+    conn=Depends(get_db),
+):
+    """
+    Manually trigger one IMAP inbox poll (useful for testing without waiting
+    for the background interval). Requires admin session or API key.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    from inbound_email import poll_imap_inbox, imap_configured
+    if not imap_configured():
+        return JSONResponse({
+            "status": "not_configured",
+            "detail": "Set IMAP_HOST, IMAP_USERNAME, IMAP_PASSWORD to enable IMAP polling.",
+        })
+
+    import asyncio as _asyncio
+    count = await _asyncio.to_thread(lambda: poll_imap_inbox(conn))
+    return JSONResponse({"status": "ok", "messages_processed": count})
+
+
+@app.get("/admin/inbox", response_class=HTMLResponse)
+async def admin_inbox_view(request: Request, conn=Depends(get_db)):
+    """Admin view of all received inbound emails."""
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    from inbound_email import get_inbound_emails, imap_configured
+    emails = get_inbound_emails(conn, limit=200)
+
+    rows_html = ""
+    for em in emails:
+        route_badge_colors = {
+            "unsubscribe": "#f87171",
+            "pipeline_reply": "#4fc8ff",
+            "lead_inquiry": "#35d08f",
+            "customer_message": "#a78bfa",
+            "catch_all": "#8faac8",
+        }
+        color = route_badge_colors.get(em["routed_to"], "#8faac8")
+        rows_html += f"""<tr>
+            <td style="color:#4a6080">{em['id']}</td>
+            <td>{em['from_name'] or ''}<br><span style="color:#5e80a0;font-size:.78rem">{em['from_email']}</span></td>
+            <td>{(em['subject'] or '')[:60]}</td>
+            <td><span style="background:rgba(0,0,0,.2);border:1px solid {color};color:{color};padding:2px 8px;border-radius:20px;font-size:.75rem;font-weight:700">{em['routed_to']}</span></td>
+            <td style="color:#5e80a0;font-size:.8rem">{em['processed_at']}</td>
+        </tr>"""
+
+    imap_status = (
+        "✓ Configured — polling every " + str(__import__('os').getenv('IMAP_POLL_INTERVAL_SECONDS', '60')) + "s"
+        if imap_configured() else
+        "⚠ Not configured — set IMAP_HOST, IMAP_USERNAME, IMAP_PASSWORD"
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inbound Email Inbox - BizStack Perks</title>
+    <style>
+        * {{ box-sizing: border-box; }} body {{ background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }}
+        header {{ align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }}
+        header h1 {{ font-size: 1.3rem; margin: 0; }} header a {{ color: #4fd1ff; text-decoration: none; }}
+        main {{ margin: auto; max-width: 1200px; padding: 24px; }}
+        .status-bar {{ background: rgba(79,200,255,.07); border: 1px solid rgba(79,200,255,.15); border-radius: 8px; padding: 10px 16px; font-size: .85rem; color: #7ab8d8; margin-bottom: 20px; }}
+        .table-wrap {{ border: 1px solid #27426f; border-radius: 10px; overflow: auto; }}
+        table {{ border-collapse: collapse; width: 100%; min-width: 600px; }}
+        th, td {{ border-bottom: 1px solid #1c2f50; padding: 11px 14px; text-align: left; }}
+        th {{ background: #162343; color: #7a9dc4; font-size: .75rem; text-transform: uppercase; }}
+        td {{ font-size: .875rem; }} tr:last-child td {{ border-bottom: 0; }}
+        .empty {{ color: #5e728f; padding: 24px; }}
+        .toolbar {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }}
+        h2 {{ font-size: 1.1rem; }}
+        .poll-btn {{ padding: 9px 18px; border-radius: 8px; background: linear-gradient(135deg,#4fc8ff,#1178ee); color: #03111d; font-weight: 700; font-size: .85rem; border: 0; cursor: pointer; }}
+    </style>
+</head>
+<body>
+<header>
+    <h1>BizStack Perks — Inbound Email Inbox</h1>
+    <nav>
+        <a href="/dashboard">Dashboard</a> ·
+        <a href="/admin">Admin workspace</a> ·
+        <a href="/admin/pipeline">Pipeline</a> ·
+        <a href="/logout">Log out</a>
+    </nav>
+</header>
+<main>
+    <div class="status-bar">
+        IMAP polling: {imap_status} &nbsp;·&nbsp;
+        Webhook endpoint: <code>POST /api/email/inbound</code> (SendGrid / Postmark / Mailgun)
+    </div>
+    <div class="toolbar">
+        <h2>Received Emails ({len(emails)})</h2>
+        <form method="post" action="/api/email/imap-poll">
+            <button type="submit" class="poll-btn">↻ Poll Inbox Now</button>
+        </form>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>From</th><th>Subject</th><th>Route</th><th>Received</th></tr>
+            </thead>
+            <tbody>
+                {rows_html if rows_html else '<tr><td class="empty" colspan="5">No inbound emails yet. Configure IMAP polling or an email webhook to start receiving.</td></tr>'}
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>"""
+    return HTMLResponse(html)

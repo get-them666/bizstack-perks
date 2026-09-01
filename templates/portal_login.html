@@ -82,6 +82,16 @@
             margin-bottom: 18px;
             font-size: 0.9rem;
         }
+        .warning {
+            background: rgba(255, 193, 64, 0.1);
+            border: 1px solid rgba(255, 193, 64, 0.3);
+            color: #ffd97d;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 0.9rem;
+        }
+        .warning strong { display: block; margin-bottom: 4px; }
         .notice {
             background: rgba(53, 208, 143, 0.12);
             border: 1px solid rgba(53, 208, 143, 0.3);
@@ -104,6 +114,13 @@
         <div class="error">{{ error }}</div>
         {% endif %}
 
+        {% if delivery_error %}
+        <div class="warning">
+            <strong>⚠ Delivery issue — code not sent</strong>
+            {{ delivery_error }}
+        </div>
+        {% endif %}
+
         {% if code_sent %}
         <div class="notice">
             {% if channel == "email" %}We emailed you a 6-digit code.{% else %}We texted you a 6-digit code.{% endif %}
@@ -119,15 +136,21 @@
         </form>
         {% else %}
         <div class="tabs">
-            <div class="tab active" id="tab-phone" onclick="switchTab('phone')">Phone</div>
-            <div class="tab" id="tab-email" onclick="switchTab('email')">Email</div>
+            <div class="tab {% if channel == 'phone' %}active{% endif %}" id="tab-phone" onclick="switchTab('phone')">Phone</div>
+            <div class="tab {% if channel == 'email' %}active{% endif %}" id="tab-email" onclick="switchTab('email')">Email</div>
         </div>
         <form method="post" action="/portal/request-code" id="login-form">
-            <input type="hidden" name="channel" id="channel-input" value="phone">
-            <label id="identifier-label" for="identifier">Phone number</label>
-            <input type="text" id="identifier" name="identifier" placeholder="+15551234567" autofocus required>
+            <input type="hidden" name="channel" id="channel-input" value="{{ channel or 'phone' }}">
+            <label id="identifier-label" for="identifier">
+                {% if channel == 'email' %}Email address{% else %}Phone number{% endif %}
+            </label>
+            <input type="text" id="identifier" name="identifier"
+                   placeholder="{% if channel == 'email' %}you@example.com{% else %}+15551234567{% endif %}"
+                   value="{{ identifier or '' }}" autofocus required>
             <button type="submit">Send login code</button>
-            <p class="hint" id="identifier-hint">Use the phone number on your BizStack Perks account.</p>
+            <p class="hint" id="identifier-hint">
+                {% if channel == 'email' %}Use the email on your BizStack Perks account.{% else %}Use the phone number on your BizStack Perks account.{% endif %}
+            </p>
         </form>
         <script>
             function switchTab(channel) {

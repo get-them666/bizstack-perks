@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intake Pipeline - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; }
+        header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 1100px; padding: 24px; }
+        h2 { font-size: 1.1rem; margin-bottom: 14px; }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+        .new-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #4fc8ff, #1178ee);
+            color: #03111d;
+            font-weight: 700;
+            font-size: 0.88rem;
+            text-decoration: none;
+        }
+        .table-wrap { border: 1px solid #27426f; border-radius: 10px; overflow: auto; }
+        table { border-collapse: collapse; width: 100%; min-width: 700px; }
+        th, td { border-bottom: 1px solid #1c2f50; padding: 11px 14px; text-align: left; vertical-align: middle; }
+        th { background: #162343; color: #7a9dc4; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+        td { font-size: .875rem; }
+        tr:last-child td { border-bottom: 0; }
+        tr:hover td { background: rgba(79,200,255,0.03); }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .badge-pending { background: rgba(250,200,80,0.15); color: #fac850; border: 1px solid rgba(250,200,80,0.3); }
+        .badge-sent { background: rgba(53,208,143,0.12); color: #35d08f; border: 1px solid rgba(53,208,143,0.25); }
+        .badge-discarded { background: rgba(255,255,255,0.05); color: #5e728f; border: 1px solid rgba(255,255,255,0.08); }
+
+        .action-link { color: #4fc8ff; text-decoration: none; font-size: 0.82rem; font-weight: 700; margin-right: 8px; }
+        .action-link:hover { text-decoration: underline; }
+        .action-link.discard { color: #f87171; }
+
+        .empty { color: #5e728f; padding: 24px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>BizStack Perks — Intake Pipeline</h1>
+    <nav>
+        <a href="/dashboard">Dashboard</a> ·
+        <a href="/admin">Admin workspace</a> ·
+        <a href="/client">Client registry</a> ·
+        <a href="/logout">Log out</a>
+    </nav>
+</header>
+<main>
+    <div class="toolbar">
+        <h2>Client Intake Pipeline Queue</h2>
+        <a href="/admin/pipeline/new" class="new-btn">+ New Client Intake</a>
+    </div>
+
+    {% if message %}
+    <div style="background: rgba(53,208,143,0.1); border: 1px solid rgba(53,208,143,0.25); color: #7fe6bc; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.88rem;">
+        {{ message }}
+    </div>
+    {% endif %}
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Client</th>
+                    <th>Product</th>
+                    <th>Amount</th>
+                    <th>State</th>
+                    <th>Credit Range</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in pipeline_items %}
+            <tr>
+                <td style="color: #4a6080;">{{ item.id }}</td>
+                <td>
+                    <strong>{{ item.client_name }}</strong><br>
+                    <span style="color: #5e80a0; font-size: 0.78rem;">{{ item.client_email }}</span>
+                </td>
+                <td>{{ item.product_type_display }}</td>
+                <td>{% if item.requested_amount %}${{ "{:,.0f}".format(item.requested_amount) }}{% else %}—{% endif %}</td>
+                <td>{{ item.state }}</td>
+                <td>{{ item.credit_score_range or "—" }}</td>
+                <td>
+                    {% if item.status == 'pending' %}
+                    <span class="badge badge-pending">Pending Review</span>
+                    {% elif item.status == 'sent' %}
+                    <span class="badge badge-sent">Sent</span>
+                    {% elif item.status == 'discarded' %}
+                    <span class="badge badge-discarded">Discarded</span>
+                    {% else %}
+                    <span class="badge badge-pending">{{ item.status }}</span>
+                    {% endif %}
+                </td>
+                <td style="color: #5e80a0; font-size: 0.8rem;">{{ item.created_at }}</td>
+                <td>
+                    {% if item.status == 'pending' %}
+                    <a href="/admin/pipeline/review/{{ item.id }}" class="action-link">Review Draft</a>
+                    {% else %}
+                    <a href="/admin/pipeline/review/{{ item.id }}" class="action-link">View</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td class="empty" colspan="9">No intake pipeline items yet. Click "New Client Intake" to get started.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

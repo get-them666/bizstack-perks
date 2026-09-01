@@ -16,8 +16,43 @@
     </style>
 </head>
 <body>
-    <header><h1>BizStack Perks admin workspace</h1><nav><a href="/dashboard">Dashboard</a> · <a href="/client">Client registry</a> · <a href="/admin/targeting">Targeting write-ups</a> · <a href="/admin/outreach">Outreach pipeline</a> · <a href="/logout">Log out</a></nav></header>
+    <header><h1>BizStack Perks admin workspace</h1><nav><a href="/dashboard">Dashboard</a> · <a href="/client">Client registry</a> · <a href="/admin/pipeline">📋 Pipeline</a> · <a href="/admin/pipeline/new">+ New Intake</a> · <a href="/admin/inbox">📥 Email Inbox</a> · <a href="/admin/targeting">Targeting</a> · <a href="/admin/outreach">Outreach</a> · <a href="/logout">Log out</a></nav></header>
     <main>
+        <section style="margin-bottom:24px">
+            <h2 style="margin-bottom:12px">Quick actions</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:12px">
+                <a href="/admin/pipeline/new" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">📋</span>
+                    <span style="font-weight:700;font-size:.9rem">New Client Intake</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Pull rates + draft email</span>
+                </a>
+                <a href="/admin/pipeline" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">🗂</span>
+                    <span style="font-weight:700;font-size:.9rem">Pipeline Queue</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Review pending drafts</span>
+                </a>
+                <a href="/admin/inbox" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">📥</span>
+                    <span style="font-weight:700;font-size:.9rem">Email Inbox</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Inbound messages</span>
+                </a>
+                <a href="/admin/targeting" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">🎯</span>
+                    <span style="font-weight:700;font-size:.9rem">Targeting Write-ups</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Market analysis</span>
+                </a>
+                <a href="/admin/outreach" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">📣</span>
+                    <span style="font-weight:700;font-size:.9rem">Outreach Pipeline</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Email campaigns</span>
+                </a>
+                <a href="/client" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">🏢</span>
+                    <span style="font-weight:700;font-size:.9rem">Client Registry</span>
+                    <span style="color:#5e80a0;font-size:.78rem">All company profiles</span>
+                </a>
+            </div>
+        </section>
         <section><h2>Opt-in lead requests</h2><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Path</th><th>Interest</th><th>Amount</th><th>Source</th><th>Consent time</th><th>Status</th></tr></thead><tbody>{% for lead in leads %}<tr><td>{{ lead[0] }}</td><td>{{ lead[1] }}</td><td>{{ lead[2] }}</td><td>{{ lead[3] }}</td><td>{{ lead[4] }}</td><td>{{ lead[5] or "-" }}</td><td>{{ lead[6] }}</td><td>{{ lead[7] }}</td><td>{{ lead[8] }}</td></tr>{% else %}<tr><td class="empty" colspan="9">No opt-in lead requests yet.</td></tr>{% endfor %}</tbody></table></div></section>
         <section><h2>Checkout activity</h2><div class="table-wrap"><table><thead><tr><th>Session</th><th>Status</th><th>Amount</th><th>Customer email</th><th>Updated</th></tr></thead><tbody>{% for payment in payments %}<tr><td>{{ payment[0] }}</td><td>{{ payment[1] }}</td><td>{% if payment[2] is not none %}{{ payment[3]|upper }} {{ "%.2f"|format(payment[2] / 100) }}{% else %}-{% endif %}</td><td>{{ payment[4] or "-" }}</td><td>{{ payment[5] }}</td></tr>{% else %}<tr><td class="empty" colspan="5">No checkout activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
         <section><h2>Voice activity</h2><div class="table-wrap"><table><thead><tr><th>Call</th><th>Direction</th><th>Status</th><th>From</th><th>To</th><th>Message</th><th>Updated</th></tr></thead><tbody>{% for call in calls %}<tr><td>{{ call[0] }}</td><td>{{ call[1] or "-" }}</td><td>{{ call[2] or "-" }}</td><td>{{ call[3] or "-" }}</td><td>{{ call[4] or "-" }}</td><td>{{ call[5] or "-" }}</td><td>{{ call[6] }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No voice activity yet.</td></tr>{% endfor %}</tbody></table></div></section>

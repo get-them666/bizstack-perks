@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Financial Intake - BizStack Perks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at top, #0f1f4a 0%, #07101e 60%);
+            color: #f0f4fb;
+            min-height: 100vh;
+            padding: 32px 20px;
+        }
+        .container { max-width: 680px; margin: 0 auto; }
+        .header { margin-bottom: 28px; }
+        .header h1 { font-size: 1.7rem; margin-bottom: 6px; }
+        .header p { color: #8faac8; font-size: 0.95rem; line-height: 1.5; }
+
+        .card {
+            background: rgba(14, 24, 50, 0.85);
+            border: 1px solid rgba(110, 175, 240, 0.16);
+            border-radius: 18px;
+            padding: 32px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #4fc8ff;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(110, 175, 240, 0.1);
+        }
+
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
+        .field { margin-bottom: 18px; }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #7ca0c4;
+            margin-bottom: 7px;
+        }
+        label .req { color: #f87171; margin-left: 2px; }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.04);
+            color: #f0f4fb;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4fc8ff;
+            background: rgba(79, 200, 255, 0.04);
+        }
+        select option { background: #0e1832; }
+        textarea { resize: vertical; min-height: 80px; }
+        .hint-text { font-size: 0.78rem; color: #56728f; margin-top: 5px; }
+
+        .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 4px; }
+        @media (max-width: 520px) { .score-grid { grid-template-columns: 1fr 1fr; } }
+        .score-btn {
+            padding: 12px 8px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03);
+            color: #8faac8;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .score-btn:hover { border-color: #4fc8ff; color: #f0f4fb; }
+        .score-btn.selected { background: rgba(79, 200, 255, 0.15); border-color: #4fc8ff; color: #4fc8ff; }
+        .score-btn.bad.selected { background: rgba(248, 113, 113, 0.15); border-color: #f87171; color: #f87171; }
+        .score-btn.ok.selected { background: rgba(250, 200, 80, 0.15); border-color: #fac850; color: #fac850; }
+        .score-btn.good.selected { background: rgba(53, 208, 143, 0.15); border-color: #35d08f; color: #35d08f; }
+
+        .disclaimer {
+            background: rgba(255, 193, 64, 0.06);
+            border: 1px solid rgba(255, 193, 64, 0.2);
+            border-radius: 10px;
+            padding: 14px 16px;
+            font-size: 0.82rem;
+            color: #b8a060;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        .disclaimer strong { color: #fac850; }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: 0;
+            background: linear-gradient(135deg, #4fc8ff, #1178ee);
+            color: #03111d;
+            font-weight: 700;
+            font-size: 1.05rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(79, 200, 255, 0.25); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .error-box {
+            background: rgba(255, 91, 91, 0.1);
+            border: 1px solid rgba(255, 91, 91, 0.25);
+            color: #ffa8a8;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            margin-bottom: 18px;
+        }
+        .success-box {
+            background: rgba(53, 208, 143, 0.1);
+            border: 1px solid rgba(53, 208, 143, 0.25);
+            color: #7fe6bc;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            margin-bottom: 18px;
+        }
+
+        .back-link { display: inline-block; color: #4fc8ff; font-size: 0.88rem; margin-bottom: 20px; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+
+        .progress-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 28px;
+        }
+        .progress-step {
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.1);
+            transition: background 0.3s;
+        }
+        .progress-step.done { background: #4fc8ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/dashboard" class="back-link">← Back to dashboard</a>
+
+        <div class="header">
+            <h1>Client Financial Intake</h1>
+            <p>Fill in your client's information below. Once submitted, the system automatically pulls live
+               bank rates, Federal Reserve economic indicators, and Census data for their area — then
+               generates a detailed email draft for your review before anything is sent.</p>
+        </div>
+
+        {% if error %}
+        <div class="error-box">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+        <div class="success-box">{{ success }}</div>
+        {% endif %}
+
+        <form method="post" action="/api/pipeline/intake" id="intake-form">
+
+            <!-- Section 1: Client Identity -->
+            <div class="card">
+                <div class="card-title">1 — Client Information</div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="client_name">Full Name <span class="req">*</span></label>
+                        <input type="text" id="client_name" name="client_name" placeholder="Jane Smith" required>
+                    </div>
+                    <div class="field">
+                        <label for="business_name">Business Name</label>
+                        <input type="text" id="business_name" name="business_name" placeholder="Acme LLC">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="client_email">Email Address <span class="req">*</span></label>
+                        <input type="email" id="client_email" name="client_email" placeholder="jane@example.com" required>
+                    </div>
+                    <div class="field">
+                        <label for="client_phone">Phone Number</label>
+                        <input type="text" id="client_phone" name="client_phone" placeholder="+15551234567">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="state">State <span class="req">*</span></label>
+                        <select id="state" name="state" required>
+                            <option value="">— Select state —</option>
+                            <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                            <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+                            <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+                            <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+                            <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+                            <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+                            <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+                            <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+                            <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+                            <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+                            <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+                            <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+                            <option>WI</option><option>WY</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="zip_code">ZIP Code</label>
+                        <input type="text" id="zip_code" name="zip_code" placeholder="10001" maxlength="5" pattern="[0-9]{5}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Product Request -->
+            <div class="card">
+                <div class="card-title">2 — Product &amp; Loan Request</div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="product_type">Product Type <span class="req">*</span></label>
+                        <select id="product_type" name="product_type" required>
+                            <option value="">— Select product —</option>
+                            <optgroup label="Business Credit">
+                                <option value="business_line_of_credit">Business Line of Credit</option>
+                                <option value="business_term_loan">Business Term Loan</option>
+                                <option value="sba_loan">SBA Loan (7a / 504)</option>
+                                <option value="equipment_financing">Equipment Financing</option>
+                                <option value="invoice_factoring">Invoice Factoring / AR Financing</option>
+                                <option value="merchant_cash_advance">Merchant Cash Advance</option>
+                                <option value="business_credit_card">Business Credit Card</option>
+                                <option value="commercial_real_estate">Commercial Real Estate Loan</option>
+                            </optgroup>
+                            <optgroup label="Consumer Credit">
+                                <option value="personal_loan">Personal Loan</option>
+                                <option value="mortgage">Mortgage / Home Purchase</option>
+                                <option value="refinance">Mortgage Refinance</option>
+                                <option value="home_equity">Home Equity Loan / HELOC</option>
+                                <option value="auto_loan">Auto Loan</option>
+                                <option value="personal_credit_card">Personal Credit Card</option>
+                                <option value="debt_consolidation">Debt Consolidation</option>
+                                <option value="student_loan_refi">Student Loan Refinance</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="requested_amount">Requested Amount ($)</label>
+                        <input type="number" id="requested_amount" name="requested_amount"
+                               placeholder="50000" min="1000" step="1000">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="loan_purpose">Purpose / Use of Funds</label>
+                        <input type="text" id="loan_purpose" name="loan_purpose"
+                               placeholder="e.g. Equipment purchase, working capital, home purchase…">
+                    </div>
+                    <div class="field">
+                        <label for="desired_term_months">Desired Term (months)</label>
+                        <select id="desired_term_months" name="desired_term_months">
+                            <option value="">— Any —</option>
+                            <option value="12">12 months (1 yr)</option>
+                            <option value="24">24 months (2 yr)</option>
+                            <option value="36">36 months (3 yr)</option>
+                            <option value="60">60 months (5 yr)</option>
+                            <option value="84">84 months (7 yr)</option>
+                            <option value="120">120 months (10 yr)</option>
+                            <option value="180">180 months (15 yr)</option>
+                            <option value="240">240 months (20 yr)</option>
+                            <option value="360">360 months (30 yr)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Credit Profile -->
+            <div class="card">
+                <div class="card-title">3 — Credit &amp; Financial Profile</div>
+
+                <div class="field">
+                    <label>Estimated Credit Score Range <span class="req">*</span></label>
+                    <div class="score-grid">
+                        <div class="score-btn bad" data-val="300-579" onclick="selectScore(this)">300–579<br><small>Poor</small></div>
+                        <div class="score-btn bad" data-val="580-619" onclick="selectScore(this)">580–619<br><small>Fair-</small></div>
+                        <div class="score-btn ok" data-val="620-659" onclick="selectScore(this)">620–659<br><small>Fair</small></div>
+                        <div class="score-btn ok" data-val="660-699" onclick="selectScore(this)">660–699<br><small>Fair+</small></div>
+                        <div class="score-btn good" data-val="700-739" onclick="selectScore(this)">700–739<br><small>Good</small></div>
+                        <div class="score-btn good" data-val="740-799" onclick="selectScore(this)">740–799<br><small>Very Good</small></div>
+                        <div class="score-btn good" data-val="800-850" onclick="selectScore(this)">800–850<br><small>Exceptional</small></div>
+                        <div class="score-btn" data-val="unknown" onclick="selectScore(this)">Unknown<br><small>Not sure</small></div>
+                    </div>
+                    <input type="hidden" id="credit_score_range" name="credit_score_range" required>
+                    <p class="hint-text">Select the client's estimated FICO / credit score range.</p>
+                </div>
+
+                <div class="field-row" style="margin-top: 16px;">
+                    <div class="field">
+                        <label for="annual_income_revenue">Annual Income / Revenue ($)</label>
+                        <input type="number" id="annual_income_revenue" name="annual_income_revenue"
+                               placeholder="120000" min="0" step="1000">
+                        <p class="hint-text">Personal income for consumer products; business gross revenue for business products.</p>
+                    </div>
+                    <div class="field">
+                        <label for="years_in_business">Years in Business / Employment</label>
+                        <select id="years_in_business" name="years_in_business">
+                            <option value="">— Select —</option>
+                            <option value="less_than_1">Less than 1 year</option>
+                            <option value="1-2">1–2 years</option>
+                            <option value="2-5">2–5 years</option>
+                            <option value="5-10">5–10 years</option>
+                            <option value="10+">10+ years</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="monthly_debt_payments">Existing Monthly Debt Payments ($)</label>
+                        <input type="number" id="monthly_debt_payments" name="monthly_debt_payments"
+                               placeholder="2500" min="0" step="100">
+                        <p class="hint-text">Total current monthly obligations (mortgages, loans, cards).</p>
+                    </div>
+                    <div class="field">
+                        <label for="collateral_available">Collateral Available?</label>
+                        <select id="collateral_available" name="collateral_available">
+                            <option value="">— Unknown —</option>
+                            <option value="yes_real_estate">Yes — Real estate</option>
+                            <option value="yes_equipment">Yes — Equipment / vehicles</option>
+                            <option value="yes_receivables">Yes — AR / inventory</option>
+                            <option value="yes_other">Yes — Other</option>
+                            <option value="no">No collateral</option>
+                            <option value="unsecured_preferred">Prefers unsecured</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="bankruptcy_history">Bankruptcy or Major Derogatory History</label>
+                    <select id="bankruptcy_history" name="bankruptcy_history">
+                        <option value="none">None</option>
+                        <option value="discharged_2plus">Discharged 2+ years ago</option>
+                        <option value="discharged_recent">Discharged within 2 years</option>
+                        <option value="active">Active / pending</option>
+                        <option value="unknown">Unknown</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Section 4: Additional Context -->
+            <div class="card">
+                <div class="card-title">4 — Additional Context (optional)</div>
+                <div class="field">
+                    <label for="notes">Notes / Special Circumstances</label>
+                    <textarea id="notes" name="notes"
+                              placeholder="Any relevant context: multiple properties, business partner situation, recent credit events, urgency timeline, etc."></textarea>
+                </div>
+                <div class="field">
+                    <label for="urgency">Timeline / Urgency</label>
+                    <select id="urgency" name="urgency">
+                        <option value="flexible">Flexible — no rush</option>
+                        <option value="30_days">Within 30 days</option>
+                        <option value="2_weeks">Within 2 weeks</option>
+                        <option value="immediate">Immediate / ASAP</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="disclaimer">
+                <strong>⚠ Advisory — not a credit decision</strong>
+                This intake form collects information to generate a market research and rate context
+                briefing. It does <em>not</em> constitute a credit application, credit check, or
+                guaranteed approval. No Social Security Numbers, full account numbers, or card numbers
+                are collected or stored here. The generated email draft is for informational purposes
+                and must be reviewed by you before sending.
+            </div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">
+                Run Pipeline — Pull Rates &amp; Generate Draft Email
+            </button>
+        </form>
+    </div>
+
+    <script>
+        function selectScore(el) {
+            document.querySelectorAll('.score-btn').forEach(b => b.classList.remove('selected'));
+            el.classList.add('selected');
+            document.getElementById('credit_score_range').value = el.dataset.val;
+        }
+
+        document.getElementById('intake-form').addEventListener('submit', function() {
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.textContent = 'Pulling live data & generating draft…';
+        });
+    </script>
+</body>
+</html>
