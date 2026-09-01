@@ -127,7 +127,7 @@
             <label id="identifier-label" for="identifier">Phone number</label>
             <input type="text" id="identifier" name="identifier" placeholder="+15551234567" autofocus required>
             <button type="submit">Send login code</button>
-            <p class="hint" id="identifier-hint">Use the phone number you signed up with.</p>
+            <p class="hint" id="identifier-hint">Use the phone number on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href="/#pricing">get started here</a>.</p>
         </form>
         <script>
             function switchTab(channel) {
@@ -143,12 +143,12 @@
                     identifierInput.type = "email";
                     identifierInput.placeholder = "you@example.com";
                     label.textContent = "Email address";
-                    hint.textContent = "Use the email you signed up with.";
+                    hint.innerHTML = "Use the email on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href='/#pricing'>get started here</a>.";
                 } else {
                     identifierInput.type = "text";
                     identifierInput.placeholder = "+15551234567";
                     label.textContent = "Phone number";
-                    hint.textContent = "Use the phone number you signed up with.";
+                    hint.innerHTML = "Use the phone number on your BizStack Perks account. This only works if you've already completed checkout — if you haven't signed up yet, <a href='/#pricing'>get started here</a>.";
                 }
                 identifierInput.value = "";
                 identifierInput.focus();

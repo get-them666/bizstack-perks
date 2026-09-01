@@ -22,6 +22,30 @@
         <section><h2>Checkout activity</h2><div class="table-wrap"><table><thead><tr><th>Session</th><th>Status</th><th>Amount</th><th>Customer email</th><th>Updated</th></tr></thead><tbody>{% for payment in payments %}<tr><td>{{ payment[0] }}</td><td>{{ payment[1] }}</td><td>{% if payment[2] is not none %}{{ payment[3]|upper }} {{ "%.2f"|format(payment[2] / 100) }}{% else %}-{% endif %}</td><td>{{ payment[4] or "-" }}</td><td>{{ payment[5] }}</td></tr>{% else %}<tr><td class="empty" colspan="5">No checkout activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
         <section><h2>Voice activity</h2><div class="table-wrap"><table><thead><tr><th>Call</th><th>Direction</th><th>Status</th><th>From</th><th>To</th><th>Message</th><th>Updated</th></tr></thead><tbody>{% for call in calls %}<tr><td>{{ call[0] }}</td><td>{{ call[1] or "-" }}</td><td>{{ call[2] or "-" }}</td><td>{{ call[3] or "-" }}</td><td>{{ call[4] or "-" }}</td><td>{{ call[5] or "-" }}</td><td>{{ call[6] }}</td></tr>{% else %}<tr><td class="empty" colspan="7">No voice activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
         <section><h2>Company profiles</h2><div class="table-wrap"><table><thead><tr><th>Company</th><th>Risk rating</th><th>Annual revenue</th><th>Created</th></tr></thead><tbody>{% for profile in profiles %}<tr><td>{{ profile[0] }}</td><td>{{ profile[1] or "-" }}</td><td>{% if profile[2] is not none %}${{ "%.2f"|format(profile[2]) }}{% else %}-{% endif %}</td><td>{{ profile[3] }}</td></tr>{% else %}<tr><td class="empty" colspan="4">No company profiles yet.</td></tr>{% endfor %}</tbody></table></div></section>
+        <section>
+            <h2>Customer portal accounts</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>ID</th><th>Business</th><th>Email</th><th>Phone</th><th>Subscription</th><th>Created</th></tr></thead>
+                    <tbody>
+                        {% for customer in customers %}
+                        <tr><td>{{ customer[0] }}</td><td>{{ customer[1] or "-" }}</td><td>{{ customer[2] or "-" }}</td><td>{{ customer[3] or "-" }}</td><td>{{ customer[4] }}</td><td>{{ customer[5] }}</td></tr>
+                        {% else %}
+                        <tr><td class="empty" colspan="6">No customer portal accounts yet. Accounts are created automatically after checkout, or you can add one manually below (useful for testing portal login).</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top: 16px; padding: 16px; background: #101934; border: 1px solid #27426f; border-radius: 10px; max-width: 500px;">
+                <h3 style="font-size: 0.95rem; margin: 0 0 12px;">Manually create a customer account</h3>
+                <form method="post" action="/api/customers/create-manual" style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="text" name="business_name" placeholder="Business name (optional)" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #27426f; background: #0d1730; color: #f5f7fb;">
+                    <input type="email" name="email" placeholder="Email" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #27426f; background: #0d1730; color: #f5f7fb;">
+                    <input type="text" name="phone" placeholder="Phone (+15551234567)" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #27426f; background: #0d1730; color: #f5f7fb;">
+                    <button type="submit" style="padding: 10px; border-radius: 6px; border: 0; background: #4fd1ff; color: #03111d; font-weight: bold; cursor: pointer;">Create account</button>
+                </form>
+            </div>
+        </section>
     </main>
 </body>
 </html>

@@ -52,6 +52,7 @@ from customer_portal import (
     create_portal_session_token,
     get_customer_by_session_token,
     clear_portal_session,
+    link_phone_to_customer,
 )
 from email_notifier import send_portal_login_code, email_configured
 
@@ -83,9 +84,24 @@ LEAD_CONSENT_TEXT = os.getenv(
     "about your request. Consent is not a condition of purchase. Message and data rates may apply.",
 )
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
+# Telephony: supports Twilio OR SignalWire. If SignalWire credentials are
+# present, they take priority (SignalWire's Project ID and API Token map to
+# the same account_sid/auth_token slots Twilio uses, since SignalWire's REST
+# API is Twilio-compatible). Falls back to TWILIO_* vars if SignalWire isn't
+# configured, so existing Twilio setups keep working unchanged.
+SIGNALWIRE_PROJECT_ID = os.getenv("SIGNALWIRE_PROJECT_ID", "")
+SIGNALWIRE_API_TOKEN = os.getenv("SIGNALWIRE_API_TOKEN", "")
+SIGNALWIRE_SPACE_URL = os.getenv("SIGNALWIRE_SPACE_URL", "")
+SIGNALWIRE_PHONE_NUMBER = os.getenv("SIGNALWIRE_PHONE_NUMBER", "")
+
+if SIGNALWIRE_PROJECT_ID and SIGNALWIRE_API_TOKEN and SIGNALWIRE_SPACE_URL:
+    TWILIO_ACCOUNT_SID = SIGNALWIRE_PROJECT_ID
+    TWILIO_AUTH_TOKEN = SIGNALWIRE_API_TOKEN
+    TWILIO_PHONE_NUMBER = SIGNALWIRE_PHONE_NUMBER or os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
+else:
+    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
 
 # Lead source APIs
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
@@ -252,6 +268,17 @@ def stripe_ready() -> bool:
 
 def twilio_ready() -> bool:
     return bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER)
+
+
+def create_telephony_client() -> Client:
+    """Create a Twilio-compatible REST client, pointed at SignalWire if configured."""
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    if SIGNALWIRE_SPACE_URL:
+        space_url = SIGNALWIRE_SPACE_URL.strip().rstrip("/")
+        if not space_url.startswith("http"):
+            space_url = f"https://{space_url}"
+        client.api.base_url = space_url
+    return client
 
 
 def create_outbound_twiml(message: str) -> str:
@@ -467,7 +494,9 @@ app.add_middleware(
 # Initialize lead source managers
 places_source = GooglePlacesLeadSource(GOOGLE_PLACES_API_KEY) if GOOGLE_PLACES_API_KEY else None
 census_analyzer = CensusLeadAnalyzer(CENSUS_API_KEY) if CENSUS_API_KEY else None
-sms_manager = TwilioSMSManager(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
+sms_manager = TwilioSMSManager(
+    TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, signalwire_space_url=SIGNALWIRE_SPACE_URL or None
+)
 
 # Affiliate partners from config
 try:
@@ -711,8 +740,51 @@ async def admin_workspace(request: Request, conn=Depends(get_db)):
                 FROM call_events ORDER BY updated_at DESC LIMIT 100
                 """
             ).fetchall(),
+            "customers": conn.execute(
+                """
+                SELECT id, business_name, email, phone, subscription_status, created_at
+                FROM customers ORDER BY created_at DESC LIMIT 100
+                """
+            ).fetchall(),
         },
     )
+
+
+@app.post("/api/customers/create-manual")
+async def create_customer_manual(
+    email: Optional[str] = Form(default=None),
+    phone: Optional[str] = Form(default=None),
+    business_name: Optional[str] = Form(default=None),
+    request: Request = None,
+    conn=Depends(get_db),
+):
+    """
+    Manually create a customer portal account, bypassing the checkout flow.
+    Login-protected admin-only tool -- useful for testing the portal login
+    flow or fixing an account that should have been auto-created but wasn't
+    (e.g. a completed payment that didn't fire the webhook correctly).
+    """
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if not email and not phone:
+        raise HTTPException(status_code=422, detail="Provide at least an email or phone number")
+
+    customer_id = provision_customer_from_checkout(
+        conn,
+        email=(email or "").strip().lower() or None,
+        business_name=business_name,
+        stripe_customer_id=None,
+        phone=(phone or "").strip() or None,
+    )
+
+    if phone and customer_id:
+        link_phone_to_customer(conn, customer_id, phone.strip())
+
+    if not customer_id:
+        raise HTTPException(status_code=500, detail="Failed to create customer record")
+
+    return RedirectResponse(url="/admin", status_code=303)
 
 
 @app.get("/admin/targeting", response_class=HTMLResponse)
@@ -1255,7 +1327,7 @@ async def trigger_outbound_call(
     if not twilio_ready():
         raise HTTPException(status_code=503, detail="Twilio voice is not configured")
 
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client = create_telephony_client()
 
     try:
         call = client.calls.create(
@@ -1298,7 +1370,7 @@ async def trigger_outbound_sales_call(
     if not twilio_ready():
         raise HTTPException(status_code=503, detail="Twilio voice is not configured")
 
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client = create_telephony_client()
 
     try:
         call = client.calls.create(

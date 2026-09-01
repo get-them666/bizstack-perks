@@ -1,5 +1,10 @@
 """
-Twilio SMS messaging module for lead notifications and two-way engagement.
+SMS messaging module for lead notifications and two-way engagement.
+
+Supports both Twilio and SignalWire. SignalWire's REST API is intentionally
+Twilio-compatible, so this reuses the same `twilio` Python package -- just
+points its API base_url at SignalWire's Space URL instead of Twilio's
+default api.twilio.com. No new dependency required.
 """
 
 import os
@@ -24,16 +29,46 @@ class SMSNotification(BaseModel):
 
 
 class TwilioSMSManager:
-    """Manage SMS notifications for leads via Twilio."""
+    """
+    Manage SMS notifications for leads via Twilio OR SignalWire.
 
-    def __init__(self, account_sid: str, auth_token: str, from_number: str):
+    If signalwire_space_url is provided, the underlying Twilio-compatible
+    REST client is pointed at SignalWire's endpoint
+    (https://<your-space>.signalwire.com) instead of Twilio's, and
+    account_sid/auth_token should be your SignalWire Project ID and API
+    Token respectively. Everything else (message creation, TwiML
+    generation) works identically since SignalWire implements the same
+    API surface.
+    """
+
+    def __init__(
+        self,
+        account_sid: str,
+        auth_token: str,
+        from_number: str,
+        signalwire_space_url: Optional[str] = None,
+    ):
         self.account_sid = account_sid
         self.auth_token = auth_token
         self.from_number = from_number
-        self.client = Client(account_sid, auth_token) if all([account_sid, auth_token]) else None
+        self.signalwire_space_url = signalwire_space_url
+
+        self.client = None
+        if account_sid and auth_token:
+            self.client = Client(account_sid, auth_token)
+            if signalwire_space_url:
+                self.client.api.base_url = self._normalize_space_url(signalwire_space_url)
+
+    @staticmethod
+    def _normalize_space_url(space_url: str) -> str:
+        """Ensure the SignalWire space URL is a full https:// base URL."""
+        space_url = space_url.strip().rstrip("/")
+        if not space_url.startswith("http"):
+            space_url = f"https://{space_url}"
+        return space_url
 
     def is_configured(self) -> bool:
-        """Check if Twilio SMS is properly configured."""
+        """Check if SMS is properly configured (Twilio or SignalWire)."""
         return self.client is not None and bool(self.from_number)
 
     def send_sms(self, notification: SMSNotification, conn: sqlite3.Connection) -> dict:
