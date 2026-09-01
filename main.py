@@ -1518,6 +1518,43 @@ async def send_sms_to_lead(
     return result
 
 
+@app.post("/api/sms/optin")
+async def sms_optin(
+    phone: str = Form(...),
+    name: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    """
+    Record an explicit SMS opt-in from a web form or landing page.
+    Removes the number from the unsubscribe list if it was there,
+    and sends a confirmation text.
+    """
+    phone = phone.strip()
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+        raise HTTPException(status_code=422, detail="Enter a valid phone number in +1XXXXXXXXXX format")
+
+    # Remove from unsubscribe list if present
+    conn.execute("DELETE FROM outreach_unsubscribes WHERE business_identifier = ?", (phone,))
+    conn.commit()
+
+    if sms_manager.is_configured():
+        try:
+            greeting = f"Hi {name.split()[0]}! " if name else "Hi! "
+            sms_manager.client.messages.create(
+                body=(
+                    f"{greeting}You're now opted in to BizStack Perks updates. "
+                    "Reply anytime with questions about financing or our platform. "
+                    "Reply STOP to opt out."
+                ),
+                from_=sms_manager.from_number,
+                to=phone,
+            )
+        except Exception as exc:
+            logger.warning("SMS optin confirmation failed: %s", exc)
+
+    return JSONResponse({"status": "ok", "phone": phone})
+
+
 # ============================================================================
 # NEW: Lead Discovery & Analytics Endpoints
 # ============================================================================
