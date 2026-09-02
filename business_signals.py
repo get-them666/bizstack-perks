@@ -150,13 +150,8 @@ class YouComSignalScanner:
         except (httpx.HTTPError, ValueError) as error:
             raise RuntimeError(f"You.com live search failed: {error}") from error
 
-    async def scan_for_signals(
-        self, location: str, industry: Optional[str] = None, days_back: int = 30
-    ) -> List[BusinessSignal]:
-        query = f'"{location}" business expansion'
-        if industry:
-            query = f'"{location}" {industry} expansion'
-
+    async def search_current_web(self, query: str, count: int = 20) -> Dict[str, Any]:
+        """Return only the results obtained during this live You.com search."""
         async with httpx.AsyncClient(timeout=30.0) as client:
             initialized, session_id = await self._call(
                 client,
@@ -183,19 +178,30 @@ class YouComSignalScanner:
                         "name": "you-search",
                         "arguments": {
                             "query": query,
-                            "freshness": self._freshness(days_back),
+                            "freshness": "month",
                             "country": "US",
-                            "count": 20,
+                            "count": min(max(count, 1), 100),
                         },
                     },
                 },
                 session_id,
             )
-
         content = search_result.get("content", [])
         if not content or not isinstance(content[0].get("text"), str):
-            raise RuntimeError("You.com live search returned an invalid news result")
-        results = json.loads(content[0]["text"]).get("results", {})
+            raise RuntimeError("You.com live search returned an invalid result")
+        try:
+            return json.loads(content[0]["text"]).get("results", {})
+        except json.JSONDecodeError as error:
+            raise RuntimeError("You.com live search returned malformed result data") from error
+
+    async def scan_for_signals(
+        self, location: str, industry: Optional[str] = None, days_back: int = 30
+    ) -> List[BusinessSignal]:
+        query = f'"{location}" business expansion'
+        if industry:
+            query = f'"{location}" {industry} expansion'
+
+        results = await self.search_current_web(query, 20)
         return self._signals_from_results(results, location)
 
 

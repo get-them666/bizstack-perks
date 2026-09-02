@@ -339,6 +339,59 @@ class BizStackPerksAppTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(source, ("Example Bank", "https://www.examplebank.test/rates"))
 
+    @patch("main.discover_live_public_bank_rates")
+    def test_admin_can_run_one_click_live_public_rate_scan(self, mock_discover):
+        mock_discover.return_value = [{
+            "bank_name": "Example Bank business loan rates",
+            "product_name": "business loan",
+            "region": "VA",
+            "source_url": "https://www.examplebank.test/business-loans",
+            "source_summary": "Business loans from 6.5% APR.",
+            "observed_rate": 6.5,
+            "rate_kind": "APR",
+            "source_domain": "examplebank.test",
+            "discovered_at": "2026-09-02T00:00:00+00:00",
+        }]
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+
+        response = self.client.post("/api/public-bank-rate-sources/scan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["rates"][0]["observed_rate"], 6.5)
+        with sqlite3.connect(self.db_path) as conn:
+            stored = conn.execute(
+                "SELECT observed_rate, source_url FROM live_public_bank_rates"
+            ).fetchone()
+        self.assertEqual(stored, (6.5, "https://www.examplebank.test/business-loans"))
+
+    @patch("main.scan_public_signals")
+    @patch("main.discover_live_public_bank_rates")
+    @patch("main.discover_public_business_contact", return_value="contact@growing.example")
+    @patch("email_notifier.send_email")
+    @patch("email_notifier.email_configured", return_value=True)
+    def test_one_click_campaign_sends_to_matching_opted_in_business(
+        self, _mock_configured, mock_send, _mock_contact, mock_discover, mock_signals
+    ):
+        from business_signals import BusinessSignal
+
+        mock_discover.return_value = []
+        mock_signals.return_value = [BusinessSignal(
+            business_name="Growing Co",
+            signal_type="news",
+            signal_summary="Growing Co expands in Norfolk, VA",
+            source_url="https://news.example/growing-co",
+            source_name="Example News",
+            location="Norfolk, VA",
+        )]
+        mock_send.return_value = True
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+        self.main.SENDER_PHYSICAL_ADDRESS = "123 Main Street, Norfolk, VA 23510"
+        response = self.client.post("/api/automation/run")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["emails_sent"][0]["email"], "contact@growing.example")
+        mock_send.assert_called_once()
+
     @patch("main.stripe.StripeClient")
     def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
         mock_stripe_client = Mock()

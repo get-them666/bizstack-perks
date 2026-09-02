@@ -11,6 +11,7 @@ that in by default and will not produce an email without it.
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from urllib.parse import quote
 
 from business_signals import BusinessSignal
 from local_bank_rates import get_best_rates_for_region, format_rates_for_display
@@ -167,3 +168,55 @@ def generate_bulk_outreach(
         emails.append(email)
 
     return emails
+
+
+def generate_live_rate_outreach_email(
+    signal: BusinessSignal,
+    live_rates: List[Dict[str, Any]],
+    sender_name: str,
+    sender_company: str,
+    sender_physical_address: str,
+    unsubscribe_url: str,
+) -> Dict[str, str]:
+    """Create an outreach email that cites rates returned by the current scan."""
+    subject = _build_subject(signal)
+    lines = [
+        f"Hi {signal.business_name} team,",
+        "",
+        (
+            f'I came across this recent coverage: "{signal.signal_summary}" '
+            f"({signal.source_name}). Congratulations on the momentum."
+        ),
+        "",
+        "I also checked current publicly displayed business-loan rate pages in Virginia.",
+    ]
+    observed_rates = [rate for rate in live_rates if rate.get("observed_rate") is not None][:3]
+    if observed_rates:
+        for rate in observed_rates:
+            lines.append(
+                f"- {rate['observed_rate']}% {rate.get('rate_kind', 'rate')} "
+                f"shown by {rate['source_domain']}: {rate['source_url']}"
+            )
+        lines.append(
+            "These are publicly displayed excerpts retrieved today and are subject to "
+            "the lender's qualifications and change; please confirm directly with the lender."
+        )
+    else:
+        lines.append(
+            "The live search found public lender pages, but none displayed a comparable "
+            "numeric rate excerpt in the returned results."
+        )
+    lines.extend(
+        [
+            "",
+            "If it would be useful, I can share the sources and help compare options.",
+            "",
+            f"Best,\n{sender_name}\n{sender_company}",
+            "",
+            "—",
+            sender_company,
+            sender_physical_address,
+            f"Don't want emails like this? Unsubscribe here: {unsubscribe_url}",
+        ]
+    )
+    return {"subject": subject, "body": "\n".join(lines)}

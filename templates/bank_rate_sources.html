@@ -14,16 +14,36 @@
         label { color:#9db1d1; display:block; font-size:.82rem; font-weight:bold; margin-bottom:6px; text-transform:uppercase; }
         input { background:#0d1730; border:1px solid #27426f; border-radius:8px; color:#f5f7fb; padding:11px; width:100%; }
         button { background:#4fd1ff; border:0; border-radius:8px; color:#03111d; cursor:pointer; font-weight:bold; margin-top:18px; padding:12px 18px; }
+        button:disabled { background:#2a4258; color:#9db1d1; cursor:not-allowed; }
         table { border-collapse:collapse; width:100%; } th,td { border-bottom:1px solid #27426f; padding:11px; text-align:left; vertical-align:top; } th { color:#9db1d1; font-size:.75rem; text-transform:uppercase; }
-        .table-wrap { overflow:auto; } .empty { color:#9db1d1; padding:16px 0; }
+        .table-wrap { overflow:auto; } .empty { color:#9db1d1; padding:16px 0; } .error { color:#ffb3b3; margin-top:14px; }
     </style>
 </head>
 <body>
     <header><h1>Public bank rate monitor</h1><nav><a href="/admin">Admin workspace</a> · <a href="/admin/outreach">Outreach</a> · <a href="/logout">Log out</a></nav></header>
     <main>
         <section class="card">
+            <h2>One-click business campaign</h2>
+            <p class="hint">Runs the live Virginia rate scan and Norfolk business-signal scan together, finds a publicly listed generic business contact, writes a source-linked commercial email, and sends it. It skips leads with no public contact, opt-outs, and delivery failures.</p>
+            <button id="campaign-button" type="button">Run live scan and send eligible outreach</button>
+            <p id="campaign-status" class="hint" aria-live="polite"></p>
+            <p id="campaign-error" class="error" style="display:none;" role="alert"></p>
+        </section>
+        <section class="card">
+            <h2>One-click live public rate scan</h2>
+            <p class="hint">Click once to search current public web results for up to 35 bank-rate pages in Virginia. Results show only a rate that appears in the live result text, alongside its source URL and scan timestamp. Pages without a visible rate remain listed as a source, not a made-up quote.</p>
+            <form id="live-rate-scan-form">
+                <input type="hidden" name="product_name" value="business loan">
+                <input type="hidden" name="region" value="VA">
+                <button id="live-rate-scan-button" type="submit">Find current Virginia business loan rates</button>
+            </form>
+            <p id="live-rate-scan-status" class="hint" aria-live="polite"></p>
+            <p id="live-rate-scan-error" class="error" style="display:none;" role="alert"></p>
+            <div id="live-rate-results" class="table-wrap" style="display:none; margin-top:16px;"></div>
+        </section>
+        <section class="card">
             <h2>Add an official public rate page</h2>
-            <p class="hint">Build your 35-bank watch list with each bank's official HTTPS rate page. This is separate from the existing local-rate comparison and does not create or claim a rate until a source is checked.</p>
+            <p class="hint">Optional: pin an official public rate page to your long-term watch list. This stays separate from both the existing local-rate comparison and the one-click live scan above.</p>
             <form method="post" action="/api/public-bank-rate-sources">
                 <div class="grid">
                     <div><label for="bank_name">Bank</label><input id="bank_name" name="bank_name" required maxlength="160" placeholder="Example Bank"></div>
@@ -43,5 +63,70 @@
             </tbody></table></div>
         </section>
     </main>
+    <script>
+        document.getElementById("campaign-button").addEventListener("click", async () => {
+            const button = document.getElementById("campaign-button");
+            const status = document.getElementById("campaign-status");
+            const error = document.getElementById("campaign-error");
+            button.disabled = true;
+            status.textContent = "Scanning current rates and business signals, then sending eligible outreach…";
+            error.style.display = "none";
+            try {
+                const response = await fetch("/api/automation/run", {
+                    method: "POST",
+                    credentials: "same-origin",
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Campaign failed");
+                status.textContent = `${data.live_rate_sources} live rate sources and ${data.business_signals} business signals found. ${data.emails_sent.length} eligible emails sent; ${data.emails_skipped.length} skipped.`;
+            } catch (campaignError) {
+                error.textContent = campaignError.message;
+                error.style.display = "block";
+                status.textContent = "";
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        document.getElementById("live-rate-scan-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const button = document.getElementById("live-rate-scan-button");
+            const status = document.getElementById("live-rate-scan-status");
+            const error = document.getElementById("live-rate-scan-error");
+            const results = document.getElementById("live-rate-results");
+            button.disabled = true;
+            status.textContent = "Searching current public bank pages…";
+            error.style.display = "none";
+            results.style.display = "none";
+            try {
+                const response = await fetch("/api/public-bank-rate-sources/scan", {
+                    method: "POST",
+                    body: new FormData(event.target),
+                    credentials: "same-origin",
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Live rate scan failed");
+                if (data.rates.length === 0) {
+                    results.innerHTML = "<p class=\"empty\">No matching current public rate pages were returned. Try again later; no rate was created.</p>";
+                } else {
+                    const rows = data.rates.map((rate) => {
+                        const displayedRate = rate.observed_rate === null
+                            ? "Not displayed in result"
+                            : `${rate.observed_rate}% ${rate.rate_kind}`;
+                        return `<tr><td>${rate.bank_name}</td><td>${displayedRate}</td><td>${rate.source_domain}</td><td><a href="${rate.source_url}" target="_blank" rel="noopener noreferrer">Open live source</a></td><td>${rate.discovered_at}</td></tr>`;
+                    }).join("");
+                    results.innerHTML = `<table><thead><tr><th>Public result</th><th>Observed rate</th><th>Source</th><th>Link</th><th>Retrieved</th></tr></thead><tbody>${rows}</tbody></table>`;
+                }
+                results.style.display = "block";
+                status.textContent = `${data.rates.length} live public sources returned; ${data.sources_refreshed} records refreshed.`;
+            } catch (scanError) {
+                error.textContent = scanError.message;
+                error.style.display = "block";
+                status.textContent = "";
+            } finally {
+                button.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>

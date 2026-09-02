@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 from contextlib import asynccontextmanager
 from typing import Optional, List
+from urllib.parse import quote
 
 import stripe
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, BackgroundTasks
@@ -32,10 +33,17 @@ from business_signals import (
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
 from public_rate_sources import (
     add_public_rate_source,
+    discover_public_business_contact,
+    discover_live_public_bank_rates,
     init_public_rate_source_table,
     list_public_rate_sources,
+    store_live_public_bank_rates,
 )
-from outreach_generator import generate_outreach_email, generate_bulk_outreach
+from outreach_generator import (
+    generate_live_rate_outreach_email,
+    generate_outreach_email,
+    generate_bulk_outreach,
+)
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
 from voice_bot import (
     VoiceBotResponseGenerator,
@@ -947,6 +955,101 @@ async def public_bank_rate_sources_page(request: Request, conn=Depends(get_db)):
         name="bank_rate_sources.html",
         context={"sources": list_public_rate_sources(conn)},
     )
+
+
+@app.post("/api/public-bank-rate-sources/scan")
+async def scan_public_bank_rate_sources(
+    product_name: str = Form(default="business loan"),
+    region: str = Form(default="VA"),
+    request: Request = None,
+    conn=Depends(get_db),
+):
+    """Discover live, publicly displayed bank-rate pages without changing saved rates."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not product_name.strip() or not region.strip():
+        raise HTTPException(status_code=422, detail="Product and region are required")
+    try:
+        rates = await discover_live_public_bank_rates(product_name.strip(), region.strip())
+    except Exception as error:
+        logger.error("Live public bank-rate scan failed: %s", error)
+        raise HTTPException(
+            status_code=502, detail="Live public rate search is unavailable right now"
+        ) from error
+    refreshed = store_live_public_bank_rates(conn, rates)
+    return {"rates": rates, "sources_refreshed": refreshed}
+
+
+@app.post("/api/automation/run")
+async def run_one_click_business_campaign(
+    request: Request,
+    conn=Depends(get_db),
+):
+    """Run live rate and business-signal discovery, then send to matching opted-in leads."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not SENDER_PHYSICAL_ADDRESS:
+        raise HTTPException(
+            status_code=503,
+            detail="SENDER_PHYSICAL_ADDRESS is required before commercial email can be sent",
+        )
+
+    from email_notifier import email_configured, send_email
+
+    if not email_configured():
+        raise HTTPException(status_code=503, detail="Email delivery is not configured")
+
+    try:
+        live_rates = await discover_live_public_bank_rates("business loan", "VA")
+        signals = await scan_public_signals("Norfolk, VA", days_back=30)
+    except Exception as error:
+        logger.error("One-click campaign discovery failed: %s", error)
+        raise HTTPException(
+            status_code=502, detail="Live discovery is unavailable right now; no email was sent"
+        ) from error
+
+    store_live_public_bank_rates(conn, live_rates)
+    store_signals(conn, signals)
+    sent = []
+    skipped = []
+    for signal in signals[:10]:
+        contact_email = await discover_public_business_contact(
+            signal.business_name, signal.location or "Norfolk, VA"
+        )
+        if not contact_email:
+            skipped.append(
+                {"business_name": signal.business_name, "reason": "No public business contact found"}
+            )
+            continue
+        business_key = signal.business_name.replace(" ", "-").lower()
+        unsubscribed = conn.execute(
+            "SELECT 1 FROM outreach_unsubscribes WHERE business_identifier = ?",
+            (business_key,),
+        ).fetchone()
+        if unsubscribed:
+            skipped.append({"business_name": signal.business_name, "reason": "Unsubscribed"})
+            continue
+        email = generate_live_rate_outreach_email(
+            signal=signal,
+            live_rates=live_rates,
+            sender_name=SENDER_COMPANY_NAME,
+            sender_company=SENDER_COMPANY_NAME,
+            sender_physical_address=SENDER_PHYSICAL_ADDRESS,
+            unsubscribe_url=(
+                f"{normalize_base_url(request)}/unsubscribe?business={quote(business_key)}"
+            ),
+        )
+        if send_email(contact_email, email["subject"], email["body"]):
+            sent.append({"business_name": signal.business_name, "email": contact_email})
+        else:
+            skipped.append({"business_name": signal.business_name, "reason": "Delivery failed"})
+
+    return {
+        "live_rate_sources": len(live_rates),
+        "business_signals": len(signals),
+        "emails_sent": sent,
+        "emails_skipped": skipped,
+    }
 
 
 @app.post("/api/public-bank-rate-sources")
