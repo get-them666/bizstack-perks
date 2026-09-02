@@ -317,6 +317,28 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("admin workspace", response.text)
         self.assertIn("Opt-in lead requests", response.text)
 
+    def test_admin_can_register_an_official_public_rate_source(self):
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+
+        response = self.client.post(
+            "/api/public-bank-rate-sources",
+            data={
+                "bank_name": "Example Bank",
+                "product_name": "Business line of credit",
+                "region": "VA",
+                "source_url": "https://www.examplebank.test/rates",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Example Bank", response.text)
+        with sqlite3.connect(self.db_path) as conn:
+            source = conn.execute(
+                "SELECT bank_name, source_url FROM public_bank_rate_sources"
+            ).fetchone()
+        self.assertEqual(source, ("Example Bank", "https://www.examplebank.test/rates"))
+
     @patch("main.stripe.StripeClient")
     def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
         mock_stripe_client = Mock()

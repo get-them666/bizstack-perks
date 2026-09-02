@@ -30,6 +30,11 @@ from business_signals import (
     store_signals,
 )
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
+from public_rate_sources import (
+    add_public_rate_source,
+    init_public_rate_source_table,
+    list_public_rate_sources,
+)
 from outreach_generator import generate_outreach_email, generate_bulk_outreach
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
 from voice_bot import (
@@ -514,6 +519,7 @@ def init_db() -> None:
         init_pipeline_tables(conn)
         init_inbound_email_tables(conn)
         init_signal_tables(conn)
+        init_public_rate_source_table(conn)
     finally:
         conn.close()
 
@@ -930,6 +936,39 @@ async def outreach_page(request: Request):
         return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
 
     return templates.TemplateResponse(request=request, name="outreach.html", context={})
+
+
+@app.get("/admin/bank-rate-sources", response_class=HTMLResponse)
+async def public_bank_rate_sources_page(request: Request, conn=Depends(get_db)):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="bank_rate_sources.html",
+        context={"sources": list_public_rate_sources(conn)},
+    )
+
+
+@app.post("/api/public-bank-rate-sources")
+async def create_public_bank_rate_source(
+    bank_name: str = Form(...),
+    product_name: str = Form(...),
+    source_url: str = Form(...),
+    region: Optional[str] = Form(default=None),
+    request: Request = None,
+    conn=Depends(get_db),
+):
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not bank_name.strip() or not product_name.strip():
+        raise HTTPException(status_code=422, detail="Bank and product are required")
+    try:
+        add_public_rate_source(conn, bank_name, product_name, region, source_url)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except sqlite3.IntegrityError as error:
+        raise HTTPException(status_code=409, detail="That public rate URL is already being monitored") from error
+    return RedirectResponse(url="/admin/bank-rate-sources", status_code=303)
 
 
 @app.get("/unsubscribe", response_class=HTMLResponse)

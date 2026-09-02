@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public bank rate monitor - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background:#0b1020; color:#f5f7fb; font-family:Arial,sans-serif; margin:0; }
+        header { background:#101934; border-bottom:1px solid #27426f; display:flex; justify-content:space-between; padding:18px 24px; }
+        header a, a { color:#4fd1ff; } header h1 { font-size:1.3rem; margin:0; }
+        main { margin:auto; max-width:1100px; padding:24px; } .card { background:#101934; border:1px solid #27426f; border-radius:12px; margin-bottom:24px; padding:24px; }
+        .hint { color:#9db1d1; line-height:1.5; } .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+        label { color:#9db1d1; display:block; font-size:.82rem; font-weight:bold; margin-bottom:6px; text-transform:uppercase; }
+        input { background:#0d1730; border:1px solid #27426f; border-radius:8px; color:#f5f7fb; padding:11px; width:100%; }
+        button { background:#4fd1ff; border:0; border-radius:8px; color:#03111d; cursor:pointer; font-weight:bold; margin-top:18px; padding:12px 18px; }
+        table { border-collapse:collapse; width:100%; } th,td { border-bottom:1px solid #27426f; padding:11px; text-align:left; vertical-align:top; } th { color:#9db1d1; font-size:.75rem; text-transform:uppercase; }
+        .table-wrap { overflow:auto; } .empty { color:#9db1d1; padding:16px 0; }
+    </style>
+</head>
+<body>
+    <header><h1>Public bank rate monitor</h1><nav><a href="/admin">Admin workspace</a> · <a href="/admin/outreach">Outreach</a> · <a href="/logout">Log out</a></nav></header>
+    <main>
+        <section class="card">
+            <h2>Add an official public rate page</h2>
+            <p class="hint">Build your 35-bank watch list with each bank's official HTTPS rate page. This is separate from the existing local-rate comparison and does not create or claim a rate until a source is checked.</p>
+            <form method="post" action="/api/public-bank-rate-sources">
+                <div class="grid">
+                    <div><label for="bank_name">Bank</label><input id="bank_name" name="bank_name" required maxlength="160" placeholder="Example Bank"></div>
+                    <div><label for="product_name">Product</label><input id="product_name" name="product_name" required maxlength="120" placeholder="Business line of credit"></div>
+                    <div><label for="region">Region</label><input id="region" name="region" maxlength="20" placeholder="VA"></div>
+                </div>
+                <div style="margin-top:14px"><label for="source_url">Official public rate-page URL</label><input id="source_url" name="source_url" type="url" required maxlength="2000" placeholder="https://bank.example/rates"></div>
+                <button type="submit">Add to monitor</button>
+            </form>
+        </section>
+        <section class="card">
+            <h2>Registered public sources ({{ sources|length }})</h2>
+            <div class="table-wrap"><table><thead><tr><th>Bank</th><th>Product</th><th>Region</th><th>Official page</th><th>Added</th><th>Monitor status</th></tr></thead><tbody>
+                {% for source in sources %}
+                <tr><td>{{ source["bank_name"] }}</td><td>{{ source["product_name"] }}</td><td>{{ source["region"] or "-" }}</td><td><a href="{{ source["source_url"] }}" target="_blank" rel="noopener noreferrer">Open source</a></td><td>{{ source["added_at"] }}</td><td>{{ source["last_check_status"] or "Awaiting check" }}</td></tr>
+                {% else %}<tr><td class="empty" colspan="6">No public rate pages added yet.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </section>
+    </main>
+</body>
+</html>
