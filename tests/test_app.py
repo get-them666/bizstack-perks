@@ -161,6 +161,30 @@ class BizStackPerksAppTests(unittest.TestCase):
                 'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/message"}\n'
             )
 
+    def test_youcom_scanner_reads_live_news_and_web_sections(self):
+        from business_signals import YouComSignalScanner
+
+        signals = YouComSignalScanner._signals_from_results(
+            {
+                "news": [{
+                    "title": "News Co expands in Norfolk, VA",
+                    "url": "https://news.example",
+                    "description": "News Co announces a Norfolk, VA expansion.",
+                }],
+                "web": [{
+                    "title": "Web Co opens a Norfolk, VA location",
+                    "url": "https://web.example",
+                    "description": "Web Co has a new location in Norfolk, VA.",
+                }],
+                "web_irrelevant": [{"title": "Ignored", "url": "https://ignored.example"}],
+            },
+            "Norfolk, VA",
+        )
+
+        self.assertEqual([signal.source_name for signal in signals], [
+            "You.com live news", "You.com live web"
+        ])
+
     @patch("email_notifier.urllib.request.urlopen")
     def test_agentmail_sends_email_otp_over_https(self, mock_urlopen):
         import email_notifier

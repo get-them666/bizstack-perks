@@ -86,6 +86,47 @@ class YouComSignalScanner:
             return "week"
         return "month"
 
+    @staticmethod
+    def _signals_from_results(
+        results: Dict[str, Any], location: str
+    ) -> List[BusinessSignal]:
+        articles = [
+            (article, "You.com live news")
+            for article in results.get("news", [])
+        ] + [
+            (article, "You.com live web")
+            for article in results.get("web", [])
+        ]
+        location_terms = [term.strip().lower() for term in location.split(",") if term.strip()]
+        signals = []
+        for article, source_name in articles:
+            title = article.get("title", "")
+            url = article.get("url")
+            article_text = " ".join(
+                str(article.get(field, ""))
+                for field in ("title", "description", "snippets")
+            ).lower()
+            if (
+                not title
+                or not url
+                or not all(term in article_text for term in location_terms)
+                or not any(keyword in article_text for keyword in EXPANSION_KEYWORDS)
+            ):
+                continue
+            signals.append(
+                BusinessSignal(
+                    business_name=_extract_business_name(title),
+                    signal_type="news",
+                    signal_summary=title,
+                    source_url=url,
+                    source_name=source_name,
+                    location=location,
+                    published_at=article.get("page_age"),
+                    confidence_score=0.75,
+                )
+            )
+        return signals
+
     async def _call(
         self,
         client: httpx.AsyncClient,
@@ -154,30 +195,8 @@ class YouComSignalScanner:
         content = search_result.get("content", [])
         if not content or not isinstance(content[0].get("text"), str):
             raise RuntimeError("You.com live search returned an invalid news result")
-        articles = json.loads(content[0]["text"]).get("results", {}).get("news", [])
-        location_terms = [term.strip().lower() for term in location.split(",") if term.strip()]
-
-        return [
-            BusinessSignal(
-                business_name=_extract_business_name(article.get("title", "")),
-                signal_type="news",
-                signal_summary=article.get("title", ""),
-                source_url=article.get("url"),
-                source_name="You.com live news",
-                location=location,
-                published_at=article.get("page_age"),
-                confidence_score=0.75,
-            )
-            for article in articles
-            if article.get("title") and article.get("url")
-            and all(
-                term in " ".join(
-                    str(article.get(field, ""))
-                    for field in ("title", "description", "snippets")
-                ).lower()
-                for term in location_terms
-            )
-        ]
+        results = json.loads(content[0]["text"]).get("results", {})
+        return self._signals_from_results(results, location)
 
 
 async def scan_public_signals(
