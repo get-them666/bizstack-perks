@@ -30,6 +30,7 @@ from business_signals import (
     scan_public_signals,
     store_signals,
 )
+from creditworthiness_scoring import init_scoring_schema, score_lead, get_lead_score
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
 from public_rate_sources import (
     add_public_rate_source,
@@ -127,7 +128,7 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 PRICE_ID = os.getenv("PRICE_ID", "")
-OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$49 / month")
+OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$99 / month")
 LEAD_CONSENT_TEXT = os.getenv(
     "LEAD_CONSENT_TEXT",
     "By submitting, you agree that BizStack Perks may contact you by call, text, and email "
@@ -535,6 +536,10 @@ def init_db() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    # Initialize creditworthiness scoring schema
+    conn = sqlite3.connect(DATABASE_PATH)
+    init_scoring_schema(conn)
+    conn.close()
     # Start IMAP background poller if credentials are configured.
     # Polls for new inbound emails every IMAP_POLL_INTERVAL_SECONDS (default 60).
     import asyncio as _asyncio
@@ -1248,7 +1253,7 @@ def build_checkout_session(
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
             return None
 
-        logger.warning("Configured Stripe Price ID cannot be used; using the configured $49 checkout item")
+        logger.warning("Configured Stripe Price ID cannot be used; using the configured $99 checkout item")
         checkout_params["line_items"] = [
             {
                 "price_data": {
@@ -1256,7 +1261,7 @@ def build_checkout_session(
                     "product_data": {
                         "name": f"BizStack Perks Entry Plan - {business_name or 'Client Portal'}",
                     },
-                    "unit_amount": 4900,
+                    "unit_amount": 9900,
                 },
                 "quantity": 1,
             }

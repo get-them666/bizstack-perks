@@ -478,7 +478,7 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "https://checkout.stripe.com/pay/cs_test_fallback")
         fallback_params = mock_stripe_client.checkout.sessions.create.call_args_list[1].kwargs["params"]
-        self.assertEqual(fallback_params["line_items"][0]["price_data"]["unit_amount"], 4900)
+        self.assertEqual(fallback_params["line_items"][0]["price_data"]["unit_amount"], 9900)
 
     @patch("main.stripe.StripeClient")
     def test_checkout_accepts_stripe_session_objects(self, mock_stripe_client_cls):

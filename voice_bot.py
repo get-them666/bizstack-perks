@@ -26,7 +26,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 NATURAL_VOICE = os.getenv("TWILIO_VOICE", "Polly.Joanna-Neural")
 NATURAL_LANGUAGE = "en-US"
 
-OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$49 / month")
+OFFER_PRICE_DISPLAY = os.getenv("OFFER_PRICE_DISPLAY", "$99 / month")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "bizstack-perks.com")
 
 # ============================================================================

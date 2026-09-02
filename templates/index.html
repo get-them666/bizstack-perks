@@ -29,7 +29,7 @@
             margin: 0 auto;
             padding: 32px 20px 56px;
         }
-        .nav, .hero, .grid, .faq, .footer, .how-it-works {
+        .nav, .hero, .faq, .footer, .how-it-works, #pricing {
             background: var(--panel);
             border: 1px solid var(--panel-border);
             border-radius: 22px;
@@ -150,38 +150,83 @@
             color: var(--text);
             margin-bottom: 6px;
         }
-        .grid {
+        .pricing-tiers {
             display: grid;
-            grid-template-columns: 1.3fr 0.9fr;
-            gap: 0;
-            overflow: hidden;
-            margin-bottom: 24px;
-        }
-        .section {
-            padding: 28px;
-        }
-        .section + .section {
-            border-left: 1px solid var(--panel-border);
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
         }
         .price-card {
-            padding: 22px;
+            padding: 28px;
             border-radius: 18px;
             background: rgba(79, 209, 255, 0.08);
             border: 1px solid rgba(79, 209, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .price-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(79, 209, 255, 0.2);
+        }
+        .price-card.featured {
+            background: rgba(79, 209, 255, 0.15);
+            border: 2px solid rgba(79, 209, 255, 0.4);
+            transform: scale(1.02);
+        }
+        .tier-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #03111d;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            width: fit-content;
+        }
+        .price-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: var(--text);
         }
         .price {
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 800;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
-        ul {
-            padding-left: 18px;
+        .price-period {
             color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
         }
-        li + li { margin-top: 8px; }
-        .faq {
-            padding: 28px;
-            margin-bottom: 24px;
+        .price-description {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .features {
+            flex: 1;
+            list-style: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .features li {
+            padding: 8px 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .features li:before {
+            content: "✓ ";
+            color: var(--success);
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .features li:last-child {
+            border-bottom: none;
         }
         .how-it-works {
             padding: 40px 32px;
@@ -221,6 +266,10 @@
             color: var(--muted);
             font-size: 0.95rem;
             line-height: 1.5;
+        }
+        .faq {
+            padding: 28px;
+            margin-bottom: 24px;
         }
         details {
             padding: 14px 0;
@@ -262,9 +311,9 @@
             font-size: 0.95rem;
         }
         @media (max-width: 860px) {
-            .grid { grid-template-columns: 1fr; }
-            .section + .section { border-left: 0; border-top: 1px solid var(--panel-border); }
-            .hero, .section, .faq, .how-it-works { padding: 22px; }
+            .pricing-tiers { grid-template-columns: 1fr; }
+            .price-card.featured { transform: scale(1); }
+            .hero, .faq, .how-it-works, #pricing { padding: 22px; }
             .nav { align-items: flex-start; flex-direction: column; gap: 12px; }
         }
     </style>
@@ -354,23 +403,51 @@
             </div>
         </section>
 
-        <section class="grid" id="pricing">
-            <div class="section">
-                <h2>What you get</h2>
-                <ul>
-                    <li>AI phone assistant that answers calls, handles objections, and can close a sale live by texting a secure checkout link</li>
-                    <li>Automated lead discovery using public Census, Federal Reserve, and business news data — no cold-calling lists to buy</li>
-                    <li>Market opportunity write-ups combining real demographic and economic data for any location you're targeting</li>
-                    <li>A self-service customer portal with phone/email login (no password) to track leads and manage billing</li>
-                    <li>SMS follow-ups, opt-out handling, and a full admin dashboard to see every lead, call, and payment in one place</li>
-                </ul>
-            </div>
-            <div class="section">
+        <section id="pricing">
+            <h2>Pricing & Plans</h2>
+            <p style="color: var(--muted); margin-bottom: 24px;">Start free, upgrade anytime. Unlock lead quality scoring with Pro.</p>
+            
+            <div class="pricing-tiers">
+                <!-- Basic Tier -->
                 <div class="price-card">
-                    <div class="price">{{ offer_price_display }}</div>
-                    <p>Full access to lead discovery, the AI voice assistant, SMS follow-ups, and your customer portal.</p>
-                    <div style="height: 14px;"></div>
-                    <button class="button button-primary" type="submit" form="checkout-form">Buy now</button>
+                    <div class="tier-badge">Basic</div>
+                    <h3>Basic</h3>
+                    <div class="price">$49</div>
+                    <div class="price-period">per month</div>
+                    <p class="price-description">Everything you need to discover and close local business leads.</p>
+                    
+                    <ul class="features">
+                        <li>AI phone assistant (inbound + outbound)</li>
+                        <li>Lead discovery (Census + news data)</li>
+                        <li>Customer portal (phone/email login)</li>
+                        <li>SMS follow-ups & opt-out handling</li>
+                        <li>Real-time dashboard & analytics</li>
+                    </ul>
+                    
+                    <button class="button button-primary" type="submit" form="checkout-form">Start at $49/month</button>
+                </div>
+
+                <!-- Pro Tier -->
+                <div class="price-card featured">
+                    <div class="tier-badge">Most Popular</div>
+                    <h3>Pro</h3>
+                    <div class="price">$99</div>
+                    <div class="price-period">per month</div>
+                    <p class="price-description">Advanced lead scoring + quality insights to close better leads, faster.</p>
+                    
+                    <ul class="features">
+                        <li>Everything in Basic, plus:</li>
+                        <li>Creditworthiness scoring (0-100)</li>
+                        <li>Lead quality badges & ratings</li>
+                        <li>Risk assessment for each lead</li>
+                        <li>Advanced filtering & sorting</li>
+                        <li>Priority support</li>
+                    </ul>
+                    
+                    <form method="post" action="/api/checkout/create">
+                        <input type="hidden" name="tier" value="pro">
+                        <button class="button button-primary" type="submit" style="width: 100%;">Upgrade to Pro</button>
+                    </form>
                 </div>
             </div>
         </section>
@@ -400,7 +477,17 @@
 
             <details>
                 <summary>Can I try this free first?</summary>
-                <p>Yes. <a href="/signup">Sign up free</a> to get a customer portal account and test our lead discovery. No payment required. You can add paid billing anytime to unlock outbound calling and SMS follow-ups.</p>
+                <p>Yes. <a href="/signup">Sign up free</a> to get a customer portal account and test our lead discovery. No payment required. You can upgrade to Basic ($49/month) or Pro ($99/month) anytime.</p>
+            </details>
+
+            <details>
+                <summary>What's the difference between Basic and Pro?</summary>
+                <p>Basic includes AI calling, lead discovery, and a customer portal. Pro adds creditworthiness scoring so you see lead quality (0–100 score) and risk ratings before calling. If you want to focus on the highest-quality leads and close more deals, Pro is worth it.</p>
+            </details>
+
+            <details>
+                <summary>How is lead quality scored?</summary>
+                <p>Our scoring model looks at business age, industry health, local economic indicators, recent growth signals from news, and loan request size. Score 0–30 = high risk, 31–60 = medium, 61–80 = good, 81–100 = excellent. Pro customers see this score for every lead in their dashboard.</p>
             </details>
 
             <details>
