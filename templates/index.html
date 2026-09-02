@@ -29,7 +29,7 @@
             margin: 0 auto;
             padding: 32px 20px 56px;
         }
-        .nav, .hero, .grid, .faq, .footer {
+        .nav, .hero, .grid, .faq, .footer, .how-it-works {
             background: var(--panel);
             border: 1px solid var(--panel-border);
             border-radius: 22px;
@@ -74,6 +74,10 @@
             margin-bottom: 16px;
             max-width: 10ch;
         }
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 14px;
+        }
         .hero-copy {
             color: var(--muted);
             max-width: 58ch;
@@ -83,6 +87,12 @@
         .cta-row {
             display: flex;
             gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .cta-secondary-row {
+            display: flex;
+            gap: 12px;
             flex-wrap: wrap;
             margin-bottom: 28px;
         }
@@ -153,10 +163,6 @@
         .section + .section {
             border-left: 1px solid var(--panel-border);
         }
-        h2 {
-            font-size: 1.4rem;
-            margin-bottom: 14px;
-        }
         .price-card {
             padding: 22px;
             border-radius: 18px;
@@ -177,6 +183,45 @@
             padding: 28px;
             margin-bottom: 24px;
         }
+        .how-it-works {
+            padding: 40px 32px;
+            margin-bottom: 24px;
+        }
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .step-number {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 50%;
+            font-weight: 800;
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            color: #03111d;
+        }
+        .step h3 {
+            color: var(--text);
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        .step p {
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
         details {
             padding: 14px 0;
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -189,6 +234,10 @@
         details p {
             color: var(--muted);
             margin-top: 10px;
+        }
+        details p a {
+            color: var(--primary);
+            text-decoration: none;
         }
         .alert {
             margin-bottom: 18px;
@@ -215,7 +264,7 @@
         @media (max-width: 860px) {
             .grid { grid-template-columns: 1fr; }
             .section + .section { border-left: 0; border-top: 1px solid var(--panel-border); }
-            .hero, .section, .faq { padding: 22px; }
+            .hero, .section, .faq, .how-it-works { padding: 22px; }
             .nav { align-items: flex-start; flex-direction: column; gap: 12px; }
         }
     </style>
@@ -225,12 +274,12 @@
         <nav class="nav">
             <div class="brand">⚡ BizStack Perks</div>
             <div class="nav-links">
+                <a href="#how">How it works</a>
                 <a href="#pricing">Pricing</a>
                 <a href="#faq">FAQ</a>
                 <a href="/apply?application_type=business">Business financing</a>
                 <a href="/apply?application_type=consumer">Consumer credit</a>
                 <a href="/affiliates">Partner offers</a>
-                <a href="/signup">Sign up free</a>
                 <a href="/portal/login">Customer login</a>
             </div>
         </nav>
@@ -254,6 +303,10 @@
                     <input type="email" name="email" placeholder="Email for receipts (optional)" aria-label="Email address" autocomplete="email">
                     <button class="button button-primary" type="submit">Start checkout</button>
                 </form>
+            </div>
+            
+            <div class="cta-secondary-row">
+                <a class="button button-secondary" href="/signup"><span style="color: var(--success);">✓</span> Try free</a>
                 <a class="button button-secondary" href="{{ support_phone_href }}">Call or contact</a>
             </div>
 
@@ -276,6 +329,27 @@
                     <strong>Customer portal</strong>
                     Every lead and customer gets a simple phone or email login — no password to
                     remember — to check status and manage billing.
+                </div>
+            </div>
+        </section>
+
+        <section class="how-it-works" id="how">
+            <h2>How it works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>AI discovers targets</h3>
+                    <p>We scan Census data, Federal Reserve economic indicators, and public business news to find companies showing growth or financing signals in your market.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>AI calls and closes</h3>
+                    <p>Our voice assistant places outbound calls, explains your offer, answers questions, and can text a secure checkout link live on the call. No manual dialing needed.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Track and manage</h3>
+                    <p>See every lead, call result, and conversion in your dashboard. Customers get their own portal to track status and manage billing.</p>
                 </div>
             </div>
         </section>
@@ -303,21 +377,45 @@
 
         <section class="faq" id="faq">
             <h2>Frequently asked questions</h2>
+            
             <details open>
                 <summary>What does BizStack Perks actually do?</summary>
-                <p>We help you find and close local business leads. Our system spots businesses showing public signs of growth or financing needs, our AI phone assistant talks to prospects and can close a signup live on the call, and everything gets tracked in your dashboard and their customer portal.</p>
+                <p>We find and close local business leads for you using AI. Our system discovers businesses showing public signals of growth or financing needs, our AI phone assistant calls them, explains your offer, and can close a sale live on the call. Every interaction—calls, texts, signups—gets tracked in a real-time dashboard so you see exactly what's working.</p>
             </details>
+
+            <details>
+                <summary>How many leads will I actually get?</summary>
+                <p>That depends on your market size and the businesses we can reach. Our system can discover and target 50–100+ qualified businesses per month in most regions. The AI assistant works through the list over time, so lead volume is steady and predictable. Free tier customers can test with smaller markets; paid tiers can go bigger.</p>
+            </details>
+
+            <details>
+                <summary>What's the typical close rate?</summary>
+                <p>Early data shows 5–10% of contacted businesses convert to paying customers at the $49/month price point. Close rates vary by industry, market, and how well the AI's script matches your offer. Your dashboard shows exact conversion rates so you can optimize.</p>
+            </details>
+
             <details>
                 <summary>How does the AI phone assistant work?</summary>
-                <p>It answers your business line, understands speech or touch-tone input, can explain pricing and features, and if a caller wants to sign up, it collects their business name and texts them a secure Stripe checkout link before the call even ends.</p>
+                <p>It answers your business line, understands speech or touch-tone input, can explain pricing and features, and if a prospect is interested, it texts them a secure payment link so they can sign up right then. No transferring to a sales rep—the bot handles the entire close live on the call. You always get a transcript and recording.</p>
             </details>
+
+            <details>
+                <summary>Can I try this free first?</summary>
+                <p>Yes. <a href="/signup">Sign up free</a> to get a customer portal account and test our lead discovery. No payment required. You can add paid billing anytime to unlock outbound calling and SMS follow-ups.</p>
+            </details>
+
+            <details>
+                <summary>What if a prospect opts out or complains?</summary>
+                <p>Our system automatically respects TCPA opt-outs and CAN-SPAM unsubscribes. If someone texts STOP, we remove them from all future contact. You also get full logs and recordings, so you can refine your pitch or adjust your target market based on feedback.</p>
+            </details>
+
             <details>
                 <summary>How is payment confirmed?</summary>
-                <p>Checkout redirects the buyer back to the site, but fulfillment is confirmed only after the Stripe webhook is verified server-side.</p>
+                <p>Checkout redirects the buyer back to the site, but fulfillment is confirmed only after the Stripe webhook is verified server-side. You're never charged until the payment is complete.</p>
             </details>
+
             <details>
                 <summary>Is my information secure?</summary>
-                <p>Yes. Payments are processed securely through Stripe and we never store your card details. Your contact information is only used to follow up on your request.</p>
+                <p>Yes. Payments are processed securely through Stripe and we never store your card details. Lead data is encrypted at rest. Your contact information is only used to set up your account and follow up on your requests—never sold or shared.</p>
             </details>
         </section>
 
