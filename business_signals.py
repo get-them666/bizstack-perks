@@ -4,14 +4,8 @@ Business expansion/loan-seeking signal scanner.
 Finds businesses showing PUBLIC signals of growth, expansion, or active
 loan-seeking -- using only legitimate, publicly available data sources:
 
-- NewsAPI (free tier): press releases and news mentions of business
-  expansion, funding rounds, new locations, hiring surges
-- SBA (Small Business Administration) public loan data: SBA publishes
-  aggregate and, in some releases, named recipient data for certain loan
-  programs (e.g. PPP loan recipient data is public record)
-- City/county open-data permit portals (Socrata-based, a common open-data
-  platform many US cities use): building permits are public record and
-  often signal expansion (new construction, renovation, new locations)
+- You.com's free live-search MCP service: current web and news mentions of
+  expansions, new locations, hiring surges, and funding activity.
 
 This module does NOT access any bank's private customer/applicant data,
 does NOT scrape login-walled content, and does NOT collect personal
@@ -21,15 +15,15 @@ API or a public news aggregator.
 
 import os
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+import json
+from typing import Callable, Optional, List, Dict, Any
 import httpx
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
-NEWSAPI_BASE_URL = "https://newsapi.org/v2"
+YOUCOM_MCP_URL = "https://api.you.com/mcp?profile=free"
+MCP_PROTOCOL_VERSION = "2025-03-26"
 
 # Keywords that signal a business is expanding, growing, or seeking financing.
 EXPANSION_KEYWORDS = [
@@ -53,144 +47,225 @@ class BusinessSignal(BaseModel):
     confidence_score: float = 0.6
 
 
-class NewsSignalScanner:
-    """Scan public news for business expansion/loan-seeking signals via NewsAPI."""
+def _extract_business_name(title: str) -> str:
+    """
+    Best-effort extraction of a business name from a headline. Not
+    perfect NLP -- takes the text before common separators, which
+    covers a large share of real headline patterns like
+    "Acme Corp expands to new location" or "Acme Corp: opens HQ".
+    """
+    for separator in [" expands", " opens", " secures", " raises", " receives", ":", " -"]:
+        if separator in title:
+            return title.split(separator)[0].strip()
+    return title[:80].strip()
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or NEWSAPI_KEY
 
-    def is_configured(self) -> bool:
-        return bool(self.api_key)
+class YouComSignalScanner:
+    """Scan current US news through You.com's free live-search MCP profile."""
+
+    @staticmethod
+    def _parse_mcp_response(body: str) -> Dict[str, Any]:
+        """Extract the JSON-RPC result from a Streamable HTTP SSE response."""
+        for line in body.splitlines():
+            if not line.startswith("data: "):
+                continue
+            message = json.loads(line[6:])
+            if "error" in message:
+                raise RuntimeError(
+                    f"You.com live search failed: {message['error'].get('message', 'unknown error')}"
+                )
+            if "result" in message:
+                return message["result"]
+        raise RuntimeError("You.com live search returned no result")
+
+    @staticmethod
+    def _freshness(days_back: int) -> str:
+        if days_back <= 1:
+            return "day"
+        if days_back <= 7:
+            return "week"
+        return "month"
+
+    async def _call(
+        self,
+        client: httpx.AsyncClient,
+        payload: Dict[str, Any],
+        session_id: Optional[str] = None,
+    ) -> tuple[Dict[str, Any], Optional[str]]:
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "User-Agent": "BizStackPerksSignalBot/1.0",
+        }
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        try:
+            response = await client.post(YOUCOM_MCP_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            return (
+                self._parse_mcp_response(response.text),
+                response.headers.get("mcp-session-id") or session_id,
+            )
+        except (httpx.HTTPError, ValueError) as error:
+            raise RuntimeError(f"You.com live search failed: {error}") from error
 
     async def scan_for_signals(
         self, location: str, industry: Optional[str] = None, days_back: int = 30
     ) -> List[BusinessSignal]:
-        """
-        Search recent news for businesses in a location (optionally filtered
-        by industry) showing expansion/loan-seeking signals.
-        """
-        if not self.is_configured():
-            logger.warning("NewsAPI key not configured")
-            return []
-
-        query_terms = " OR ".join(f'"{kw}"' for kw in EXPANSION_KEYWORDS[:8])
-        query = f"({query_terms}) AND {location}"
+        query = f'"{location}" business expansion'
         if industry:
-            query += f" AND {industry}"
+            query = f'"{location}" {industry} expansion'
 
-        from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(
-                    f"{NEWSAPI_BASE_URL}/everything",
-                    params={
-                        "q": query,
-                        "from": from_date,
-                        "sortBy": "relevancy",
-                        "language": "en",
-                        "pageSize": 20,
-                        "apiKey": self.api_key,
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            initialized, session_id = await self._call(
+                client,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": MCP_PROTOCOL_VERSION,
+                        "capabilities": {},
+                        "clientInfo": {"name": "bizstack-perks", "version": "1.0"},
                     },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+                },
+            )
+            if initialized.get("protocolVersion") != MCP_PROTOCOL_VERSION:
+                raise RuntimeError("You.com live search returned an unsupported MCP protocol")
+            search_result, _ = await self._call(
+                client,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "you-search",
+                        "arguments": {
+                            "query": query,
+                            "freshness": self._freshness(days_back),
+                            "country": "US",
+                            "count": 20,
+                        },
+                    },
+                },
+                session_id,
+            )
 
-                if data.get("status") != "ok":
-                    logger.warning(f"NewsAPI error: {data.get('message')}")
-                    return []
+        content = search_result.get("content", [])
+        if not content or not isinstance(content[0].get("text"), str):
+            raise RuntimeError("You.com live search returned an invalid news result")
+        articles = json.loads(content[0]["text"]).get("results", {}).get("news", [])
+        location_terms = [term.strip().lower() for term in location.split(",") if term.strip()]
 
-                signals = []
-                for article in data.get("articles", []):
-                    business_name = self._extract_business_name(article.get("title", ""))
-                    signals.append(
-                        BusinessSignal(
-                            business_name=business_name,
-                            signal_type="news",
-                            signal_summary=article.get("title", ""),
-                            source_url=article.get("url"),
-                            source_name=article.get("source", {}).get("name", "News"),
-                            location=location,
-                            published_at=article.get("publishedAt"),
-                            confidence_score=0.6,
-                        )
-                    )
-                return signals
-        except Exception as e:
-            logger.error(f"News signal scan error: {e}")
-            return []
+        return [
+            BusinessSignal(
+                business_name=_extract_business_name(article.get("title", "")),
+                signal_type="news",
+                signal_summary=article.get("title", ""),
+                source_url=article.get("url"),
+                source_name="You.com live news",
+                location=location,
+                published_at=article.get("page_age"),
+                confidence_score=0.75,
+            )
+            for article in articles
+            if article.get("title") and article.get("url")
+            and all(
+                term in " ".join(
+                    str(article.get(field, ""))
+                    for field in ("title", "description", "snippets")
+                ).lower()
+                for term in location_terms
+            )
+        ]
 
-    @staticmethod
-    def _extract_business_name(title: str) -> str:
+
+async def scan_public_signals(
+    location: str, industry: Optional[str] = None, days_back: int = 30
+) -> List[BusinessSignal]:
+    """Return only fresh signals fetched through the configured live provider."""
+    return deduplicate_signals(
+        await YouComSignalScanner().scan_for_signals(location, industry, days_back)
+    )
+
+
+def init_signal_tables(conn) -> None:
+    conn.execute(
         """
-        Best-effort extraction of a business name from a headline. Not
-        perfect NLP -- takes the text before common separators, which
-        covers a large share of real headline patterns like
-        "Acme Corp expands to new location" or "Acme Corp: opens HQ".
+        CREATE TABLE IF NOT EXISTS business_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            business_name TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            signal_summary TEXT NOT NULL,
+            source_url TEXT UNIQUE NOT NULL,
+            source_name TEXT NOT NULL,
+            location TEXT,
+            published_at TEXT,
+            confidence_score REAL NOT NULL,
+            discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """
-        for separator in [" expands", " opens", " secures", " raises", " receives", ":", " -"]:
-            if separator in title:
-                return title.split(separator)[0].strip()
-        return title[:80].strip()
+    )
+    conn.commit()
 
 
-class OpenDataPermitScanner:
-    """
-    Scan city/county open-data permit portals for new construction/expansion
-    permits. Many US cities publish permit data via Socrata (a standard
-    open-data platform) with a consistent query API.
-    """
+def store_signals(conn, signals: List[BusinessSignal]) -> int:
+    """Persist unique public signals so scans remain available after reload."""
+    inserted = 0
+    for signal in signals:
+        if not signal.source_url:
+            continue
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO business_signals (
+                business_name, signal_type, signal_summary, source_url,
+                source_name, location, published_at, confidence_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                signal.business_name,
+                signal.signal_type,
+                signal.signal_summary,
+                signal.source_url,
+                signal.source_name,
+                signal.location,
+                signal.published_at,
+                signal.confidence_score,
+            ),
+        )
+        inserted += cursor.rowcount
+    conn.commit()
+    return inserted
 
-    def __init__(self, portal_base_url: str, api_token: Optional[str] = None):
-        """
-        Args:
-            portal_base_url: the city's Socrata dataset endpoint, e.g.
-                "https://data.cityofnewyork.us/resource/ipu4-2q9a.json"
-            api_token: optional Socrata app token (raises rate limits; free to request)
-        """
-        self.portal_base_url = portal_base_url.rstrip("/")
-        self.api_token = api_token
 
-    async def scan_recent_permits(
-        self, days_back: int = 30, permit_type_filter: Optional[str] = None
-    ) -> List[BusinessSignal]:
-        """Fetch recent commercial/business permits, which often signal expansion."""
-        if not self.portal_base_url:
-            return []
+def signal_scan_targets() -> List[Dict[str, str]]:
+    """Read autonomous scan targets from a JSON environment variable."""
+    try:
+        targets = json.loads(os.getenv("SIGNAL_SCAN_TARGETS", "[]"))
+    except json.JSONDecodeError:
+        logger.error("SIGNAL_SCAN_TARGETS must be a JSON array")
+        return []
+    return [
+        target
+        for target in targets
+        if isinstance(target, dict) and isinstance(target.get("location"), str)
+    ]
 
-        from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
+async def run_autonomous_signal_scan(conn_factory: Callable[[], Any]) -> int:
+    """Run one configured discovery sweep and retain the results."""
+    total = 0
+    for target in signal_scan_targets():
+        signals = await scan_public_signals(
+            target["location"], target.get("industry"), int(target.get("days_back", 30))
+        )
+        conn = conn_factory()
         try:
-            headers = {"X-App-Token": self.api_token} if self.api_token else {}
-            params = {"$limit": 50, "$order": "issued_date DESC"}
-            if permit_type_filter:
-                params["$where"] = f"permit_type='{permit_type_filter}' AND issued_date > '{from_date}'"
-            else:
-                params["$where"] = f"issued_date > '{from_date}'"
-
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(self.portal_base_url, params=params, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-
-                signals = []
-                for permit in data:
-                    business_name = permit.get("business_name") or permit.get("owner_name") or "Unknown business"
-                    signals.append(
-                        BusinessSignal(
-                            business_name=business_name,
-                            signal_type="permit",
-                            signal_summary=f"Permit filed: {permit.get('permit_type', 'construction/expansion')}",
-                            source_name="City open-data permit portal",
-                            location=permit.get("address") or permit.get("location"),
-                            published_at=permit.get("issued_date"),
-                            confidence_score=0.7,
-                        )
-                    )
-                return signals
-        except Exception as e:
-            logger.error(f"Permit scan error: {e}")
-            return []
+            total += store_signals(conn, signals)
+        finally:
+            conn.close()
+    logger.info("Autonomous signal scan stored %d new signals", total)
+    return total
 
 
 def deduplicate_signals(signals: List[BusinessSignal]) -> List[BusinessSignal]:

@@ -88,7 +88,7 @@
                         <input type="text" id="industry" name="industry" placeholder="construction">
                     </div>
                 </div>
-                <p class="hint">Searches public news (via NewsAPI) for recent expansion/loan-seeking mentions.</p>
+                <p class="hint">Searches current live news for matching expansion activity. Results are not cached or seeded.</p>
                 <button type="submit" id="scan-btn">Scan for signals</button>
             </form>
             <div id="scan-loading" class="loading" style="display:none;">Scanning&hellip;</div>
@@ -180,18 +180,34 @@
                 }
                 const data = await response.json();
                 if (data.signals.length === 0) {
-                    results.innerHTML = "<li class=\"signal-item\">No signals found for this location right now.</li>";
+                    results.innerHTML = "<li class=\"signal-item\">No current matching signals were returned for this location.</li>";
                 }
                 data.signals.forEach((signal) => {
                     const li = document.createElement("li");
                     li.className = "signal-item";
-                    li.innerHTML = `
-                        <div>
-                            <div class="signal-name">${signal.business_name}</div>
-                            <div class="signal-summary">${signal.signal_summary} &mdash; ${signal.source_name}</div>
-                        </div>
-                        <button type="button" class="use-btn" data-name="${signal.business_name}" data-summary="${signal.signal_summary.replace(/"/g, '&quot;')}" data-source="${signal.source_name}" data-type="${signal.signal_type}" data-location="${signal.location || ''}">Use for outreach</button>
-                    `;
+                    const details = document.createElement("div");
+                    const name = document.createElement("div");
+                    const summary = document.createElement("div");
+                    const source = document.createElement("a");
+                    name.className = "signal-name";
+                    name.textContent = signal.business_name;
+                    summary.className = "signal-summary";
+                    summary.textContent = `${signal.signal_summary} — ${signal.source_name}`;
+                    source.href = signal.source_url;
+                    source.target = "_blank";
+                    source.rel = "noopener noreferrer";
+                    source.textContent = "View live source";
+                    details.append(name, summary, source);
+                    const useButton = document.createElement("button");
+                    useButton.type = "button";
+                    useButton.className = "use-btn";
+                    useButton.textContent = "Use for outreach";
+                    useButton.dataset.name = signal.business_name;
+                    useButton.dataset.summary = signal.signal_summary;
+                    useButton.dataset.source = signal.source_name;
+                    useButton.dataset.type = signal.signal_type;
+                    useButton.dataset.location = signal.location || "";
+                    li.append(details, useButton);
                     results.appendChild(li);
                 });
 

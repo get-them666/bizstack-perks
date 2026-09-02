@@ -115,6 +115,52 @@ class BizStackPerksAppTests(unittest.TestCase):
             self.assertTrue(reloaded_portal.verify_otp(conn, identifier, code))
             self.assertFalse(reloaded_portal.verify_otp(conn, identifier, code))
 
+    @patch("main.scan_public_signals")
+    def test_signal_scan_stores_discovered_public_signals(self, mock_scan):
+        from business_signals import BusinessSignal
+
+        mock_scan.return_value = [
+            BusinessSignal(
+                business_name="Growing Co",
+                signal_type="news",
+                signal_summary="Growing Co opens a new location",
+                source_url="https://example.com/growing-co",
+                source_name="Example News",
+                location="Chesapeake, VA",
+                confidence_score=0.8,
+            )
+        ]
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+
+        response = self.client.post(
+            "/api/signals/scan",
+            data={"location": "Chesapeake, VA", "industry": "construction"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["signals_stored"], 1)
+        with sqlite3.connect(self.db_path) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM business_signals").fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_youcom_mcp_response_parses_current_news(self):
+        from business_signals import YouComSignalScanner
+
+        result = YouComSignalScanner._parse_mcp_response(
+            'event: message\n'
+            'data: {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{}"}]}}\n'
+        )
+
+        self.assertEqual(result["content"][0]["type"], "text")
+
+    def test_youcom_mcp_response_rejects_missing_result(self):
+        from business_signals import YouComSignalScanner
+
+        with self.assertRaisesRegex(RuntimeError, "no result"):
+            YouComSignalScanner._parse_mcp_response(
+                'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/message"}\n'
+            )
+
     @patch("email_notifier.urllib.request.urlopen")
     def test_agentmail_sends_email_otp_over_https(self, mock_urlopen):
         import email_notifier

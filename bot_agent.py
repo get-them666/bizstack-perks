@@ -56,7 +56,13 @@ logging.basicConfig(
 logger = logging.getLogger("bot_agent")
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DATABASE_PATH   = os.getenv("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "bizstack.db"))
+_VOLUME_PATH = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/app/data")
+DATABASE_PATH = os.getenv(
+    "DATABASE_PATH",
+    os.path.join(_VOLUME_PATH, "bizstack.db")
+    if os.path.isdir(_VOLUME_PATH)
+    else os.path.join(os.path.dirname(__file__), "bizstack.db"),
+)
 OPENAI_KEY      = os.getenv("OPENAI_API_KEY", "")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 FOLLOW_UP_HOURS = int(os.getenv("BOT_FOLLOW_UP_HOURS", "2"))
@@ -372,6 +378,13 @@ async def task_outbound_calls() -> int:
     return called
 
 
+async def task_scan_signals() -> int:
+    """Find and persist public business-growth signals for configured markets."""
+    from business_signals import run_autonomous_signal_scan
+
+    return await run_autonomous_signal_scan(get_db)
+
+
 # ── Task: status summary ───────────────────────────────────────────────────────
 async def task_status_summary() -> None:
     """Print a summary of the current system state."""
@@ -415,6 +428,7 @@ async def run_once(task_name: Optional[str] = None) -> None:
         "poll-email":         task_poll_email,
         "pipeline-reminders": task_pipeline_reminders,
         "outbound-calls":     task_outbound_calls,
+        "scan-signals":       task_scan_signals,
         "status":             task_status_summary,
     }
 
@@ -430,6 +444,7 @@ async def run_once(task_name: Optional[str] = None) -> None:
     await task_follow_up_leads()
     await task_poll_email()
     await task_pipeline_reminders()
+    await task_scan_signals()
     logger.info("Run-once complete.")
 
 
@@ -462,6 +477,7 @@ async def run_daemon() -> None:
             # Every hour (every 12th tick)
             if tick % 12 == 0:
                 await task_status_summary()
+                await task_scan_signals()
 
         except Exception as e:
             logger.error("Daemon task error (continuing): %s", e)

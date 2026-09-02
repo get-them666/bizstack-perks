@@ -23,7 +23,12 @@ from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLe
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms, handle_inbound_sms_async
 from lead_analytics import LeadHotspotAnalyzer
 from writeup_generator import generate_targeting_writeup
-from business_signals import NewsSignalScanner, OpenDataPermitScanner, deduplicate_signals
+from business_signals import (
+    init_signal_tables,
+    run_autonomous_signal_scan,
+    scan_public_signals,
+    store_signals,
+)
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
 from outreach_generator import generate_outreach_email, generate_bulk_outreach
 from affiliate_manager import AffiliateCommissionManager, AffiliatePartner
@@ -508,6 +513,7 @@ def init_db() -> None:
         init_customer_tables(conn)
         init_pipeline_tables(conn)
         init_inbound_email_tables(conn)
+        init_signal_tables(conn)
     finally:
         conn.close()
 
@@ -523,6 +529,19 @@ async def lifespan(_: FastAPI):
             lambda: sqlite3.connect(DATABASE_PATH)
         )
     )
+    if os.getenv("AUTO_SIGNAL_SCAN_ENABLED", "false").lower() == "true":
+        async def scan_signals_periodically() -> None:
+            interval = max(300, int(os.getenv("SIGNAL_SCAN_INTERVAL_SECONDS", "21600")))
+            while True:
+                try:
+                    await run_autonomous_signal_scan(
+                        lambda: sqlite3.connect(DATABASE_PATH)
+                    )
+                except Exception:
+                    logger.exception("Autonomous signal scan failed")
+                await _asyncio.sleep(interval)
+
+        _asyncio.create_task(scan_signals_periodically())
     yield
 
 
@@ -1752,6 +1771,7 @@ async def scan_business_signals(
     days_back: int = Form(default=30),
     request: Request = None,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
 ):
     """
     Scan public news for businesses showing expansion/loan-seeking signals
@@ -1760,18 +1780,22 @@ async def scan_business_signals(
     """
     require_api_key_or_session(request, x_api_key)
 
-    if not NEWSAPI_KEY:
-        raise HTTPException(status_code=503, detail="NEWSAPI_KEY is not configured")
-
-    scanner = NewsSignalScanner(NEWSAPI_KEY)
     try:
-        signals = await scanner.scan_for_signals(location=location, industry=industry, days_back=days_back)
+        signals = await scan_public_signals(
+            location=location, industry=industry, days_back=days_back
+        )
     except Exception as e:
         logger.error(f"Business signal scan failed: {e}")
         raise HTTPException(status_code=502, detail="Unable to scan for signals right now") from e
 
-    deduped = deduplicate_signals(signals)
-    return {"location": location, "industry": industry, "signal_count": len(deduped), "signals": [s.dict() for s in deduped]}
+    stored = store_signals(conn, signals)
+    return {
+        "location": location,
+        "industry": industry,
+        "signal_count": len(signals),
+        "signals_stored": stored,
+        "signals": [s.dict() for s in signals],
+    }
 
 
 @app.get("/api/bank-rates")
