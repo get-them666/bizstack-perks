@@ -113,8 +113,8 @@ async def discover_live_public_bank_rates(
     product_name: str, region: str, limit: int = 35
 ) -> list[dict]:
     """Inspect public pages for FDIC-listed institutions without guessing rates."""
-    banks = await _fdic_banks(region, max(limit * 3, 100))
-    semaphore = asyncio.Semaphore(8)
+    banks = await _fdic_banks(region, limit * 2)
+    semaphore = asyncio.Semaphore(12)
     async with httpx.AsyncClient(
         follow_redirects=True,
         headers={"User-Agent": BOT_USER_AGENT},
@@ -138,30 +138,46 @@ async def discover_live_public_bank_rates(
 
 async def _fdic_banks(region: str, limit: int) -> list[dict]:
     """Get real insured institutions and their published websites from FDIC."""
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(
-            FDIC_INSTITUTIONS_URL,
-            params={
-                "filters": f"STALP:{region.upper()}",
-                "fields": "NAME,WEBADDR,CERT",
-                "limit": min(max(limit, 1), 100),
-                "format": "json",
-            },
-        )
-        response.raise_for_status()
     banks = []
     seen_domains = set()
-    for item in response.json().get("data", []):
-        bank = item.get("data", {})
-        web_address = str(bank.get("WEBADDR") or "").strip()
-        if not web_address:
-            continue
-        base_url = web_address if web_address.startswith("https://") else f"https://{web_address}"
-        domain = urlparse(base_url).netloc.lower()
-        if not domain or domain in seen_domains:
-            continue
-        seen_domains.add(domain)
-        banks.append({"name": bank.get("NAME", "FDIC-listed institution"), "url": base_url})
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        offset = 0
+        page_size = 100
+        while len(banks) < limit:
+            response = await client.get(
+                FDIC_INSTITUTIONS_URL,
+                params={
+                    "filters": f"STALP:{region.upper()}",
+                    "fields": "NAME,WEBADDR,CERT",
+                    "limit": page_size,
+                    "offset": offset,
+                    "format": "json",
+                },
+            )
+            response.raise_for_status()
+            page = response.json().get("data", [])
+            if not page:
+                break
+            for item in page:
+                bank = item.get("data", {})
+                web_address = str(bank.get("WEBADDR") or "").strip()
+                if not web_address:
+                    continue
+                base_url = (
+                    web_address
+                    if web_address.startswith("https://")
+                    else f"https://{web_address}"
+                )
+                domain = urlparse(base_url).netloc.lower()
+                if not domain or domain in seen_domains:
+                    continue
+                seen_domains.add(domain)
+                banks.append(
+                    {"name": bank.get("NAME", "FDIC-listed institution"), "url": base_url}
+                )
+                if len(banks) == limit:
+                    break
+            offset += page_size
     return banks
 
 
