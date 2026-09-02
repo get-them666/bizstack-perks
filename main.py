@@ -30,7 +30,7 @@ from business_signals import (
     scan_public_signals,
     store_signals,
 )
-from bank_database import get_banks_by_region_and_product, get_product_types, PRODUCT_TYPES
+from bank_database import get_banks_by_region_and_product, PRODUCT_TYPES
 from creditworthiness_scoring import init_scoring_schema, score_lead, get_lead_score
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
 from public_rate_sources import (
