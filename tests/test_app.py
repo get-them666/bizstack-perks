@@ -392,6 +392,22 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.json()["emails_sent"][0]["email"], "contact@growing.example")
         mock_send.assert_called_once()
 
+    def test_public_rate_results_reject_comparison_sites_and_unlabeled_percentages(self):
+        from public_rate_sources import _is_bank_rate_result, _rate_from_text
+
+        self.assertFalse(_is_bank_rate_result({
+            "title": "Business loan rates - NerdWallet",
+            "url": "https://www.nerdwallet.com/business-loans",
+            "description": "Compare bank rates",
+        }))
+        self.assertTrue(_is_bank_rate_result({
+            "title": "Business loan rates - Example Bank",
+            "url": "https://www.examplebank.test/business-loans",
+            "description": "See today's business loan rates.",
+        }))
+        self.assertEqual(_rate_from_text("Fixed rate of 7.25% APR"), (7.25, "APR"))
+        self.assertEqual(_rate_from_text("Borrow from 7.25% today"), (None, None))
+
     @patch("main.stripe.StripeClient")
     def test_checkout_creation_redirects_and_persists_pending_payment(self, mock_stripe_client_cls):
         mock_stripe_client = Mock()

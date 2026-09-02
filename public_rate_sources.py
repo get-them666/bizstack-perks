@@ -7,11 +7,24 @@ from urllib.parse import urlparse
 
 from business_signals import YouComSignalScanner
 
-RATE_PATTERN = re.compile(r"(?<!\d)(\d{1,2}(?:\.\d{1,3})?)\s*%\s*(APR|APY)?", re.IGNORECASE)
+RATE_PATTERN = re.compile(
+    r"(?<!\d)(\d{1,2}(?:\.\d{1,3})?)\s*%\s*(APR|APY)\b", re.IGNORECASE
+)
 PUBLIC_EMAIL_PATTERN = re.compile(
     r"\b(?:info|contact|hello|sales|support|office)@[a-z0-9.-]+\.[a-z]{2,}\b",
     re.IGNORECASE,
 )
+REGION_SEARCH_NAMES = {"VA": "Virginia"}
+NON_BANK_SOURCE_DOMAINS = {
+    "bankrate.com",
+    "cnbc.com",
+    "forbes.com",
+    "lendingtree.com",
+    "nerdwallet.com",
+    "usmilitary.org",
+    "usnews.com",
+    "valoannetwork.com",
+}
 
 
 def init_public_rate_source_table(conn) -> None:
@@ -103,13 +116,18 @@ def _rate_from_text(text: str):
 
 
 def _is_bank_rate_result(result: dict) -> bool:
-    text = " ".join(
-        str(result.get(field, "")) for field in ("title", "description", "snippets")
-    ).lower()
+    title = str(result.get("title", "")).lower()
+    domain = urlparse(str(result.get("url", ""))).netloc.removeprefix("www.").lower()
     return (
         bool(result.get("url") and result.get("title"))
-        and "rate" in text
-        and any(term in text for term in ("bank", "credit union", "financial"))
+        and domain not in NON_BANK_SOURCE_DOMAINS
+        and "rate" in " ".join(
+            str(result.get(field, "")) for field in ("title", "description", "snippets")
+        ).lower()
+        and any(
+            term in title or term in domain
+            for term in ("bank", "credit union", "creditunion", "financial", "cu.org")
+        )
     )
 
 
@@ -117,7 +135,8 @@ async def discover_live_public_bank_rates(
     product_name: str, region: str, limit: int = 35
 ) -> list[dict]:
     """Discover current public bank-rate pages; do not infer values not displayed."""
-    query = f"{region} {product_name} rates"
+    search_region = REGION_SEARCH_NAMES.get(region.upper(), region)
+    query = f"{search_region} {product_name} bank rates"
     results = await YouComSignalScanner().search_current_web(query, 100)
     discovered = []
     seen_urls = set()
