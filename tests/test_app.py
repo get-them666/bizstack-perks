@@ -73,6 +73,48 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
+    def test_legacy_profiles_schema_is_migrated_without_data_loss(self):
+        legacy_path = os.path.join(self.tempdir.name, "legacy.db")
+        with sqlite3.connect(legacy_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company_name TEXT UNIQUE NOT NULL,
+                    credit_risk_rating TEXT,
+                    annual_revenue REAL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO profiles (company_name) VALUES (?)", ("Existing business",)
+            )
+
+        with patch.object(self.main, "DATABASE_PATH", legacy_path):
+            self.main.init_db()
+            with sqlite3.connect(legacy_path) as conn:
+                row = conn.execute(
+                    "SELECT company_name, created_at FROM profiles"
+                ).fetchone()
+
+        self.assertEqual(row[0], "Existing business")
+        self.assertIsNotNone(row[1])
+
+    def test_portal_otp_survives_application_reload(self):
+        identifier = "customer@example.com"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            self.main.init_customer_tables(conn)
+            code = self.main.generate_otp(conn, identifier)
+
+        import customer_portal
+
+        reloaded_portal = importlib.reload(customer_portal)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            self.assertTrue(reloaded_portal.verify_otp(conn, identifier, code))
+            self.assertFalse(reloaded_portal.verify_otp(conn, identifier, code))
+
     @patch("email_notifier.urllib.request.urlopen")
     def test_agentmail_sends_email_otp_over_https(self, mock_urlopen):
         import email_notifier

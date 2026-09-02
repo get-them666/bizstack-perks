@@ -92,7 +92,13 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "bizstack.db"))
+RAILWAY_VOLUME_PATH = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/app/data")
+DEFAULT_DATABASE_PATH = (
+    os.path.join(RAILWAY_VOLUME_PATH, "bizstack.db")
+    if os.path.isdir(RAILWAY_VOLUME_PATH)
+    else os.path.join(BASE_DIR, "bizstack.db")
+)
+DATABASE_PATH = os.getenv("DATABASE_PATH", DEFAULT_DATABASE_PATH)
 MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
 MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "password123")
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
@@ -409,6 +415,14 @@ def init_db() -> None:
             )
             """
         )
+        profile_columns = {
+            row[1] for row in cursor.execute("PRAGMA table_info(profiles)").fetchall()
+        }
+        if "created_at" not in profile_columns:
+            cursor.execute("ALTER TABLE profiles ADD COLUMN created_at TIMESTAMP")
+            cursor.execute(
+                "UPDATE profiles SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
+            )
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS payments (
@@ -926,7 +940,10 @@ async def add_profile(
 ):
     try:
         conn.execute(
-            "INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
+            """
+            INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """,
             (company_name.strip(), credit_risk, annual_revenue),
         )
         conn.commit()
@@ -2028,7 +2045,7 @@ async def portal_request_code(
             logger.info("Portal login requested for unknown email (no account)")
             code_sent = True  # neutral — no code was generated
         else:
-            code = generate_otp(identifier)
+            code = generate_otp(conn, identifier)
             if email_configured():
                 sent = send_portal_login_code(identifier, code)
                 if sent:
@@ -2061,7 +2078,7 @@ async def portal_request_code(
             logger.info("Portal login requested for unknown phone (no account)")
             code_sent = True
         else:
-            code = generate_otp(identifier)
+            code = generate_otp(conn, identifier)
             if aws_otp_configured():
                 sent = send_sns_sms(
                     identifier,
@@ -2121,7 +2138,7 @@ async def portal_verify_code(
     if channel == "email":
         identifier = identifier.lower()
 
-    if not verify_otp(identifier, code):
+    if not verify_otp(conn, identifier, code):
         return templates.TemplateResponse(
             request=request,
             name="portal_login.html",
