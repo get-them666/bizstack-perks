@@ -2199,14 +2199,37 @@ async def portal_billing_redirect(request: Request, conn=Depends(get_db)):
     if not customer:
         return RedirectResponse(url="/portal/login", status_code=303)
 
-    if not stripe_ready() or not customer["stripe_customer_id"]:
+    if not stripe_ready():
         return RedirectResponse(url="/portal?error=Billing+portal+is+not+available+yet", status_code=303)
 
     try:
         stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
+        stripe_customer_id = customer["stripe_customer_id"]
+        if not stripe_customer_id:
+            customer_params = {
+                "metadata": {"portal_customer_id": str(customer["id"])},
+            }
+            if customer["email"]:
+                customer_params["email"] = customer["email"]
+            if customer["business_name"]:
+                customer_params["name"] = customer["business_name"]
+
+            stripe_customer = stripe_client.customers.create(params=customer_params)
+            stripe_customer_data = (
+                stripe_customer.to_dict()
+                if hasattr(stripe_customer, "to_dict")
+                else stripe_customer
+            )
+            stripe_customer_id = stripe_customer_data["id"]
+            conn.execute(
+                "UPDATE customers SET stripe_customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (stripe_customer_id, customer["id"]),
+            )
+            conn.commit()
+
         portal_session = stripe_client.billing_portal.sessions.create(
             params={
-                "customer": customer["stripe_customer_id"],
+                "customer": stripe_customer_id,
                 "return_url": f"{normalize_base_url(request)}/portal",
             }
         )

@@ -138,6 +138,48 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer agentmail-key")
         self.assertIn(b"123456", request.data)
 
+    @patch("main.stripe.StripeClient")
+    def test_billing_portal_creates_stripe_customer_for_portal_signup(
+        self, mock_stripe_client_cls
+    ):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            customer_id = self.main.provision_customer_from_checkout(
+                conn,
+                email="buyer@example.com",
+                business_name="Buyer Co",
+                stripe_customer_id=None,
+            )
+            session_token = self.main.create_portal_session_token(conn, customer_id)
+
+        stripe_client = Mock()
+        stripe_client.customers.create.return_value = {"id": "cus_portal_123"}
+        stripe_client.billing_portal.sessions.create.return_value = {
+            "url": "https://billing.stripe.com/session/test"
+        }
+        mock_stripe_client_cls.return_value = stripe_client
+        self.client.cookies.set("portal_session_token", session_token)
+
+        response = self.client.post("/portal/billing", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(
+            response.headers["location"], "https://billing.stripe.com/session/test"
+        )
+        self.assertEqual(
+            stripe_client.customers.create.call_args.kwargs["params"]["email"],
+            "buyer@example.com",
+        )
+        portal_params = stripe_client.billing_portal.sessions.create.call_args.kwargs[
+            "params"
+        ]
+        self.assertEqual(portal_params["customer"], "cus_portal_123")
+        with sqlite3.connect(self.db_path) as conn:
+            customer = conn.execute(
+                "SELECT stripe_customer_id FROM customers WHERE id = ?", (customer_id,)
+            ).fetchone()
+        self.assertEqual(customer[0], "cus_portal_123")
+
     def test_aws_sms_delivery_is_used_for_portal_login_codes(self):
         self.main.aws_otp_configured = Mock(return_value=True)
         self.main.send_sns_sms = Mock(return_value=True)
