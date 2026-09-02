@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax reference - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; }
+        header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 900px; padding: 24px; }
+        .intro { color: #9db1d1; font-size: 0.9rem; margin-bottom: 24px; }
+        .card { background: #101934; border: 1px solid #27426f; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .card h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 16px; color: #4fd1ff; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-bottom: 12px; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #27426f; }
+        th { color: #9db1d1; text-transform: uppercase; font-size: 0.75rem; }
+        .disclaimer {
+            background: rgba(255, 91, 91, 0.1); border: 1px solid rgba(255, 91, 91, 0.3);
+            border-radius: 10px; padding: 14px 16px; color: #ffb3b3; font-size: 0.85rem; margin-bottom: 24px;
+        }
+        .estimator-form { display: flex; flex-direction: column; gap: 10px; max-width: 400px; }
+        .estimator-form input, .estimator-form select {
+            padding: 10px 12px; border-radius: 8px; border: 1px solid #27426f; background: #0d1730; color: #f5f7fb;
+        }
+        .estimator-form label { font-size: 0.8rem; color: #9db1d1; text-transform: uppercase; margin-bottom: -6px; }
+        button {
+            background: #4fd1ff; border: 0; border-radius: 8px; color: #03111d; cursor: pointer;
+            font-weight: bold; padding: 10px 18px; font-size: 0.9rem;
+        }
+        #estimate-output { margin-top: 16px; font-size: 0.9rem; color: #c7d2e6; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Tax reference</h1>
+        <nav>
+            <a href="/dashboard">Dashboard</a> ·
+            <a href="/admin">Admin workspace</a> ·
+            <a href="/logout">Log out</a>
+        </nav>
+    </header>
+    <main>
+        <p class="intro">Tax year {{ summary.tax_year }} reference figures for use in market write-ups and general conversations. Manually maintained from IRS.gov's own published tables (no scraping, no live API).</p>
+
+        <div class="disclaimer">
+            <strong>Not tax advice.</strong> {{ summary.source_note }}
+        </div>
+
+        <div class="card">
+            <h2>Federal income tax brackets (Single)</h2>
+            <table>
+                <thead><tr><th>Rate</th><th>Up to</th></tr></thead>
+                <tbody>
+                    {% for bracket in summary.federal_brackets.single %}
+                    <tr><td>{{ (bracket.rate * 100) | round(0) }}%</td><td>{% if bracket.up_to %}${{ "{:,}".format(bracket.up_to) }}{% else %}No limit{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Federal income tax brackets (Married Filing Jointly)</h2>
+            <table>
+                <thead><tr><th>Rate</th><th>Up to</th></tr></thead>
+                <tbody>
+                    {% for bracket in summary.federal_brackets.married_filing_jointly %}
+                    <tr><td>{{ (bracket.rate * 100) | round(0) }}%</td><td>{% if bracket.up_to %}${{ "{:,}".format(bracket.up_to) }}{% else %}No limit{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Standard deductions</h2>
+            <table>
+                <tbody>
+                    <tr><td>Single</td><td>${{ "{:,}".format(summary.standard_deductions.single) }}</td></tr>
+                    <tr><td>Married filing jointly</td><td>${{ "{:,}".format(summary.standard_deductions.married_filing_jointly) }}</td></tr>
+                    <tr><td>Head of household</td><td>${{ "{:,}".format(summary.standard_deductions.head_of_household) }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Self-employment tax</h2>
+            <table>
+                <tbody>
+                    <tr><td>Total SE tax rate</td><td>{{ (summary.self_employment_tax.total_rate * 100) | round(1) }}%</td></tr>
+                    <tr><td>Social Security portion</td><td>{{ (summary.self_employment_tax.social_security_rate * 100) | round(1) }}%</td></tr>
+                    <tr><td>Medicare portion</td><td>{{ (summary.self_employment_tax.medicare_rate * 100) | round(1) }}%</td></tr>
+                    <tr><td>Social Security wage base ({{ summary.tax_year }})</td><td>${{ "{:,}".format(summary.self_employment_tax.social_security_wage_base_2025) }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Standard mileage rate</h2>
+            <p style="color: #c7d2e6; font-size: 0.9rem;">${{ summary.standard_mileage_rate }} per business mile ({{ summary.tax_year }})</p>
+        </div>
+
+        <div class="card">
+            <h2>Quick estimator</h2>
+            <p class="intro" style="margin-bottom: 12px;">Simplified educational estimate only &mdash; not tax advice.</p>
+            <form class="estimator-form" id="estimate-form">
+                <label for="taxable_income">Taxable income</label>
+                <input type="number" id="taxable_income" name="taxable_income" placeholder="75000" required>
+
+                <label for="filing_status">Filing status</label>
+                <select id="filing_status" name="filing_status">
+                    <option value="single">Single</option>
+                    <option value="married_filing_jointly">Married filing jointly</option>
+                </select>
+
+                <label style="display: flex; align-items: center; gap: 8px; text-transform: none; margin-top: 6px;">
+                    <input type="checkbox" id="is_self_employment_income" name="is_self_employment_income" value="true" style="width: auto;">
+                    This is self-employment income
+                </label>
+
+                <button type="submit">Estimate</button>
+            </form>
+            <div id="estimate-output"></div>
+        </div>
+    </main>
+
+    <script>
+        document.getElementById("estimate-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const output = document.getElementById("estimate-output");
+            output.textContent = "Calculating...";
+
+            try {
+                const response = await fetch("/api/taxes/estimate", { method: "POST", body: formData, credentials: "same-origin" });
+                const data = await response.json();
+                let html = `<strong>Estimated income tax:</strong> $${data.income_tax.estimated_tax_owed.toLocaleString()} (effective rate ${data.income_tax.effective_tax_rate}%)<br>`;
+                if (data.self_employment_tax) {
+                    html += `<strong>Estimated self-employment tax:</strong> $${data.self_employment_tax.estimated_se_tax.toLocaleString()}<br>`;
+                }
+                html += `<p style="color:#7288a8; font-size:0.8rem; margin-top:8px;">${data.income_tax.disclaimer}</p>`;
+                output.innerHTML = html;
+            } catch (err) {
+                output.textContent = "Unable to calculate estimate.";
+            }
+        });
+    </script>
+</body>
+</html>

@@ -664,6 +664,21 @@ async def checkout_success(request: Request, session_id: Optional[str] = None):
     )
 
 
+@app.get("/disclaimer", response_class=HTMLResponse)
+async def disclaimer_page(request: Request):
+    """Public liability disclaimer and terms of use. Not legal advice --
+    consult an attorney to tailor this to your specific business and
+    jurisdiction."""
+    return templates.TemplateResponse(
+        request=request,
+        name="disclaimer.html",
+        context={
+            "updated_date": datetime.utcnow().strftime("%B %d, %Y"),
+            "support_contact": os.getenv("SUPPORT_EMAIL", "our support team"),
+        },
+    )
+
+
 @app.get("/checkout/cancel", response_class=HTMLResponse)
 async def checkout_cancel(request: Request):
     return templates.TemplateResponse(request=request, name="checkout_cancel.html", context={})
@@ -944,6 +959,51 @@ async def outreach_page(request: Request):
         return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
 
     return templates.TemplateResponse(request=request, name="outreach.html", context={})
+
+
+@app.get("/admin/taxes", response_class=HTMLResponse)
+async def taxes_reference_page(request: Request):
+    """
+    Backend reference page for federal tax brackets, standard deductions,
+    self-employment tax rates, and the mileage rate -- login-protected,
+    same pattern as the other backend tools. Manually-maintained data
+    (see tax_reference.py) since there is no free public IRS API for
+    this kind of general reference data. Not tax advice.
+    """
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    from tax_reference import get_reference_summary
+    return templates.TemplateResponse(
+        request=request,
+        name="tax_reference.html",
+        context={"summary": get_reference_summary()},
+    )
+
+
+@app.post("/api/taxes/estimate")
+async def estimate_taxes(
+    taxable_income: float = Form(...),
+    filing_status: str = Form(default="single"),
+    is_self_employment_income: bool = Form(default=False),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Simplified, educational tax estimate endpoint -- NOT tax advice.
+    Login or API-key protected, consistent with other backend tools.
+    """
+    require_api_key_or_session(request, x_api_key)
+
+    from tax_reference import estimate_effective_tax_rate, estimate_self_employment_tax
+
+    income_tax_estimate = estimate_effective_tax_rate(taxable_income, filing_status)
+    result = {"income_tax": income_tax_estimate}
+
+    if is_self_employment_income:
+        result["self_employment_tax"] = estimate_self_employment_tax(taxable_income)
+
+    return result
 
 
 @app.get("/admin/bank-rate-sources", response_class=HTMLResponse)
