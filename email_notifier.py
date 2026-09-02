@@ -7,6 +7,9 @@ available or a customer prefers email.
 import os
 import smtplib
 import logging
+import json
+import urllib.error
+import urllib.request
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -21,13 +24,46 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USERNAME)
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
+AGENTMAIL_API_KEY = os.getenv("AGENTMAIL_API_KEY", "")
+AGENTMAIL_INBOX_ID = os.getenv("AGENTMAIL_INBOX_ID", "")
 
 
 def email_configured() -> bool:
-    """Check whether SES or SMTP can send mail."""
-    return aws_email_configured() or bool(
+    """Check whether AgentMail, SES, or SMTP can send mail."""
+    return agentmail_configured() or aws_email_configured() or bool(
         SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM_EMAIL
     )
+
+
+def agentmail_configured() -> bool:
+    """Check whether the HTTPS AgentMail delivery provider is configured."""
+    return bool(AGENTMAIL_API_KEY and AGENTMAIL_INBOX_ID)
+
+
+def send_agentmail_email(to_email: str, subject: str, body_text: str) -> bool:
+    """Send an email through AgentMail's HTTPS API."""
+    payload = json.dumps(
+        {"to": to_email, "subject": subject, "text": body_text}
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.agentmail.to/v0/inboxes/{AGENTMAIL_INBOX_ID}/messages/send",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {AGENTMAIL_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            if response.status != 200:
+                logger.error("AgentMail returned HTTP %s for %s", response.status, to_email)
+                return False
+        logger.info("Email sent to %s through AgentMail", to_email)
+        return True
+    except urllib.error.URLError as error:
+        logger.error("AgentMail failed to send email to %s: %s", to_email, error)
+        return False
 
 
 def send_email(to_email: str, subject: str, body_text: str) -> bool:
@@ -38,6 +74,9 @@ def send_email(to_email: str, subject: str, body_text: str) -> bool:
     if not email_configured():
         logger.warning("SMTP not configured; cannot send email to %s", to_email)
         return False
+
+    if agentmail_configured():
+        return send_agentmail_email(to_email, subject, body_text)
 
     if aws_email_configured():
         return send_ses_email(to_email, subject, body_text)

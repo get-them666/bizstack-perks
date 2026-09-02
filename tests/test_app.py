@@ -73,6 +73,29 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
+    @patch("email_notifier.urllib.request.urlopen")
+    def test_agentmail_sends_email_otp_over_https(self, mock_urlopen):
+        import email_notifier
+
+        response = Mock(status=200)
+        mock_urlopen.return_value.__enter__.return_value = response
+        with patch.multiple(
+            email_notifier,
+            AGENTMAIL_API_KEY="agentmail-key",
+            AGENTMAIL_INBOX_ID="inbox-id",
+        ):
+            self.assertTrue(
+                email_notifier.send_portal_login_code("customer@example.com", "123456")
+            )
+
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://api.agentmail.to/v0/inboxes/inbox-id/messages/send",
+        )
+        self.assertEqual(request.get_header("Authorization"), "Bearer agentmail-key")
+        self.assertIn(b"123456", request.data)
+
     def test_aws_sms_delivery_is_used_for_portal_login_codes(self):
         self.main.aws_otp_configured = Mock(return_value=True)
         self.main.send_sns_sms = Mock(return_value=True)
