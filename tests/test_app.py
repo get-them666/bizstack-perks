@@ -73,6 +73,31 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
+    def test_portal_otp_survives_module_reload_and_is_single_use(self):
+        identifier = "customer@example.com"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            self.main.init_customer_tables(conn)
+            code = self.main.generate_otp(conn, identifier)
+
+        import customer_portal
+
+        reloaded_portal = importlib.reload(customer_portal)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            self.assertTrue(reloaded_portal.verify_otp(conn, identifier, code))
+            self.assertFalse(reloaded_portal.verify_otp(conn, identifier, code))
+
+    def test_portal_login_explains_when_account_is_not_registered(self):
+        response = self.client.post(
+            "/portal/request-code",
+            data={"channel": "email", "identifier": "unknown@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("We could not send a code", response.text)
+        self.assertIn("Create a free account first", response.text)
+
     def test_client_registry_is_available_to_authenticated_users(self):
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)
         response = self.client.get("/client")
