@@ -109,6 +109,37 @@ def _rate_from_text(text: str):
     return rate, (match.group(2) or "rate").upper()
 
 
+def _rate_for_product(text: str, product_name: str):
+    """Return an APR/APY only when the requested product is nearby on the page."""
+    product_terms = [term.lower() for term in product_name.split() if len(term) > 2]
+    lowered = text.lower()
+    for match in RATE_PATTERN.finditer(text):
+        rate = float(match.group(1))
+        if not 0 < rate < 100:
+            continue
+        sentence_start = max(
+            lowered.rfind(".", 0, match.start()),
+            lowered.rfind("!", 0, match.start()),
+            lowered.rfind("?", 0, match.start()),
+            lowered.rfind("\n", 0, match.start()),
+        ) + 1
+        sentence_end_candidates = [
+            position
+            for position in (
+                lowered.find(".", match.end()),
+                lowered.find("!", match.end()),
+                lowered.find("?", match.end()),
+                lowered.find("\n", match.end()),
+            )
+            if position != -1
+        ]
+        sentence_end = min(sentence_end_candidates) if sentence_end_candidates else len(lowered)
+        context = lowered[sentence_start:sentence_end]
+        if all(term in context for term in product_terms):
+            return rate, match.group(2).upper()
+    return None, None
+
+
 async def discover_live_public_bank_rates(
     product_name: str, region: str, limit: int = 35
 ) -> list[dict]:
@@ -245,7 +276,7 @@ async def _inspect_bank_rate_page(
             text = _page_text(page.text)
             if not all(term in text.lower() for term in product_name.lower().split()):
                 continue
-            rate, rate_kind = _rate_from_text(text)
+            rate, rate_kind = _rate_for_product(text, product_name)
             return {
                 "bank_name": bank["name"][:160],
                 "product_name": product_name,

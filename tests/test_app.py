@@ -393,10 +393,24 @@ class BizStackPerksAppTests(unittest.TestCase):
         mock_send.assert_called_once()
 
     def test_public_rate_monitor_extracts_labeled_rates_and_same_site_links(self):
-        from public_rate_sources import _rate_from_text, _rate_page_links
+        from public_rate_sources import _rate_for_product, _rate_from_text, _rate_page_links
 
         self.assertEqual(_rate_from_text("Fixed rate of 7.25% APR"), (7.25, "APR"))
         self.assertEqual(_rate_from_text("Borrow from 7.25% today"), (None, None))
+        self.assertEqual(
+            _rate_for_product(
+                "Business loan rates begin at 7.25% APR for qualified borrowers.",
+                "business loan",
+            ),
+            (7.25, "APR"),
+        )
+        self.assertEqual(
+            _rate_for_product(
+                "Business loans are available. Savings account earns 4.25% APY.",
+                "business loan",
+            ),
+            (None, None),
+        )
         self.assertEqual(
             _rate_page_links(
                 '<a href="/business-loans">Business loans</a>'
