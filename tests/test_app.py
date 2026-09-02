@@ -98,6 +98,57 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("We could not send a code", response.text)
         self.assertIn("Create a free account first", response.text)
 
+    def test_aws_sms_delivery_is_used_for_portal_login_codes(self):
+        self.main.aws_otp_configured = Mock(return_value=True)
+        self.main.send_sns_sms = Mock(return_value=True)
+        self.client.post(
+            "/signup",
+            data={
+                "business_name": "Acme",
+                "phone": "+15551234567",
+                "consent": "accepted",
+            },
+        )
+
+        response = self.client.post(
+            "/portal/request-code",
+            data={"channel": "phone", "identifier": "+15551234567"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("We texted you a 6-digit code", response.text)
+        self.main.send_sns_sms.assert_called_once()
+
+    @patch("aws_messaging._client")
+    def test_aws_messaging_sends_ses_email_and_sns_sms(self, mock_client):
+        import aws_messaging
+
+        client = Mock()
+        mock_client.return_value = client
+        with patch.multiple(
+            aws_messaging,
+            AWS_OTP_ENABLED=True,
+            AWS_REGION="us-east-1",
+            AWS_ACCESS_KEY_ID="access-key",
+            AWS_SECRET_ACCESS_KEY="secret-key",
+            AWS_SES_FROM_EMAIL="no-reply@example.com",
+            AWS_SNS_SENDER_ID="BizStack",
+        ):
+            self.assertTrue(
+                aws_messaging.send_email(
+                    "buyer@example.com", "Your code", "Your code is 123456"
+                )
+            )
+            self.assertTrue(aws_messaging.send_sms("+15551234567", "Your code is 123456"))
+
+        client.send_email.assert_called_once()
+        publish = client.publish.call_args.kwargs
+        self.assertEqual(publish["PhoneNumber"], "+15551234567")
+        self.assertEqual(
+            publish["MessageAttributes"]["AWS.SNS.SMS.SMSType"]["StringValue"],
+            "Transactional",
+        )
+
     def test_client_registry_is_available_to_authenticated_users(self):
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)
         response = self.client.get("/client")

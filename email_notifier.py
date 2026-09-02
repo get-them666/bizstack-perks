@@ -11,6 +11,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 
+from aws_messaging import aws_email_configured, send_email as send_ses_email
+
 logger = logging.getLogger(__name__)
 
 SMTP_HOST = os.getenv("SMTP_HOST", "")
@@ -22,8 +24,10 @@ SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
 
 
 def email_configured() -> bool:
-    """Check whether SMTP is fully configured."""
-    return bool(SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM_EMAIL)
+    """Check whether SES or SMTP can send mail."""
+    return aws_email_configured() or bool(
+        SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM_EMAIL
+    )
 
 
 def send_email(to_email: str, subject: str, body_text: str) -> bool:
@@ -34,6 +38,9 @@ def send_email(to_email: str, subject: str, body_text: str) -> bool:
     if not email_configured():
         logger.warning("SMTP not configured; cannot send email to %s", to_email)
         return False
+
+    if aws_email_configured():
+        return send_ses_email(to_email, subject, body_text)
 
     message = MIMEMultipart()
     message["From"] = SMTP_FROM_EMAIL

@@ -54,7 +54,11 @@ from customer_portal import (
     clear_portal_session,
     link_phone_to_customer,
 )
-from email_notifier import send_portal_login_code, email_configured
+from email_notifier import (
+    email_configured,
+    send_portal_login_code,
+)
+from aws_messaging import aws_otp_configured, send_sms as send_sns_sms
 from intake_pipeline import (
     init_pipeline_tables,
     run_intake_pipeline,
@@ -578,6 +582,7 @@ def get_feature_config():
         "twilio_sms": sms_manager.is_configured(),
         "twilio_voice": twilio_ready(),
         "email_otp": email_configured(),
+        "aws_otp": aws_otp_configured(),
         "google_places": places_source is not None,
         "census_analytics": census_analyzer is not None,
         "fred_banking_data": bool(FRED_API_KEY),
@@ -2084,7 +2089,19 @@ async def portal_request_code(
             )
         else:
             code = generate_otp(conn, identifier)
-            if sms_manager.is_configured():
+            if aws_otp_configured():
+                sent = send_sns_sms(
+                    identifier,
+                    f"Your BizStack Perks login code is {code}. It expires in 10 minutes.",
+                )
+                if sent:
+                    code_sent = True
+                else:
+                    delivery_error = (
+                        "We couldn't send the login code via SMS right now. "
+                        "Please try again in a moment, or switch to email login."
+                    )
+            elif sms_manager.is_configured():
                 try:
                     sms_manager.client.messages.create(
                         body=f"Your BizStack Perks login code is {code}. It expires in 10 minutes.",
