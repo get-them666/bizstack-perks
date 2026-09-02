@@ -92,12 +92,7 @@ logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DATABASE_PATH = (
-    os.path.join("/app/data", "bizstack.db")
-    if os.path.isdir("/app/data")
-    else os.path.join(BASE_DIR, "bizstack.db")
-)
-DATABASE_PATH = os.getenv("DATABASE_PATH", DEFAULT_DATABASE_PATH)
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "bizstack.db"))
 MOCK_USERNAME = os.getenv("BIZSTACK_ADMIN_USER", "admin")
 MOCK_PASSWORD = os.getenv("BIZSTACK_ADMIN_PASS", "password123")
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", secrets.token_hex(32))
@@ -2031,20 +2026,9 @@ async def portal_request_code(
             # Don't reveal whether the account exists (avoid account enumeration).
             # Show a neutral success screen so attackers can't probe valid emails.
             logger.info("Portal login requested for unknown email (no account)")
-            return templates.TemplateResponse(
-                request=request,
-                name="portal_login.html",
-                context={
-                    "error": None,
-                    "delivery_error": None,
-                    "code_sent": False,
-                    "identifier": identifier,
-                    "channel": "email",
-                    "account_missing": True,
-                },
-            )
+            code_sent = True  # neutral — no code was generated
         else:
-            code = generate_otp(conn, identifier)
+            code = generate_otp(identifier)
             if email_configured():
                 sent = send_portal_login_code(identifier, code)
                 if sent:
@@ -2075,20 +2059,9 @@ async def portal_request_code(
         if not customer:
             # Same neutral treatment — don't reveal whether the number exists.
             logger.info("Portal login requested for unknown phone (no account)")
-            return templates.TemplateResponse(
-                request=request,
-                name="portal_login.html",
-                context={
-                    "error": None,
-                    "delivery_error": None,
-                    "code_sent": False,
-                    "identifier": identifier,
-                    "channel": "phone",
-                    "account_missing": True,
-                },
-            )
+            code_sent = True
         else:
-            code = generate_otp(conn, identifier)
+            code = generate_otp(identifier)
             if aws_otp_configured():
                 sent = send_sns_sms(
                     identifier,
@@ -2132,7 +2105,6 @@ async def portal_request_code(
             "code_sent": code_sent and not delivery_error,
             "identifier": identifier if not delivery_error else "",
             "channel": channel,
-            "account_missing": False,
         },
     )
 
@@ -2149,7 +2121,7 @@ async def portal_verify_code(
     if channel == "email":
         identifier = identifier.lower()
 
-    if not verify_otp(conn, identifier, code):
+    if not verify_otp(identifier, code):
         return templates.TemplateResponse(
             request=request,
             name="portal_login.html",

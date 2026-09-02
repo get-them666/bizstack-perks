@@ -121,13 +121,6 @@
         </div>
         {% endif %}
 
-        {% if account_missing %}
-        <div class="warning">
-            <strong>We could not send a code</strong>
-            Create a free account first, then use the same email address or phone number to log in.
-        </div>
-        {% endif %}
-
         {% if code_sent %}
         <div class="notice">
             {% if channel == "email" %}We emailed you a 6-digit code.{% else %}We texted you a 6-digit code.{% endif %}

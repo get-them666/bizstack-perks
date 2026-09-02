@@ -11,6 +11,7 @@ import os
 import secrets
 import sqlite3
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 from pydantic import BaseModel
@@ -20,6 +21,12 @@ logger = logging.getLogger(__name__)
 # OTP codes are short-lived and single-use.
 OTP_TTL_SECONDS = 10 * 60  # 10 minutes
 OTP_LENGTH = 6
+
+# In-memory OTP store: {phone: {"code": str, "expires_at": float, "attempts": int}}
+# Process-local is fine here since OTPs are short-lived and this rarely needs to
+# survive a restart; a real multi-instance deployment would move this to the DB
+# or a shared cache, but that's overkill for this app's current scale.
+_OTP_STORE: dict[str, dict] = {}
 _MAX_OTP_ATTEMPTS = 5
 
 
@@ -47,16 +54,6 @@ def init_customer_tables(conn: sqlite3.Connection) -> None:
     existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(leads)").fetchall()}
     if "customer_id" not in existing_cols:
         cursor.execute("ALTER TABLE leads ADD COLUMN customer_id INTEGER REFERENCES customers(id)")
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS portal_otps (
-            identifier TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            expires_at TIMESTAMP NOT NULL,
-            attempts INTEGER NOT NULL DEFAULT 0
-        )
-        """
-    )
     conn.commit()
 
 
@@ -174,56 +171,41 @@ def get_customer_leads(conn: sqlite3.Connection, customer_id: int, limit: int = 
 # ============================================================================
 
 
-def generate_otp(conn: sqlite3.Connection, identifier: str) -> str:
-    """Generate and persist a fresh OTP code so deployments cannot invalidate it."""
+def _prune_expired_otps() -> None:
+    now = time.time()
+    expired = [phone for phone, data in _OTP_STORE.items() if data["expires_at"] < now]
+    for phone in expired:
+        _OTP_STORE.pop(phone, None)
+
+
+def generate_otp(phone: str) -> str:
+    """Generate and store a fresh OTP code for a phone number."""
+    _prune_expired_otps()
     code = f"{secrets.randbelow(10**OTP_LENGTH):06d}"
-    expires_at = datetime.utcnow() + timedelta(seconds=OTP_TTL_SECONDS)
-    conn.execute("DELETE FROM portal_otps WHERE expires_at <= CURRENT_TIMESTAMP")
-    conn.execute(
-        """
-        INSERT INTO portal_otps (identifier, code, expires_at, attempts)
-        VALUES (?, ?, ?, 0)
-        ON CONFLICT(identifier) DO UPDATE SET
-            code = excluded.code,
-            expires_at = excluded.expires_at,
-            attempts = 0
-        """,
-        (identifier, code, expires_at.isoformat(sep=" ", timespec="seconds")),
-    )
-    conn.commit()
+    _OTP_STORE[phone] = {
+        "code": code,
+        "expires_at": time.time() + OTP_TTL_SECONDS,
+        "attempts": 0,
+    }
     return code
 
 
-def verify_otp(conn: sqlite3.Connection, identifier: str, code: str) -> bool:
+def verify_otp(phone: str, code: str) -> bool:
     """Check a submitted OTP code. Single-use: consumes the code on success."""
-    entry = conn.execute(
-        "SELECT code, expires_at, attempts FROM portal_otps WHERE identifier = ?",
-        (identifier,),
-    ).fetchone()
+    _prune_expired_otps()
+    entry = _OTP_STORE.get(phone)
     if not entry:
         return False
 
-    if datetime.fromisoformat(entry["expires_at"]) <= datetime.utcnow():
-        conn.execute("DELETE FROM portal_otps WHERE identifier = ?", (identifier,))
-        conn.commit()
-        return False
-
-    attempts = entry["attempts"] + 1
-    if attempts > _MAX_OTP_ATTEMPTS:
-        conn.execute("DELETE FROM portal_otps WHERE identifier = ?", (identifier,))
-        conn.commit()
+    entry["attempts"] += 1
+    if entry["attempts"] > _MAX_OTP_ATTEMPTS:
+        _OTP_STORE.pop(phone, None)
         return False
 
     if secrets.compare_digest(entry["code"], code.strip()):
-        conn.execute("DELETE FROM portal_otps WHERE identifier = ?", (identifier,))
-        conn.commit()
+        _OTP_STORE.pop(phone, None)  # single-use
         return True
 
-    conn.execute(
-        "UPDATE portal_otps SET attempts = ? WHERE identifier = ?",
-        (attempts, identifier),
-    )
-    conn.commit()
     return False
 
 
