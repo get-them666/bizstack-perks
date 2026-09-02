@@ -399,12 +399,12 @@ class BizStackPerksAppTests(unittest.TestCase):
             "title": "Business loan rates - NerdWallet",
             "url": "https://www.nerdwallet.com/business-loans",
             "description": "Compare bank rates",
-        }))
+        }, "business loan"))
         self.assertTrue(_is_bank_rate_result({
             "title": "Business loan rates - Example Bank",
             "url": "https://www.examplebank.test/business-loans",
             "description": "See today's business loan rates.",
-        }))
+        }, "business loan"))
         self.assertEqual(_rate_from_text("Fixed rate of 7.25% APR"), (7.25, "APR"))
         self.assertEqual(_rate_from_text("Borrow from 7.25% today"), (None, None))
 
