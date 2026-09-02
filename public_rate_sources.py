@@ -1,34 +1,24 @@
 """Live public bank-rate discovery and an optional official-page watch list."""
 
+import asyncio
 from datetime import datetime, timezone
+from html import unescape
 import re
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
-from business_signals import YouComSignalScanner
+import httpx
 
-RATE_PATTERN = re.compile(
-    r"(?<!\d)(\d{1,2}(?:\.\d{1,3})?)\s*%\s*(APR|APY)\b", re.IGNORECASE
-)
+FDIC_INSTITUTIONS_URL = "https://api.fdic.gov/banks/institutions"
+RATE_PATTERN = re.compile(r"(?<!\d)(\d{1,2}(?:\.\d{1,3})?)\s*%\s*(APR|APY)\b", re.IGNORECASE)
+HREF_PATTERN = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.IGNORECASE)
+TAG_PATTERN = re.compile(r"<[^>]+>")
 PUBLIC_EMAIL_PATTERN = re.compile(
     r"\b(?:info|contact|hello|sales|support|office)@[a-z0-9.-]+\.[a-z]{2,}\b",
     re.IGNORECASE,
 )
-REGION_SEARCH_NAMES = {"VA": "Virginia"}
-NON_BANK_SOURCE_DOMAINS = {
-    "bankrate.com",
-    "cnbc.com",
-    "forbes.com",
-    "getholdings.com",
-    "lendingtree.com",
-    "lloydsbank.com",
-    "monitorbankrates.com",
-    "nerdwallet.com",
-    "smartasset.com",
-    "usmilitary.org",
-    "usnews.com",
-    "valoannetwork.com",
-}
+BOT_USER_AGENT = "BizStackPerksRateMonitor/1.0 (+https://bizstackperks.com)"
 
 
 def init_public_rate_source_table(conn) -> None:
@@ -119,79 +109,142 @@ def _rate_from_text(text: str):
     return rate, (match.group(2) or "rate").upper()
 
 
-def _is_bank_rate_result(result: dict, product_name: str) -> bool:
-    title = str(result.get("title", "")).lower()
-    domain = urlparse(str(result.get("url", ""))).netloc.removeprefix("www.").lower()
-    text = " ".join(
-        str(result.get(field, "")) for field in ("title", "description", "snippets")
-    ).lower()
-    product_terms = [term for term in product_name.lower().split() if len(term) > 2]
-    return (
-        bool(result.get("url") and result.get("title"))
-        and domain not in NON_BANK_SOURCE_DOMAINS
-        and "rate" in text
-        and all(term in text for term in product_terms)
-        and any(
-            term in title or term in domain
-            for term in ("bank", "credit union", "creditunion", "cu.org")
-        )
-    )
-
-
 async def discover_live_public_bank_rates(
     product_name: str, region: str, limit: int = 35
 ) -> list[dict]:
-    """Discover current public bank-rate pages; do not infer values not displayed."""
-    search_region = REGION_SEARCH_NAMES.get(region.upper(), region)
-    queries = (
-        f"{search_region} {product_name} bank rates",
-        f"{search_region} community bank {product_name} rates",
-        f"{search_region} credit union {product_name} rates",
-    )
-    discovered = []
-    seen_urls = set()
-    scanner = YouComSignalScanner()
-    for query in queries:
-        results = await scanner.search_current_web(query, 100)
-        for result in results.get("web", []) + results.get("news", []):
-            if (
-                not _is_bank_rate_result(result, product_name)
-                or result["url"] in seen_urls
-            ):
-                continue
-            seen_urls.add(result["url"])
-            summary = result.get("description") or result.get("title", "")
-            rate, rate_kind = _rate_from_text(
-                " ".join(
-                    str(result.get(field, ""))
-                    for field in ("title", "description", "snippets")
-                )
+    """Inspect public pages for FDIC-listed institutions without guessing rates."""
+    banks = await _fdic_banks(region, max(limit * 3, 100))
+    semaphore = asyncio.Semaphore(8)
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        headers={"User-Agent": BOT_USER_AGENT},
+        timeout=15.0,
+    ) as client:
+        candidates = await asyncio.gather(
+            *(
+                _inspect_bank_rate_page(client, semaphore, bank, product_name, region)
+                for bank in banks
             )
-            domain = urlparse(result["url"]).netloc.removeprefix("www.")
-            discovered.append(
-                {
-                    "bank_name": result.get("title", "")[:160],
-                    "product_name": product_name,
-                    "region": region.upper(),
-                    "source_url": result["url"],
-                    "source_summary": summary[:1000],
-                    "observed_rate": rate,
-                    "rate_kind": rate_kind,
-                    "source_domain": domain,
-                    "discovered_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            if len(discovered) == limit:
-                break
-        if len(discovered) == limit:
-            break
+        )
+    discovered = [candidate for candidate in candidates if candidate]
     return sorted(
-        discovered,
+        discovered[:limit],
         key=lambda result: (
             result["observed_rate"] is None,
             result["observed_rate"] if result["observed_rate"] is not None else 0,
         ),
     )
+
+
+async def _fdic_banks(region: str, limit: int) -> list[dict]:
+    """Get real insured institutions and their published websites from FDIC."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            FDIC_INSTITUTIONS_URL,
+            params={
+                "filters": f"STALP:{region.upper()}",
+                "fields": "NAME,WEBADDR,CERT",
+                "limit": min(max(limit, 1), 100),
+                "format": "json",
+            },
+        )
+        response.raise_for_status()
+    banks = []
+    seen_domains = set()
+    for item in response.json().get("data", []):
+        bank = item.get("data", {})
+        web_address = str(bank.get("WEBADDR") or "").strip()
+        if not web_address:
+            continue
+        base_url = web_address if web_address.startswith("https://") else f"https://{web_address}"
+        domain = urlparse(base_url).netloc.lower()
+        if not domain or domain in seen_domains:
+            continue
+        seen_domains.add(domain)
+        banks.append({"name": bank.get("NAME", "FDIC-listed institution"), "url": base_url})
+    return banks
+
+
+async def _allows_monitoring(client: httpx.AsyncClient, url: str) -> bool:
+    parsed = urlparse(url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    try:
+        response = await client.get(robots_url)
+    except httpx.HTTPError:
+        return False
+    if response.status_code == 404:
+        return True
+    if response.status_code != 200:
+        return False
+    parser = RobotFileParser()
+    parser.parse(response.text.splitlines())
+    return parser.can_fetch(BOT_USER_AGENT, url)
+
+
+def _page_text(html: str) -> str:
+    return re.sub(r"\s+", " ", unescape(TAG_PATTERN.sub(" ", html))).strip()
+
+
+def _rate_page_links(html: str, base_url: str) -> list[str]:
+    links = []
+    base_domain = urlparse(base_url).netloc
+    for href in HREF_PATTERN.findall(html):
+        candidate = urljoin(base_url, unescape(href))
+        parsed = urlparse(candidate)
+        if (
+            parsed.scheme == "https"
+            and parsed.netloc == base_domain
+            and any(term in candidate.lower() for term in ("rate", "loan", "business", "credit"))
+            and candidate not in links
+        ):
+            links.append(candidate)
+    return links[:8]
+
+
+async def _inspect_bank_rate_page(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    bank: dict,
+    product_name: str,
+    region: str,
+) -> Optional[dict]:
+    """Read one FDIC-listed bank's permitted public page and likely rate link."""
+    async with semaphore:
+        if not await _allows_monitoring(client, bank["url"]):
+            return None
+        try:
+            home = await client.get(bank["url"])
+            home.raise_for_status()
+        except httpx.HTTPError:
+            return None
+        pages = [str(home.url)] + _rate_page_links(home.text, str(home.url))
+        for page_url in pages:
+            if not await _allows_monitoring(client, page_url):
+                continue
+            try:
+                page = home if page_url == str(home.url) else await client.get(page_url)
+                page.raise_for_status()
+            except httpx.HTTPError:
+                continue
+            text = _page_text(page.text)
+            if not all(term in text.lower() for term in product_name.lower().split()):
+                continue
+            rate, rate_kind = _rate_from_text(text)
+            return {
+                "bank_name": bank["name"][:160],
+                "product_name": product_name,
+                "region": region.upper(),
+                "source_url": str(page.url),
+                "source_summary": (
+                    f"FDIC-listed institution public page retrieved at "
+                    f"{datetime.now(timezone.utc).isoformat()}"
+                ),
+                "observed_rate": rate,
+                "rate_kind": rate_kind,
+                "source_domain": urlparse(str(page.url)).netloc.removeprefix("www."),
+                "discovered_at": datetime.now(timezone.utc).isoformat(),
+            }
+    return None
 
 
 def store_live_public_bank_rates(conn, rates: list[dict]) -> int:
@@ -233,6 +286,8 @@ async def discover_public_business_contact(
 ) -> Optional[str]:
     """Return a publicly displayed generic business contact, never a guessed address."""
     query = f'"{business_name}" "{location}" contact email'
+    from business_signals import YouComSignalScanner
+
     results = await YouComSignalScanner().search_current_web(query, 20)
     for result in results.get("web", []):
         text = " ".join(
