@@ -532,7 +532,7 @@ async def lifespan(_: FastAPI):
     if os.getenv("AUTO_SIGNAL_SCAN_ENABLED", "false").lower() == "true":
         async def scan_signals_periodically() -> None:
             interval = max(300, int(os.getenv("SIGNAL_SCAN_INTERVAL_SECONDS", "21600")))
-            logger.info(
+            logger.warning(
                 "Autonomous signal scanning enabled; scanning every %d seconds", interval
             )
             while True:
@@ -540,7 +540,9 @@ async def lifespan(_: FastAPI):
                     stored = await run_autonomous_signal_scan(
                         lambda: sqlite3.connect(DATABASE_PATH)
                     )
-                    logger.info("Autonomous signal scan completed; stored %d new signals", stored)
+                    logger.warning(
+                        "Autonomous signal scan completed; stored %d new signals", stored
+                    )
                 except Exception:
                     logger.exception("Autonomous signal scan failed")
                 await _asyncio.sleep(interval)
