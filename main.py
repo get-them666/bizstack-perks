@@ -30,6 +30,7 @@ from business_signals import (
     scan_public_signals,
     store_signals,
 )
+from bank_database import get_banks_by_region_and_product, get_product_types, PRODUCT_TYPES
 from creditworthiness_scoring import init_scoring_schema, score_lead, get_lead_score
 from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_rates_for_display, check_rate_staleness
 from public_rate_sources import (
@@ -1020,6 +1021,24 @@ async def public_bank_rate_sources_page(request: Request, conn=Depends(get_db)):
         name="bank_rate_sources.html",
         context={"sources": list_public_rate_sources(conn)},
     )
+
+
+@app.get("/api/banks")
+async def get_banks(
+    region: str = "VA",
+    product_type: Optional[str] = None,
+):
+    """
+    Get banks in a region, optionally filtered by product type.
+    Returns bank name, city, and rate URL if product specified.
+    """
+    banks = get_banks_by_region_and_product(region, product_type)
+    return {
+        "region": region,
+        "product_type": product_type,
+        "count": len(banks),
+        "banks": banks,
+    }
 
 
 @app.post("/api/public-bank-rate-sources/scan")

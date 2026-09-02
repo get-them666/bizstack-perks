@@ -12,11 +12,19 @@
         main { margin:auto; max-width:1100px; padding:24px; } .card { background:#101934; border:1px solid #27426f; border-radius:12px; margin-bottom:24px; padding:24px; }
         .hint { color:#9db1d1; line-height:1.5; } .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
         label { color:#9db1d1; display:block; font-size:.82rem; font-weight:bold; margin-bottom:6px; text-transform:uppercase; }
-        input { background:#0d1730; border:1px solid #27426f; border-radius:8px; color:#f5f7fb; padding:11px; width:100%; }
+        input, select { background:#0d1730; border:1px solid #27426f; border-radius:8px; color:#f5f7fb; padding:11px; width:100%; }
         button { background:#4fd1ff; border:0; border-radius:8px; color:#03111d; cursor:pointer; font-weight:bold; margin-top:18px; padding:12px 18px; }
         button:disabled { background:#2a4258; color:#9db1d1; cursor:not-allowed; }
+        button.secondary { background:#27426f; color:#4fd1ff; margin-left:8px; }
         table { border-collapse:collapse; width:100%; } th,td { border-bottom:1px solid #27426f; padding:11px; text-align:left; vertical-align:top; } th { color:#9db1d1; font-size:.75rem; text-transform:uppercase; }
         .table-wrap { overflow:auto; } .empty { color:#9db1d1; padding:16px 0; } .error { color:#ffb3b3; margin-top:14px; }
+        .bank-picker { background:#0d1730; border:1px solid #27426f; border-radius:8px; display:none; margin-top:12px; max-height:300px; overflow-y:auto; padding:0; }
+        .bank-option { border-bottom:1px solid #27426f; cursor:pointer; padding:12px; transition:background 0.2s; }
+        .bank-option:hover { background:#1a2844; }
+        .bank-option:last-child { border-bottom:none; }
+        .auto-fill { background:#35d08f; border:1px solid #2ab878; border-radius:8px; color:#03111d; margin-top:12px; padding:12px; font-size:.9rem; }
+        .form-section { margin-bottom:28px; padding-bottom:28px; border-bottom:1px solid #27426f; }
+        .form-section:last-child { border-bottom:none; }
     </style>
 </head>
 <body>
@@ -43,16 +51,63 @@
         </section>
         <section class="card">
             <h2>Add an official public rate page</h2>
-            <p class="hint">Optional: pin an official public rate page to your long-term watch list. This stays separate from both the existing local-rate comparison and the one-click live scan above.</p>
+            <p class="hint">Select a product type to auto-populate a list of Virginia banks. Click a bank to auto-fill its name and official rate page URL, then submit.</p>
+            
             <form method="post" action="/api/public-bank-rate-sources">
-                <div class="grid">
-                    <div><label for="bank_name">Bank</label><input id="bank_name" name="bank_name" required maxlength="160" placeholder="Example Bank"></div>
-                    <div><label for="product_name">Product</label><input id="product_name" name="product_name" required maxlength="120" placeholder="Business line of credit"></div>
-                    <div><label for="region">Region</label><input id="region" name="region" maxlength="20" placeholder="VA"></div>
+                <!-- STEP 1: Product Type Selection -->
+                <div class="form-section">
+                    <div class="grid">
+                        <div>
+                            <label for="product_type_select">1. Product Type</label>
+                            <select id="product_type_select" onchange="fetchBanks()">
+                                <option value="">-- Select product type --</option>
+                                <option value="commercial_loan">Commercial Loan</option>
+                                <option value="sba_loan">SBA Loan</option>
+                                <option value="line_of_credit">Line of Credit</option>
+                                <option value="equipment_financing">Equipment Financing</option>
+                                <option value="term_loan">Term Loan</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div style="margin-top:14px"><label for="source_url">Official public rate-page URL</label><input id="source_url" name="source_url" type="url" required maxlength="2000" placeholder="https://bank.example/rates"></div>
-                <button type="submit">Add to monitor</button>
+
+                <!-- STEP 2: Bank Picker -->
+                <div class="form-section" id="bank-picker-section" style="display:none;">
+                    <p class="hint">2. Select a bank:</p>
+                    <div class="bank-picker" id="bank-picker"></div>
+                    <p id="bank-picker-status" class="hint" aria-live="polite"></p>
+                    <p id="bank-picker-error" class="error" style="display:none;" role="alert"></p>
+                </div>
+
+                <!-- STEP 3: Auto-filled Form -->
+                <div class="form-section">
+                    <p class="hint">3. Review and submit:</p>
+                    <div class="grid">
+                        <div>
+                            <label for="bank_name">Bank</label>
+                            <input id="bank_name" name="bank_name" required maxlength="160" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                        </div>
+                        <div>
+                            <label for="product_name">Product</label>
+                            <input id="product_name" name="product_name" required maxlength="120" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                        </div>
+                        <div>
+                            <label for="region">Region</label>
+                            <input id="region" name="region" value="VA" maxlength="20" readonly style="background:#1a2844; opacity:0.8;">
+                        </div>
+                    </div>
+                    <div style="margin-top:14px">
+                        <label for="source_url">Official public rate-page URL</label>
+                        <input id="source_url" name="source_url" type="url" required maxlength="2000" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                    </div>
+                    <button type="submit" id="submit-btn" disabled>Add to monitor</button>
+                    <button type="button" class="secondary" onclick="resetForm()" style="display:none;" id="reset-btn">Reset</button>
+                </div>
             </form>
+
+            <div id="auto-fill-indicator" class="auto-fill" style="display:none;">
+                ✓ Bank and rate page auto-filled. Ready to submit.
+            </div>
         </section>
         <section class="card">
             <h2>Registered public sources ({{ sources|length }})</h2>
@@ -64,6 +119,83 @@
         </section>
     </main>
     <script>
+        async function fetchBanks() {
+            const productType = document.getElementById("product_type_select").value;
+            const pickerSection = document.getElementById("bank-picker-section");
+            const bankPicker = document.getElementById("bank-picker");
+            const status = document.getElementById("bank-picker-status");
+            const error = document.getElementById("bank-picker-error");
+
+            if (!productType) {
+                pickerSection.style.display = "none";
+                return;
+            }
+
+            status.textContent = "Loading banks...";
+            error.style.display = "none";
+            bankPicker.innerHTML = "";
+            pickerSection.style.display = "block";
+
+            try {
+                const response = await fetch(`/api/banks?region=VA&product_type=${encodeURIComponent(productType)}`);
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.detail || "Failed to fetch banks");
+
+                if (data.banks.length === 0) {
+                    error.textContent = "No banks found for this product type.";
+                    error.style.display = "block";
+                    status.textContent = "";
+                    return;
+                }
+
+                bankPicker.innerHTML = data.banks.map(bank => `
+                    <div class="bank-option" onclick="selectBank('${bank.name}', '${productType}', '${bank.rate_url}')">
+                        <strong>${bank.name}</strong><br>
+                        <span style="color:#9db1d1; font-size:.85rem;">${bank.city}</span>
+                    </div>
+                `).join("");
+
+                status.textContent = `${data.banks.length} banks found. Click to select.`;
+            } catch (err) {
+                error.textContent = err.message;
+                error.style.display = "block";
+                status.textContent = "";
+            }
+        }
+
+        function selectBank(bankName, productType, rateUrl) {
+            const productTypeMap = {
+                "commercial_loan": "Commercial Loan",
+                "sba_loan": "SBA Loan",
+                "line_of_credit": "Line of Credit",
+                "equipment_financing": "Equipment Financing",
+                "term_loan": "Term Loan",
+            };
+
+            document.getElementById("bank_name").value = bankName;
+            document.getElementById("product_name").value = productTypeMap[productType] || productType;
+            document.getElementById("source_url").value = rateUrl;
+            document.getElementById("submit-btn").disabled = false;
+            document.getElementById("reset-btn").style.display = "inline-block";
+            document.getElementById("auto-fill-indicator").style.display = "block";
+            document.getElementById("bank-picker").style.display = "none";
+        }
+
+        function resetForm() {
+            document.getElementById("product_type_select").value = "";
+            document.getElementById("bank_name").value = "";
+            document.getElementById("product_name").value = "";
+            document.getElementById("source_url").value = "";
+            document.getElementById("region").value = "VA";
+            document.getElementById("submit-btn").disabled = true;
+            document.getElementById("reset-btn").style.display = "none";
+            document.getElementById("auto-fill-indicator").style.display = "none";
+            document.getElementById("bank-picker-section").style.display = "none";
+            document.getElementById("bank-picker").innerHTML = "";
+        }
+
+        // Campaign button handler
         document.getElementById("campaign-button").addEventListener("click", async () => {
             const button = document.getElementById("campaign-button");
             const status = document.getElementById("campaign-status");
@@ -88,6 +220,7 @@
             }
         });
 
+        // Live rate scan handler
         document.getElementById("live-rate-scan-form").addEventListener("submit", async (event) => {
             event.preventDefault();
             const button = document.getElementById("live-rate-scan-button");
