@@ -73,34 +73,6 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
 
-    def test_init_db_migrates_legacy_profiles_for_dashboard(self):
-        legacy_db = os.path.join(self.tempdir.name, "legacy.db")
-        with sqlite3.connect(legacy_db) as conn:
-            conn.execute(
-                """
-                CREATE TABLE profiles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    company_name TEXT UNIQUE NOT NULL,
-                    credit_risk_rating TEXT,
-                    annual_revenue REAL
-                )
-                """
-            )
-            conn.execute(
-                "INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue) VALUES (?, ?, ?)",
-                ("Legacy Co", "low", 100000),
-            )
-
-        with patch.object(self.main, "DATABASE_PATH", legacy_db):
-            self.main.init_db()
-            with sqlite3.connect(legacy_db) as conn:
-                profile = conn.execute(
-                    "SELECT company_name, created_at FROM profiles"
-                ).fetchone()
-
-        self.assertEqual(profile[0], "Legacy Co")
-        self.assertIsNotNone(profile[1])
-
     def test_portal_otp_survives_module_reload_and_is_single_use(self):
         identifier = "customer@example.com"
         with sqlite3.connect(self.db_path) as conn:

@@ -414,14 +414,6 @@ def init_db() -> None:
             )
             """
         )
-        profile_columns = {
-            row[1] for row in cursor.execute("PRAGMA table_info(profiles)").fetchall()
-        }
-        if "created_at" not in profile_columns:
-            cursor.execute("ALTER TABLE profiles ADD COLUMN created_at TIMESTAMP")
-            cursor.execute(
-                "UPDATE profiles SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
-            )
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS payments (
