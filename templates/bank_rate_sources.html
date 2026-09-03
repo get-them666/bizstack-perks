@@ -149,21 +149,19 @@
                     return;
                 }
 
-                bankPicker.innerHTML = data.banks.map((bank, idx) => `
-                    <div class="bank-option" data-bank-idx="${idx}" data-bank-name="${bank.name.replace(/"/g, '&quot;')}" data-product-type="${productType}" data-rate-url="${bank.rate_url.replace(/"/g, '&quot;')}">
+                bankPicker.innerHTML = data.banks.map((bank) => `
+                    <button type="button" class="bank-btn" style="width:100%; text-align:left; background:#0d1730; border:none; border-bottom:1px solid #27426f; padding:12px; color:#f5f7fb; cursor:pointer;" data-bank='${JSON.stringify(bank)}'>
                         <strong>${bank.name}</strong><br>
                         <span style="color:#9db1d1; font-size:.85rem;">${bank.city}</span>
-                    </div>
+                    </button>
                 `).join("");
 
-                // Add event listeners to all bank options
-                document.querySelectorAll(".bank-option").forEach(option => {
-                    option.addEventListener("click", function() {
-                        selectBank(
-                            this.getAttribute("data-bank-name"),
-                            this.getAttribute("data-product-type"),
-                            this.getAttribute("data-rate-url")
-                        );
+                // Add click listeners
+                document.querySelectorAll(".bank-btn").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.preventDefault();
+                        const bank = JSON.parse(btn.getAttribute("data-bank"));
+                        selectBank(bank.name, bank.product_type, bank.rate_url);
                     });
                 });
 
