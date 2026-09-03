@@ -111,6 +111,8 @@
         </section>
         <section class="card">
             <h2>Registered public sources ({{ sources|length }})</h2>
+            <button id="scan-registered-btn" type="button" style="background:#35d08f; color:#03111d; margin-bottom:16px;">Scan all registered banks now</button>
+            <p id="scan-registered-status" class="hint" aria-live="polite"></p>
             <div class="table-wrap"><table><thead><tr><th>Bank</th><th>Product</th><th>Region</th><th>Official page</th><th>Added</th><th>Monitor status</th></tr></thead><tbody>
                 {% for source in sources %}
                 <tr><td>{{ source["bank_name"] }}</td><td>{{ source["product_name"] }}</td><td>{{ source["region"] or "-" }}</td><td><a href="{{ source["source_url"] }}" target="_blank" rel="noopener noreferrer">Open source</a></td><td>{{ source["added_at"] }}</td><td>{{ source["last_check_status"] or "Awaiting check" }}</td></tr>
@@ -229,6 +231,28 @@
             document.getElementById("bank-picker-section").style.display = "none";
             document.getElementById("bank-picker").innerHTML = "";
         }
+
+        // Scan registered banks button
+        document.getElementById("scan-registered-btn").addEventListener("click", async () => {
+            const button = document.getElementById("scan-registered-btn");
+            const status = document.getElementById("scan-registered-status");
+            button.disabled = true;
+            status.textContent = "Scanning registered banks...";
+            try {
+                const response = await fetch("/api/public-bank-rate-sources/scan-registered", {
+                    method: "POST",
+                    credentials: "same-origin",
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Scan failed");
+                status.textContent = `${data.message}. Page will refresh in 2 seconds.`;
+                setTimeout(() => location.reload(), 2000);
+            } catch (err) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = "#ffb3b3";
+                button.disabled = false;
+            }
+        });
 
         // Campaign button handler
         document.getElementById("campaign-button").addEventListener("click", async () => {

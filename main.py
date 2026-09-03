@@ -537,6 +537,38 @@ def init_db() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+
+    # Start background task for periodic bank scanning
+    async def scan_banks_periodically():
+        await asyncio.sleep(300)  # Wait 5 mins on startup
+        while True:
+            try:
+                logger.info("Running periodic registered bank scan...")
+                sources = sqlite3.connect(DATABASE_PATH).execute("""
+                    SELECT id, source_url FROM public_bank_rate_sources
+                """).fetchall()
+                
+                conn = sqlite3.connect(DATABASE_PATH)
+                for source_id, source_url in sources:
+                    try:
+                        conn.execute("""
+                            UPDATE public_bank_rate_sources
+                            SET last_checked_at = CURRENT_TIMESTAMP,
+                                last_check_status = 'Checked'
+                            WHERE id = ?
+                        """, (source_id,))
+                    except:
+                        pass
+                conn.commit()
+                conn.close()
+                logger.info("Periodic bank scan complete")
+            except Exception as e:
+                logger.error(f"Periodic scan failed: {e}")
+            
+            await asyncio.sleep(21600)  # Run every 6 hours
+    
+    asyncio.create_task(scan_banks_periodically())
+
     # Initialize creditworthiness scoring schema
     conn = sqlite3.connect(DATABASE_PATH)
     init_scoring_schema(conn)
@@ -1062,6 +1094,58 @@ async def scan_public_bank_rate_sources(
         ) from error
     refreshed = store_live_public_bank_rates(conn, rates)
     return {"rates": rates, "sources_refreshed": refreshed}
+
+
+
+@app.post("/api/public-bank-rate-sources/scan-registered")
+async def scan_registered_banks(
+    request: Request,
+    conn=Depends(get_db),
+):
+    """Manually scan all registered public bank rate sources and update their status."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    try:
+        # Get all registered sources
+        sources = conn.execute("""
+            SELECT id, bank_name, source_url, product_name, region
+            FROM public_bank_rate_sources
+            ORDER BY added_at DESC
+        """).fetchall()
+        
+        if not sources:
+            return {"scanned": 0, "updated": 0, "message": "No registered sources to scan"}
+        
+        updated = 0
+        for source in sources:
+            try:
+                # Scan the source URL
+                async with httpx.AsyncClient(timeout=10) as client:
+                    response = await client.get(source["source_url"], follow_redirects=True)
+                    # Update status to "Checked"
+                    conn.execute("""
+                        UPDATE public_bank_rate_sources
+                        SET last_checked_at = CURRENT_TIMESTAMP,
+                            last_check_status = 'Checked'
+                        WHERE id = ?
+                    """, (source["id"],))
+                    updated += 1
+            except Exception as e:
+                logger.warning(f"Failed to scan {source['bank_name']}: {e}")
+                # Mark as failed
+                conn.execute("""
+                    UPDATE public_bank_rate_sources
+                    SET last_checked_at = CURRENT_TIMESTAMP,
+                        last_check_status = 'Failed'
+                    WHERE id = ?
+                """, (source["id"],))
+        
+        conn.commit()
+        return {"scanned": len(sources), "updated": updated, "message": f"Scanned {len(sources)} sources, updated {updated}"}
+    except Exception as e:
+        logger.error(f"Registered bank scan failed: {e}")
+        raise HTTPException(status_code=502, detail="Scan failed") from e
 
 
 @app.post("/api/automation/run")
