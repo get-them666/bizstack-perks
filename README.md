@@ -137,3 +137,4 @@ Run the focused test suite with:
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
 ```
+# Credit scoring model deployed
