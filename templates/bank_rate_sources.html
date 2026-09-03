@@ -149,12 +149,23 @@
                     return;
                 }
 
-                bankPicker.innerHTML = data.banks.map(bank => `
-                    <div class="bank-option" onclick="selectBank('${bank.name}', '${productType}', '${bank.rate_url}')">
+                bankPicker.innerHTML = data.banks.map((bank, idx) => `
+                    <div class="bank-option" data-bank-idx="${idx}" data-bank-name="${bank.name.replace(/"/g, '&quot;')}" data-product-type="${productType}" data-rate-url="${bank.rate_url.replace(/"/g, '&quot;')}">
                         <strong>${bank.name}</strong><br>
                         <span style="color:#9db1d1; font-size:.85rem;">${bank.city}</span>
                     </div>
                 `).join("");
+
+                // Add event listeners to all bank options
+                document.querySelectorAll(".bank-option").forEach(option => {
+                    option.addEventListener("click", function() {
+                        selectBank(
+                            this.getAttribute("data-bank-name"),
+                            this.getAttribute("data-product-type"),
+                            this.getAttribute("data-rate-url")
+                        );
+                    });
+                });
 
                 status.textContent = `${data.banks.length} banks found. Click to select.`;
             } catch (err) {
