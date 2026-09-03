@@ -163,7 +163,7 @@
                 }
 
                 bankPicker.innerHTML = data.banks.map((bank) => `
-                    <button type="button" class="bank-btn" style="width:100%; text-align:left; background:#0d1730; border:none; border-bottom:1px solid #27426f; padding:12px; color:#f5f7fb; cursor:pointer;" data-bank='${JSON.stringify(bank)}'>
+                    <button type="button" type="button" class="bank-btn" style="width:100%; text-align:left; background:#0d1730; border:none; border-bottom:1px solid #27426f; padding:12px; color:#f5f7fb; cursor:pointer;" onclick="selectBankDirect(this)" data-bank='${JSON.stringify(bank)}'>
                         <strong>${bank.name}</strong><br>
                         <span style="color:#9db1d1; font-size:.85rem;">${bank.city}</span>
                     </button>
@@ -178,6 +178,25 @@
                 error.style.display = "block";
                 status.textContent = "";
             }
+        }
+
+        function selectBankDirect(button) {
+            const bankData = JSON.parse(button.getAttribute("data-bank"));
+            const productTypeMap = {
+                "commercial_loan": "Commercial Loan",
+                "sba_loan": "SBA Loan",
+                "line_of_credit": "Line of Credit",
+                "equipment_financing": "Equipment Financing",
+                "term_loan": "Term Loan",
+            };
+            
+            document.getElementById("bank_name").value = bankData.name;
+            document.getElementById("product_name").value = productTypeMap[bankData.product_type] || bankData.product_type;
+            document.getElementById("source_url").value = bankData.rate_url;
+            document.getElementById("submit-btn").disabled = false;
+            document.getElementById("reset-btn").style.display = "inline-block";
+            document.getElementById("auto-fill-indicator").style.display = "block";
+            document.getElementById("bank-picker").style.display = "none";
         }
 
         function selectBank(bankName, productType, rateUrl) {
