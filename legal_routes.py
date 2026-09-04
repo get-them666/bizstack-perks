@@ -5,7 +5,6 @@ FastAPI routes for Legal Document Business Writer.
 import hmac
 import logging
 import os
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -31,6 +30,8 @@ ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
 UPLOAD_FOLDER = Path("./uploaded_documents").resolve()
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 LEGAL_API_TOKEN = os.getenv("LEGAL_API_TOKEN", "")
+MAX_UPLOAD_SIZE = int(os.getenv("LEGAL_MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def json_response(content: dict, status_code: int = 200) -> JSONResponse:
@@ -101,8 +102,17 @@ def save_upload(file: UploadFile, *, pdf_only: bool = False) -> Path:
 
     extension = filename.rsplit(".", 1)[1].lower()
     destination = UPLOAD_FOLDER / f"{uuid4().hex}.{extension}"
-    with destination.open("wb") as output:
-        shutil.copyfileobj(file.file, output)
+    bytes_written = 0
+    try:
+        with destination.open("wb") as output:
+            while chunk := file.file.read(UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_UPLOAD_SIZE:
+                    raise ValueError("File exceeds maximum upload size")
+                output.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
     return destination
 
 
@@ -252,6 +262,7 @@ def delete_document(document_name: str, _: None = Depends(require_auth)):
 @legal_router.post("/pdf/read")
 def read_pdf(file: UploadFile = File(...), _: None = Depends(require_auth)):
     """Read and extract content from a PDF."""
+    filepath = None
     try:
         filepath = save_upload(file, pdf_only=True)
         if not doc_writer.pdf_handler:
@@ -261,6 +272,9 @@ def read_pdf(file: UploadFile = File(...), _: None = Depends(require_auth)):
         return json_response({"error": str(exc)}, 400)
     except Exception:
         return internal_error()
+    finally:
+        if filepath:
+            filepath.unlink(missing_ok=True)
 
 
 @legal_router.post("/pdf/merge", status_code=201)
@@ -291,13 +305,25 @@ def split_pdf(data: dict, _: None = Depends(require_auth)):
         if "pdf_path" not in data:
             return json_response({"error": "Missing pdf_path"}, 400)
         pdf_path = str(resolve_stored_file(data["pdf_path"]))
-        output_dir = str(doc_writer.documents_dir / f"split_{datetime.now().timestamp()}")
+        output_dir = doc_writer.documents_dir / f"split_{uuid4().hex}"
         if not doc_writer.pdf_handler:
             return json_response({"error": "PDF support not available"}, 501)
+        result = doc_writer.pdf_handler.split_pdf(
+            pdf_path, str(output_dir), data.get("pages")
+        )
+        output_files = []
+        for output_file in result.get("output_files", []):
+            destination = doc_writer.documents_dir / (
+                f"split_{uuid4().hex}_{public_file_name(output_file)}"
+            )
+            Path(output_file).replace(destination)
+            output_files.append(str(destination))
+        if "output_files" in result:
+            result = result.copy()
+            result["output_files"] = output_files
+        output_dir.rmdir()
         return json_response(
-            public_file_result(
-                doc_writer.pdf_handler.split_pdf(pdf_path, output_dir, data.get("pages"))
-            ),
+            public_file_result(result),
             201,
         )
     except ValueError:
@@ -342,6 +368,7 @@ def add_watermark(data: dict, _: None = Depends(require_auth)):
 @legal_router.post("/form/fields")
 def read_form_fields(file: UploadFile = File(...), _: None = Depends(require_auth)):
     """Extract fields from a PDF form."""
+    filepath = None
     try:
         filepath = save_upload(file, pdf_only=True)
         if not doc_writer.form_handler:
@@ -353,6 +380,9 @@ def read_form_fields(file: UploadFile = File(...), _: None = Depends(require_aut
         return json_response({"error": str(exc)}, 400)
     except Exception:
         return internal_error()
+    finally:
+        if filepath:
+            filepath.unlink(missing_ok=True)
 
 
 @legal_router.post("/form/fill", status_code=201)
@@ -367,7 +397,9 @@ def fill_form(data: dict, _: None = Depends(require_auth)):
         if not doc_writer.form_handler:
             return json_response({"error": "Form support not available"}, 501)
         return json_response(
-            doc_writer.form_handler.fill_form(pdf_path, data["form_data"], output_path),
+            public_file_result(
+                doc_writer.form_handler.fill_form(pdf_path, data["form_data"], output_path)
+            ),
             201,
         )
     except ValueError:

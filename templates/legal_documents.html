@@ -728,20 +728,42 @@
                 const data = await response.json();
                 const documents = data.documents || [];
                 const list = document.getElementById('documentList');
-                list.innerHTML = documents.map(d => `
-                    <div class="document-item">
-                        <div class="document-icon">📄</div>
-                        <div class="document-info">
-                            <div class="document-name">${d.name}</div>
-                            <div class="document-meta">${new Date(d.created).toLocaleDateString()} • ${(d.size / 1024).toFixed(2)} KB</div>
-                        </div>
-                        <div class="document-actions">
-                            <button class="btn-secondary" onclick="downloadDocument('${d.name}')">Download</button>
-                            <button class="btn-secondary" onclick="shareDocument('${d.name}')">Share</button>
-                            <button class="btn-danger" onclick="deleteDocument('${d.name}')">Delete</button>
-                        </div>
-                    </div>
-                `).join('');
+                list.replaceChildren(...documents.map(d => {
+                    const item = document.createElement('div');
+                    const icon = document.createElement('div');
+                    const info = document.createElement('div');
+                    const name = document.createElement('div');
+                    const meta = document.createElement('div');
+                    const actions = document.createElement('div');
+                    const download = document.createElement('button');
+                    const share = document.createElement('button');
+                    const remove = document.createElement('button');
+
+                    item.className = 'document-item';
+                    icon.className = 'document-icon';
+                    icon.textContent = '📄';
+                    info.className = 'document-info';
+                    name.className = 'document-name';
+                    name.textContent = d.name;
+                    meta.className = 'document-meta';
+                    meta.textContent = `${new Date(d.created).toLocaleDateString()} • ${(d.size / 1024).toFixed(2)} KB`;
+                    actions.className = 'document-actions';
+
+                    download.className = 'btn-secondary';
+                    download.textContent = 'Download';
+                    download.addEventListener('click', () => downloadDocument(d.name));
+                    share.className = 'btn-secondary';
+                    share.textContent = 'Share';
+                    share.addEventListener('click', () => shareDocument(d.name));
+                    remove.className = 'btn-danger';
+                    remove.textContent = 'Delete';
+                    remove.addEventListener('click', () => deleteDocument(d.name));
+
+                    info.append(name, meta);
+                    actions.append(download, share, remove);
+                    item.append(icon, info, actions);
+                    return item;
+                }));
                 populateDocumentSelects(documents);
             } catch (error) {
                 showAlert('Error loading documents: ' + error.message, 'error');
@@ -778,10 +800,11 @@
         }
 
         function populateDocumentSelects(documents) {
-            const options = '<option value="">Choose a document...</option>' +
-                documents.map(document => `<option value="${document.name}">${document.name}</option>`).join('');
-            document.getElementById('emailDocument').innerHTML = options;
-            document.getElementById('smsDocument').innerHTML = options;
+            ['emailDocument', 'smsDocument'].forEach(selectId => {
+                const select = document.getElementById(selectId);
+                const options = documents.map(document => new Option(document.name, document.name));
+                select.replaceChildren(new Option('Choose a document...', ''), ...options);
+            });
         }
 
         async function selectTemplate(templateId) {
