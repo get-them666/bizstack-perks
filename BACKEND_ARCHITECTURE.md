@@ -39,16 +39,16 @@ FRONTEND (React/Vue/etc)
 ### 🔌 Flask Integration
 
 ```python
-# In your backend app.py:
+# In your FastAPI backend app.py:
 
-from flask import Flask
-from legal_routes import legal_bp
+from fastapi import FastAPI
+from legal_routes import legal_router
 from legal_models import Base
 
-app = Flask(__name__)
+app = FastAPI()
 
-# Register the blueprint
-app.register_blueprint(legal_bp)
+# Register the router
+app.include_router(legal_router)
 
 # Initialize database
 Base.metadata.create_all(engine)
@@ -349,10 +349,10 @@ Or your frontend calls the API:
    pip install -r legal_requirements.txt
    ```
 
-3. **Register in Flask:**
+3. **Register in FastAPI:**
    ```python
-   from legal_routes import legal_bp
-   app.register_blueprint(legal_bp)
+   from legal_routes import legal_router
+   app.include_router(legal_router)
    ```
 
 4. **Configure .env**

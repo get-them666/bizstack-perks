@@ -82,7 +82,7 @@ class LegalDocument(Base):
     
     # Content
     filled_data = Column(Text)  # JSON of form data used to generate document
-    metadata = Column(Text)  # JSON for additional metadata
+    document_metadata = Column("metadata", Text)  # JSON for additional metadata
     
     # Relationships
     templates = relationship("LegalTemplate", secondary=document_template_association, back_populates="documents")

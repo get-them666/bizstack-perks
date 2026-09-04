@@ -138,9 +138,9 @@ A comprehensive legal document management system with PDF/form handling, email/S
 4. **Register Routes in Main Application**
    ```python
    # In your main.py or app.py
-   from legal_routes import legal_bp
+   from legal_routes import legal_router
    
-   app.register_blueprint(legal_bp)
+   app.include_router(legal_router)
    ```
 
 ## API Endpoints

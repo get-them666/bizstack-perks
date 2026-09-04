@@ -60,18 +60,18 @@ nano .env  # or your preferred editor
 - [ ] ENVIRONMENT set to development or production
 
 ### Phase 4: Backend Integration (15 minutes)
-In your Flask app (`app.py` or `main.py`):
+In your FastAPI app (`app.py` or `main.py`):
 
 ```python
-from flask import Flask
-from legal_routes import legal_bp
+from fastapi import FastAPI
+from legal_routes import legal_router
 from legal_models import Base
 from sqlalchemy import create_engine
 
-app = Flask(__name__)
+app = FastAPI()
 
-# Register legal document blueprint (adds /api/legal/* routes)
-app.register_blueprint(legal_bp)
+# Register legal document router (adds /api/legal/* routes)
+app.include_router(legal_router)
 
 # Initialize database tables
 engine = create_engine(os.getenv('DATABASE_URL'))

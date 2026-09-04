@@ -35,7 +35,7 @@ TOTAL FILES: 15 + 1 optional
    - Health check endpoint (1)
    - Additional operational endpoints (7)
    Authentication: Bearer token on all endpoints (except /health and /templates GET)
-   Registration: app.register_blueprint(legal_bp)
+   Registration: app.include_router(legal_router)
 
 ✅ legal_models.py (285 lines)
    Purpose: SQLAlchemy ORM database models

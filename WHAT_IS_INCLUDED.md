@@ -165,13 +165,13 @@ pip install -r legal_requirements.txt
 python legal_quickstart.py
 ```
 
-### Step 3: Register in Flask
+### Step 3: Register in FastAPI
 Add to your `app.py`:
 ```python
-from legal_routes import legal_bp
+from legal_routes import legal_router
 from legal_models import Base
 
-app.register_blueprint(legal_bp)
+app.include_router(legal_router)
 Base.metadata.create_all(engine)
 ```
 

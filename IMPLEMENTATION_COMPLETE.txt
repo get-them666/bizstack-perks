@@ -180,10 +180,10 @@ Template Coverage:
    cp .env.example .env
    nano .env  (fill in your SMTP/SMS settings)
 
-3. Integrate with Flask
+3. Integrate with FastAPI
    In your app.py:
-   from legal_routes import legal_bp
-   app.register_blueprint(legal_bp)
+   from legal_routes import legal_router
+   app.include_router(legal_router)
 
 4. Initialize Database
    python legal_quickstart.py

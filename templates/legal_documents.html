@@ -549,7 +549,7 @@
                     <h2 class="section-title">🔧 PDF Tools</h2>
                     <div class="form-group">
                         <label>Upload PDF:</label>
-                        <input type="file" accept=".pdf" id="pdfFile">
+                        <input type="file" accept=".pdf" id="pdfFile" multiple>
                     </div>
                     <div class="button-group">
                         <button class="btn-primary" onclick="mergePDFs()">Merge PDFs</button>
@@ -657,15 +657,25 @@
     <script>
         // Show/Hide Sections
         function showSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const activeLink = Array.from(document.querySelectorAll('.sidebar-link'))
+                .find(link => link.getAttribute('onclick') === `showSection('${sectionId}')`);
+
+            if (!section) {
+                showAlert('This section is not available yet.', 'error');
+                return;
+            }
+
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
             
-            document.getElementById(sectionId).classList.add('active');
-            event.target.classList.add('active');
+            section.classList.add('active');
+            if (activeLink) activeLink.classList.add('active');
             
             // Load data for specific sections
             if (sectionId === 'documents') loadDocuments();
             if (sectionId === 'templates') loadTemplates();
+            if (sectionId === 'email' || sectionId === 'sms') loadDocuments();
         }
 
         // Load Templates
@@ -674,16 +684,20 @@
                 const response = await fetch('/api/legal/templates', {
                     headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
+                if (!response.ok) throw new Error(`Request failed (${response.status})`);
                 const data = await response.json();
-                
+                const templates = data.templates || [];
                 const grid = document.getElementById('templateGrid');
-                grid.innerHTML = data.templates.map(t => `
-                    <div class="template-card" onclick="selectTemplate('${t.id}')">
+                const select = document.getElementById('templateSelect');
+                grid.innerHTML = templates.map(t => `
+                    <div class="template-card" onclick="selectTemplate('${getTemplateId(t)}')">
                         <h3>${t.name}</h3>
                         <span class="category">${t.category}</span>
                         <p>${t.description}</p>
                     </div>
                 `).join('');
+                select.innerHTML = '<option value="">Choose a template...</option>' +
+                    templates.map(t => `<option value="${getTemplateId(t)}">${t.name}</option>`).join('');
             } catch (error) {
                 showAlert('Error loading templates: ' + error.message, 'error');
             }
@@ -695,10 +709,11 @@
                 const response = await fetch('/api/legal/documents', {
                     headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
+                if (!response.ok) throw new Error(`Request failed (${response.status})`);
                 const data = await response.json();
-                
+                const documents = data.documents || [];
                 const list = document.getElementById('documentList');
-                list.innerHTML = data.documents.map(d => `
+                list.innerHTML = documents.map(d => `
                     <div class="document-item">
                         <div class="document-icon">📄</div>
                         <div class="document-info">
@@ -712,6 +727,7 @@
                         </div>
                     </div>
                 `).join('');
+                populateDocumentSelects(documents);
             } catch (error) {
                 showAlert('Error loading documents: ' + error.message, 'error');
             }
@@ -720,6 +736,272 @@
         // Helper Functions
         function getToken() {
             return localStorage.getItem('auth_token') || 'demo-token';
+        }
+
+        function getTemplateId(template) {
+            if (template.id) return template.id;
+            const filename = String(template.file_path || '').split(/[\\/]/).pop() || '';
+            return filename.replace(/_template\.[^.]+$/, '');
+        }
+
+        async function apiRequest(url, options = {}) {
+            const headers = {
+                'Authorization': `Bearer ${getToken()}`,
+                ...options.headers
+            };
+            if (options.body && !(options.body instanceof FormData)) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            const response = await fetch(url, { ...options, headers });
+            const contentType = response.headers.get('content-type') || '';
+            const data = contentType.includes('application/json') ? await response.json() : null;
+            if (!response.ok) {
+                throw new Error(data?.error || `Request failed (${response.status})`);
+            }
+            return { response, data };
+        }
+
+        function populateDocumentSelects(documents) {
+            const options = '<option value="">Choose a document...</option>' +
+                documents.map(document => `<option value="${document.name}">${document.name}</option>`).join('');
+            document.getElementById('emailDocument').innerHTML = options;
+            document.getElementById('smsDocument').innerHTML = options;
+        }
+
+        async function selectTemplate(templateId) {
+            document.getElementById('templateSelect').value = templateId;
+            showSection('generate');
+            await loadTemplateFields();
+        }
+
+        async function loadTemplateFields() {
+            const templateId = document.getElementById('templateSelect').value;
+            const formFields = document.getElementById('formFields');
+            formFields.innerHTML = '';
+            if (!templateId) return;
+
+            try {
+                const { data } = await apiRequest(`/api/legal/templates/${encodeURIComponent(templateId)}`);
+                const fields = data.template?.fields || [];
+                formFields.innerHTML = fields.map(field => `
+                    <div class="form-group">
+                        <label for="field-${field}">${field.replace(/_/g, ' ')}:</label>
+                        <input type="text" id="field-${field}" name="${field}">
+                    </div>
+                `).join('');
+            } catch (error) {
+                showAlert('Error loading template fields: ' + error.message, 'error');
+            }
+        }
+
+        async function generateDocument() {
+            const templateId = document.getElementById('templateSelect').value;
+            if (!templateId) {
+                showAlert('Choose a template before generating a document.', 'error');
+                return;
+            }
+            const formData = Object.fromEntries(
+                Array.from(document.querySelectorAll('#formFields input')).map(input => [input.name, input.value])
+            );
+
+            try {
+                const { data } = await apiRequest('/api/legal/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        template_id: templateId,
+                        form_data: formData,
+                        format: document.getElementById('format').value
+                    })
+                });
+                showAlert(`Document generated: ${data.file}`, 'success');
+                loadDocuments();
+            } catch (error) {
+                showAlert('Error generating document: ' + error.message, 'error');
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('templateSelect').value = '';
+            document.getElementById('formFields').innerHTML = '';
+            document.getElementById('format').value = 'docx';
+        }
+
+        async function uploadPdfFiles(requireSingle = false) {
+            const files = Array.from(document.getElementById('pdfFile').files);
+            if (!files.length || (requireSingle && files.length !== 1)) {
+                throw new Error(requireSingle ? 'Select exactly one PDF file.' : 'Select at least one PDF file.');
+            }
+            return Promise.all(files.map(async file => {
+                const formData = new FormData();
+                formData.append('file', file);
+                const { data } = await apiRequest('/api/legal/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                return data.path || data.filename;
+            }));
+        }
+
+        async function mergePDFs() {
+            try {
+                const pdfPaths = await uploadPdfFiles();
+                const { data } = await apiRequest('/api/legal/pdf/merge', {
+                    method: 'POST',
+                    body: JSON.stringify({ pdf_paths: pdfPaths })
+                });
+                showAlert(data.message || 'PDFs merged successfully.', 'success');
+                loadDocuments();
+            } catch (error) {
+                showAlert('Error merging PDFs: ' + error.message, 'error');
+            }
+        }
+
+        async function splitPDF() {
+            try {
+                const [pdfPath] = await uploadPdfFiles(true);
+                const { data } = await apiRequest('/api/legal/pdf/split', {
+                    method: 'POST',
+                    body: JSON.stringify({ pdf_path: pdfPath })
+                });
+                showAlert(data.message || 'PDF split successfully.', 'success');
+                loadDocuments();
+            } catch (error) {
+                showAlert('Error splitting PDF: ' + error.message, 'error');
+            }
+        }
+
+        async function addWatermark() {
+            const watermarkText = window.prompt('Watermark text:', 'CONFIDENTIAL');
+            if (!watermarkText) return;
+
+            try {
+                const [pdfPath] = await uploadPdfFiles(true);
+                const { data } = await apiRequest('/api/legal/pdf/watermark', {
+                    method: 'POST',
+                    body: JSON.stringify({ pdf_path: pdfPath, watermark_text: watermarkText })
+                });
+                showAlert(data.message || 'Watermark added successfully.', 'success');
+                loadDocuments();
+            } catch (error) {
+                showAlert('Error adding watermark: ' + error.message, 'error');
+            }
+        }
+
+        async function sendEmail() {
+            const recipient = document.getElementById('emailRecipient').value;
+            const documentName = document.getElementById('emailDocument').value;
+            if (!recipient || !documentName) {
+                showAlert('Choose a document and enter a recipient email address.', 'error');
+                return;
+            }
+            try {
+                await apiRequest('/api/legal/email/send', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        document_path: documentName,
+                        recipient_email: recipient,
+                        subject: document.getElementById('emailSubject').value,
+                        message: document.getElementById('emailMessage').value
+                    })
+                });
+                showAlert('Email sent successfully.', 'success');
+            } catch (error) {
+                showAlert('Error sending email: ' + error.message, 'error');
+            }
+        }
+
+        async function sendSMS() {
+            const recipient = document.getElementById('smsRecipient').value;
+            const documentName = document.getElementById('smsDocument').value;
+            if (!recipient || !documentName) {
+                showAlert('Choose a document and enter a recipient phone number.', 'error');
+                return;
+            }
+            try {
+                await apiRequest('/api/legal/sms/send', {
+                    method: 'POST',
+                    body: JSON.stringify({ document_path: documentName, recipient_number: recipient })
+                });
+                showAlert('SMS sent successfully.', 'success');
+            } catch (error) {
+                showAlert('Error sending SMS: ' + error.message, 'error');
+            }
+        }
+
+        async function downloadDocument(documentName) {
+            try {
+                const { response } = await apiRequest(`/api/legal/download/${encodeURIComponent(documentName)}`);
+                const url = URL.createObjectURL(await response.blob());
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = documentName;
+                link.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                showAlert('Error downloading document: ' + error.message, 'error');
+            }
+        }
+
+        function shareDocument(documentName) {
+            showSection('email');
+            document.getElementById('emailDocument').value = documentName;
+            showAlert('Complete the email form to share this document.', 'info');
+        }
+
+        async function deleteDocument(documentName) {
+            if (!window.confirm(`Delete "${documentName}"?`)) return;
+
+            try {
+                await apiRequest(`/api/legal/delete/${encodeURIComponent(documentName)}`, { method: 'DELETE' });
+                showAlert('Document deleted successfully.', 'success');
+                loadDocuments();
+            } catch (error) {
+                showAlert('Error deleting document: ' + error.message, 'error');
+            }
+        }
+
+        function configureEmail() {
+            showConfigurationForm('Configure Email', `
+                <form>
+                    <div class="form-group"><label>SMTP Server:<input name="smtp_server" required></label></div>
+                    <div class="form-group"><label>SMTP Port:<input name="smtp_port" type="number" value="587" required></label></div>
+                    <div class="form-group"><label>Email:<input name="email" type="email" required></label></div>
+                    <div class="form-group"><label>Password:<input name="password" type="password" required></label></div>
+                    <button class="btn-primary" type="submit">Save</button>
+                </form>
+            `, '/api/legal/email/setup');
+        }
+
+        function configureSMS() {
+            showConfigurationForm('Configure SMS', `
+                <form>
+                    <div class="form-group"><label>Account SID:<input name="twilio_account_sid" required></label></div>
+                    <div class="form-group"><label>Auth Token:<input name="twilio_auth_token" type="password" required></label></div>
+                    <div class="form-group"><label>From Number:<input name="from_number" type="tel" required></label></div>
+                    <button class="btn-primary" type="submit">Save</button>
+                </form>
+            `, '/api/legal/sms/setup');
+        }
+
+        function showConfigurationForm(title, content, endpoint) {
+            document.getElementById('configTitle').textContent = title;
+            const container = document.getElementById('configForm');
+            container.innerHTML = content;
+            container.querySelector('form').addEventListener('submit', async event => {
+                event.preventDefault();
+                const values = Object.fromEntries(new FormData(event.currentTarget));
+                if (values.smtp_port) values.smtp_port = Number(values.smtp_port);
+
+                try {
+                    await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(values) });
+                    closeModal();
+                    showAlert(`${title} saved successfully.`, 'success');
+                } catch (error) {
+                    showAlert(`Error saving configuration: ${error.message}`, 'error');
+                }
+            });
+            document.getElementById('configModal').classList.add('show');
         }
 
         function showAlert(message, type = 'info') {

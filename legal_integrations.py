@@ -26,7 +26,8 @@ class LegalEmailService:
         self.email_notifier = email_notifier
         self.db = db_session
     
-    def send_document(self, document_path: str, recipient_email: str, 
+    def send_document(self, document_path: Optional[str] = None,
+                     recipient_email: str = "",
                      subject: str = "Legal Document", message: str = "",
                      cc: Optional[List[str]] = None, 
                      bcc: Optional[List[str]] = None) -> Dict:
@@ -34,7 +35,7 @@ class LegalEmailService:
         Send legal document via email using existing email service.
         
         Args:
-            document_path: Path to document file
+            document_path: Optional path to document file
             recipient_email: Recipient email address
             subject: Email subject
             message: Email message body
@@ -45,21 +46,44 @@ class LegalEmailService:
             Dictionary with status and message_id
         """
         try:
-            if not Path(document_path).exists():
+            if not recipient_email:
+                raise ValueError("Recipient email is required")
+
+            if document_path and not Path(document_path).exists():
                 raise FileNotFoundError(f"Document not found: {document_path}")
             
             # Use existing email_notifier if available
             if self.email_notifier:
-                result = self.email_notifier.send_with_attachment(
-                    to=recipient_email,
-                    subject=subject,
-                    message=message,
-                    attachment_path=document_path,
-                    cc=cc,
-                    bcc=bcc
+                send_with_attachment = getattr(
+                    self.email_notifier, "send_with_attachment", None
                 )
+                if document_path and callable(send_with_attachment):
+                    result = send_with_attachment(
+                        to=recipient_email,
+                        subject=subject,
+                        message=message,
+                        attachment_path=document_path,
+                        cc=cc,
+                        bcc=bcc
+                    )
+                else:
+                    send_email = getattr(self.email_notifier, "send_email", None)
+                    if not callable(send_email):
+                        raise AttributeError(
+                            "Email notifier does not provide a supported send method"
+                        )
+                    if document_path:
+                        logger.warning(
+                            "Email notifier does not support attachments; "
+                            "sending document notification without attachment"
+                        )
+                    result = send_email(recipient_email, subject, message)
+
+                if isinstance(result, dict):
+                    return result
+
                 logger.info(f"Document emailed to {recipient_email}: {result}")
-                return result
+                return {"status": "success" if result else "error"}
             else:
                 logger.warning("Email service not initialized")
                 return {"status": "error", "message": "Email service not available"}
@@ -272,7 +296,7 @@ class LegalNotificationService:
         
         if self.email and user_email:
             result["email"] = self.email.send_document(
-                "",  # No attachment for notification
+                None,
                 user_email,
                 subject="Document Generated",
                 message=email_message
@@ -297,7 +321,7 @@ class LegalNotificationService:
         
         if self.email and recipient_email:
             result["email"] = self.email.send_document(
-                "",
+                None,
                 recipient_email,
                 subject=f"Document Shared: {document_name}",
                 message=f"{email_message}\n\nDownload: {download_url}"

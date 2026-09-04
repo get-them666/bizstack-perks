@@ -149,14 +149,14 @@ Base.metadata.create_all(engine)
 
 - [ ] Database tables created successfully
 
-### Phase 5: Flask Integration (10 minutes)
+### Phase 5: FastAPI Integration (10 minutes)
 In your main `app.py`:
 
 ```python
-from legal_routes import legal_bp
+from legal_routes import legal_router
 
-# Register blueprint
-app.register_blueprint(legal_bp)
+# Register router
+app.include_router(legal_router)
 
 # Initialize database
 from legal_models import Base

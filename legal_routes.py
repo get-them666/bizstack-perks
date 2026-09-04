@@ -1,114 +1,148 @@
 """
-Flask/FastAPI routes for Legal Document Business Writer
-Integrates with the main application for web-based document management.
+FastAPI routes for Legal Document Business Writer.
 """
 
-from flask import Blueprint, request, jsonify, send_file, render_template
-from werkzeug.utils import secure_filename
-from functools import wraps
+import hmac
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
+from uuid import uuid4
 
-from legal_document_writer import LegalDocumentWriter, PDFHandler, FormHandler
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, JSONResponse
+from werkzeug.utils import secure_filename
+
+from legal_document_writer import LegalDocumentWriter
 
 
-legal_bp = Blueprint('legal', __name__, url_prefix='/api/legal')
+legal_router = APIRouter(prefix="/api/legal", tags=["legal"])
 logger = logging.getLogger(__name__)
 
-# Initialize document writer
 doc_writer = LegalDocumentWriter({
     "library_path": "./legal_templates",
-    "documents_dir": "./generated_documents"
+    "documents_dir": "./generated_documents",
 })
 
-ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt', 'json'}
-UPLOAD_FOLDER = "./uploaded_documents"
-Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
+ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
+UPLOAD_FOLDER = Path("./uploaded_documents").resolve()
+UPLOAD_FOLDER.mkdir(exist_ok=True)
+LEGAL_API_TOKEN = os.getenv("LEGAL_API_TOKEN", "")
 
 
-def internal_error():
+def json_response(content: dict, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(content=jsonable_encoder(content), status_code=status_code)
+
+
+def internal_error() -> JSONResponse:
     """Log implementation details without returning them to API consumers."""
     logger.exception("Legal document request failed")
-    return jsonify({"error": "Internal server error"}), 500
+    return json_response({"error": "Internal server error"}, 500)
 
 
-def resolve_stored_file(file_path):
-    """Only allow PDF operations on files managed by this application."""
-    safe_filename = secure_filename(os.path.basename(str(file_path)))
+def resolve_stored_file(file_reference: str) -> Path:
+    """Look up a PDF by its managed filename without constructing a client path."""
+    safe_filename = secure_filename(str(file_reference).replace("\\", "/").rsplit("/", 1)[-1])
     if not safe_filename:
         raise ValueError("A valid filename is required")
 
-    managed_directories = (Path(UPLOAD_FOLDER).resolve(), doc_writer.documents_dir)
-    for directory in managed_directories:
-        candidate = directory / safe_filename
-        if candidate.is_file():
-            return candidate
+    for directory in (UPLOAD_FOLDER, doc_writer.documents_dir):
+        try:
+            return next(
+                stored_file
+                for stored_file in directory.iterdir()
+                if (
+                    stored_file.is_file()
+                    and stored_file.name == safe_filename
+                    and stored_file.suffix.lower() == ".pdf"
+                )
+            )
+        except StopIteration:
+            continue
 
     raise FileNotFoundError("File not found")
 
 
-def allowed_file(filename):
-    """Check if file extension is allowed."""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def allowed_file(filename: Optional[str]) -> bool:
+    """Check if a filename has an allowed extension."""
+    return bool(filename and "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS)
 
 
-def require_auth(f):
-    """Decorator for routes requiring authentication."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"error": "Unauthorized"}), 401
-        return f(*args, **kwargs)
-    return decorated_function
+def is_pdf(filename: Optional[str]) -> bool:
+    return bool(filename and filename.lower().endswith(".pdf"))
+
+
+def save_upload(file: UploadFile, *, pdf_only: bool = False) -> Path:
+    filename = file.filename
+    if not allowed_file(filename) or (pdf_only and not is_pdf(filename)):
+        raise ValueError("PDF file required" if pdf_only else "File type not allowed")
+
+    extension = filename.rsplit(".", 1)[1].lower()
+    destination = UPLOAD_FOLDER / f"{uuid4().hex}.{extension}"
+    with destination.open("wb") as output:
+        shutil.copyfileobj(file.file, output)
+    return destination
+
+
+def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
+    """Require a configured Bearer token for protected legal endpoints."""
+    scheme, _, token = (authorization or "").partition(" ")
+    if (
+        scheme != "Bearer"
+        or not token
+        or not LEGAL_API_TOKEN
+        or not hmac.compare_digest(token, LEGAL_API_TOKEN)
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 # ============================================================================
 # Template Management Routes
 # ============================================================================
 
-@legal_bp.route('/templates', methods=['GET'])
-def list_templates():
+@legal_router.get("/templates")
+def list_templates(category: Optional[str] = None):
     """List all available legal document templates."""
     try:
-        category = request.args.get('category')
         templates = doc_writer.library.list_templates(category=category)
-        
-        return jsonify({
+        return json_response({
             "status": "success",
             "count": len(templates),
-            "templates": templates
-        }), 200
+            "templates": templates,
+        })
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/templates/categories', methods=['GET'])
+@legal_router.get("/templates/categories")
 def list_categories():
     """List all document categories."""
     try:
-        categories = doc_writer.library.list_categories()
-        return jsonify({
+        return json_response({
             "status": "success",
-            "categories": categories
-        }), 200
+            "categories": doc_writer.library.list_categories(),
+        })
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/templates/<template_id>', methods=['GET'])
-def get_template(template_id):
+@legal_router.get("/templates/{template_id}")
+def get_template(template_id: str):
     """Get specific template details."""
     try:
-        template = doc_writer.library.get_template(template_id)
-        return jsonify({
+        return json_response({
             "status": "success",
-            "template": template
-        }), 200
+            "template": doc_writer.library.get_template(template_id),
+        })
     except ValueError:
-        return jsonify({"error": "Template not found"}), 404
+        return json_response({"error": "Template not found"}, 404)
     except Exception:
         return internal_error()
 
@@ -117,89 +151,74 @@ def get_template(template_id):
 # Document Generation Routes
 # ============================================================================
 
-@legal_bp.route('/generate', methods=['POST'])
-@require_auth
-def generate_document():
+@legal_router.post("/generate", status_code=201)
+def generate_document(data: dict, _: None = Depends(require_auth)):
     """Generate a new document from template with provided data."""
     try:
-        data = request.get_json()
-        
-        if not data or 'template_id' not in data or 'form_data' not in data:
-            return jsonify({"error": "Missing template_id or form_data"}), 400
-        
-        template_id = data['template_id']
-        form_data = data['form_data']
-        format_type = data.get('format', 'docx')
-        filename = data.get('filename')
-        
-        result = doc_writer.generate_document(template_id, form_data, format_type, filename)
-        
-        if result['status'] == 'success':
-            return jsonify({
-                "status": "success",
-                "template": result["template"],
-                "file": result["file"],
-                "format": result["format"],
-                "size": result["size"],
-            }), 201
-        else:
-            return jsonify({"error": "Unable to generate document"}), 400
+        if "template_id" not in data or "form_data" not in data:
+            return json_response({"error": "Missing template_id or form_data"}, 400)
+
+        result = doc_writer.generate_document(
+            data["template_id"],
+            data["form_data"],
+            data.get("format", "docx"),
+            data.get("filename"),
+        )
+        if result["status"] != "success":
+            return json_response({"error": "Unable to generate document"}, 400)
+
+        return json_response({
+            "status": "success",
+            "template": result["template"],
+            "file": result["file"],
+            "format": result["format"],
+            "size": result["size"],
+        }, 201)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/documents', methods=['GET'])
-@require_auth
-def list_generated_documents():
+@legal_router.get("/documents")
+def list_generated_documents(_: None = Depends(require_auth)):
     """List all generated documents."""
     try:
         documents = doc_writer.list_generated_documents()
-        return jsonify({
+        return json_response({
             "status": "success",
             "count": len(documents),
-            "documents": documents
-        }), 200
+            "documents": documents,
+        })
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/download/<document_name>', methods=['GET'])
-@require_auth
-def download_document(document_name):
+@legal_router.get("/download/{document_name}")
+def download_document(document_name: str, _: None = Depends(require_auth)):
     """Download a generated document."""
     try:
-        document_name = secure_filename(document_name)
-        file_path = doc_writer.resolve_document_path(
-            document_name, require_exists=False
-        )
-        
+        safe_name = secure_filename(document_name)
+        if not safe_name:
+            return json_response({"error": "Invalid document name"}, 400)
+        file_path = doc_writer.resolve_document_path(safe_name, require_exists=False)
         if not file_path.is_file():
-            return jsonify({"error": "Document not found"}), 404
-        
-        return send_file(
-            str(file_path),
-            as_attachment=True,
-            download_name=document_name
-        )
+            return json_response({"error": "Document not found"}, 404)
+        return FileResponse(file_path, filename=safe_name)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/delete/<document_name>', methods=['DELETE'])
-@require_auth
-def delete_document(document_name):
+@legal_router.delete("/delete/{document_name}")
+def delete_document(document_name: str, _: None = Depends(require_auth)):
     """Delete a generated document."""
     try:
-        document_name = secure_filename(document_name)
-        file_path = doc_writer.resolve_document_path(
-            document_name, require_exists=False
-        )
-        
+        safe_name = secure_filename(document_name)
+        if not safe_name:
+            return json_response({"error": "Invalid document name"}, 400)
+        file_path = doc_writer.resolve_document_path(safe_name, require_exists=False)
         if not file_path.is_file():
-            return jsonify({"error": "Document not found"}), 404
-        
+            return json_response({"error": "Document not found"}, 404)
         file_path.unlink()
-        return jsonify({"status": "success", "message": "Document deleted"}), 200
+        return json_response({"status": "success", "message": "Document deleted"})
     except Exception:
         return internal_error()
 
@@ -208,98 +227,79 @@ def delete_document(document_name):
 # PDF Handling Routes
 # ============================================================================
 
-@legal_bp.route('/pdf/read', methods=['POST'])
-@require_auth
-def read_pdf():
-    """Read and extract content from PDF."""
+@legal_router.post("/pdf/read")
+def read_pdf(file: UploadFile = File(...), _: None = Depends(require_auth)):
+    """Read and extract content from a PDF."""
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['file']
-        if not allowed_file(file.filename):
-            return jsonify({"error": "File type not allowed"}), 400
-        
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-        
+        filepath = save_upload(file, pdf_only=True)
         if not doc_writer.pdf_handler:
-            return jsonify({"error": "PDF support not available"}), 501
-        
-        result = doc_writer.pdf_handler.read_pdf(filepath)
-        return jsonify(result), 200
+            return json_response({"error": "PDF support not available"}, 501)
+        return json_response(doc_writer.pdf_handler.read_pdf(str(filepath)))
+    except ValueError as exc:
+        return json_response({"error": str(exc)}, 400)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/pdf/merge', methods=['POST'])
-@require_auth
-def merge_pdfs():
-    """Merge multiple PDF files."""
+@legal_router.post("/pdf/merge", status_code=201)
+def merge_pdfs(data: dict, _: None = Depends(require_auth)):
+    """Merge multiple managed PDF files."""
     try:
-        data = request.get_json()
-        if not data or 'pdf_paths' not in data:
-            return jsonify({"error": "Missing pdf_paths"}), 400
-
-        if not isinstance(data['pdf_paths'], list):
-            return jsonify({"error": "pdf_paths must be a list"}), 400
-
-        pdf_paths = [str(resolve_stored_file(path)) for path in data['pdf_paths']]
-        output_filename = data.get('output_name', f"merged_{datetime.now().timestamp()}.pdf")
+        if not isinstance(data.get("pdf_paths"), list):
+            return json_response({"error": "pdf_paths must be a list"}, 400)
+        pdf_paths = [str(resolve_stored_file(path)) for path in data["pdf_paths"]]
+        output_filename = data.get("output_name", f"merged_{datetime.now().timestamp()}.pdf")
         output_path = str(doc_writer.create_output_path(output_filename, "pdf"))
-        
         if not doc_writer.pdf_handler:
-            return jsonify({"error": "PDF support not available"}), 501
-        
-        result = doc_writer.pdf_handler.merge_pdfs(pdf_paths, output_path)
-        return jsonify(result), 201
+            return json_response({"error": "PDF support not available"}, 501)
+        return json_response(doc_writer.pdf_handler.merge_pdfs(pdf_paths, output_path), 201)
+    except (ValueError, FileNotFoundError):
+        return json_response({"error": "PDF not found"}, 404)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/pdf/split', methods=['POST'])
-@require_auth
-def split_pdf():
-    """Split PDF into individual pages."""
+@legal_router.post("/pdf/split", status_code=201)
+def split_pdf(data: dict, _: None = Depends(require_auth)):
+    """Split a managed PDF into individual pages."""
     try:
-        data = request.get_json()
-        if not data or 'pdf_path' not in data:
-            return jsonify({"error": "Missing pdf_path"}), 400
-        
-        pdf_path = str(resolve_stored_file(data['pdf_path']))
-        pages = data.get('pages')
+        if "pdf_path" not in data:
+            return json_response({"error": "Missing pdf_path"}, 400)
+        pdf_path = str(resolve_stored_file(data["pdf_path"]))
         output_dir = str(doc_writer.documents_dir / f"split_{datetime.now().timestamp()}")
-        
         if not doc_writer.pdf_handler:
-            return jsonify({"error": "PDF support not available"}), 501
-        
-        result = doc_writer.pdf_handler.split_pdf(pdf_path, output_dir, pages)
-        return jsonify(result), 201
+            return json_response({"error": "PDF support not available"}, 501)
+        return json_response(
+            doc_writer.pdf_handler.split_pdf(pdf_path, output_dir, data.get("pages")),
+            201,
+        )
+    except ValueError:
+        return json_response({"error": "Invalid PDF filename"}, 400)
+    except FileNotFoundError:
+        return json_response({"error": "PDF not found"}, 404)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/pdf/watermark', methods=['POST'])
-@require_auth
-def add_watermark():
-    """Add watermark to PDF."""
+@legal_router.post("/pdf/watermark", status_code=201)
+def add_watermark(data: dict, _: None = Depends(require_auth)):
+    """Add a watermark to a managed PDF."""
     try:
-        data = request.get_json()
-        required = ['pdf_path', 'watermark_text']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
-        pdf_path = str(resolve_stored_file(data['pdf_path']))
-        watermark_text = data['watermark_text']
-        output_filename = data.get('output_name', f"watermarked_{datetime.now().timestamp()}.pdf")
+        if "pdf_path" not in data or "watermark_text" not in data:
+            return json_response({"error": "Missing required fields: ['pdf_path', 'watermark_text']"}, 400)
+        pdf_path = str(resolve_stored_file(data["pdf_path"]))
+        output_filename = data.get("output_name", f"watermarked_{datetime.now().timestamp()}.pdf")
         output_path = str(doc_writer.create_output_path(output_filename, "pdf"))
-        
         if not doc_writer.pdf_handler:
-            return jsonify({"error": "PDF support not available"}), 501
-        
-        result = doc_writer.pdf_handler.add_watermark(pdf_path, watermark_text, output_path)
-        return jsonify(result), 201
+            return json_response({"error": "PDF support not available"}, 501)
+        return json_response(
+            doc_writer.pdf_handler.add_watermark(pdf_path, data["watermark_text"], output_path),
+            201,
+        )
+    except ValueError:
+        return json_response({"error": "Invalid PDF filename"}, 400)
+    except FileNotFoundError:
+        return json_response({"error": "PDF not found"}, 404)
     except Exception:
         return internal_error()
 
@@ -308,172 +308,120 @@ def add_watermark():
 # Form Handling Routes
 # ============================================================================
 
-@legal_bp.route('/form/fields', methods=['POST'])
-@require_auth
-def read_form_fields():
-    """Extract form fields from PDF."""
+@legal_router.post("/form/fields")
+def read_form_fields(file: UploadFile = File(...), _: None = Depends(require_auth)):
+    """Extract fields from a PDF form."""
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['file']
-        if not allowed_file(file.filename):
-            return jsonify({"error": "File type not allowed"}), 400
-        
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-        
+        filepath = save_upload(file, pdf_only=True)
         if not doc_writer.form_handler:
-            return jsonify({"error": "Form support not available"}), 501
-        
-        result = doc_writer.form_handler.read_form_fields(filepath)
-        return jsonify(result), 200
+            return json_response({"error": "Form support not available"}, 501)
+        return json_response(doc_writer.form_handler.read_form_fields(str(filepath)))
+    except ValueError as exc:
+        return json_response({"error": str(exc)}, 400)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/form/fill', methods=['POST'])
-@require_auth
-def fill_form():
-    """Fill form fields with data."""
+@legal_router.post("/form/fill", status_code=201)
+def fill_form(data: dict, _: None = Depends(require_auth)):
+    """Fill fields in a managed PDF form."""
     try:
-        data = request.get_json()
-        required = ['pdf_path', 'form_data']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
-        pdf_path = str(resolve_stored_file(data['pdf_path']))
-        form_data = data['form_data']
-        output_filename = data.get('output_name', f"filled_{datetime.now().timestamp()}.pdf")
+        if "pdf_path" not in data or "form_data" not in data:
+            return json_response({"error": "Missing required fields: ['pdf_path', 'form_data']"}, 400)
+        pdf_path = str(resolve_stored_file(data["pdf_path"]))
+        output_filename = data.get("output_name", f"filled_{datetime.now().timestamp()}.pdf")
         output_path = str(doc_writer.create_output_path(output_filename, "pdf"))
-        
         if not doc_writer.form_handler:
-            return jsonify({"error": "Form support not available"}), 501
-        
-        result = doc_writer.form_handler.fill_form(pdf_path, form_data, output_path)
-        return jsonify(result), 201
-    except Exception:
-        return internal_error()
-
-
-# ============================================================================
-# Email Integration Routes
-# ============================================================================
-
-@legal_bp.route('/email/setup', methods=['POST'])
-@require_auth
-def setup_email():
-    """Setup email configuration."""
-    try:
-        data = request.get_json()
-        required = ['smtp_server', 'smtp_port', 'email', 'password']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
-        doc_writer.setup_email(
-            data['smtp_server'],
-            data['smtp_port'],
-            data['email'],
-            data['password']
+            return json_response({"error": "Form support not available"}, 501)
+        return json_response(
+            doc_writer.form_handler.fill_form(pdf_path, data["form_data"], output_path),
+            201,
         )
-        
-        return jsonify({"status": "success", "message": "Email configured"}), 200
+    except ValueError:
+        return json_response({"error": "Invalid PDF filename"}, 400)
+    except FileNotFoundError:
+        return json_response({"error": "PDF not found"}, 404)
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/email/send', methods=['POST'])
-@require_auth
-def email_document():
-    """Send document via email."""
+# ============================================================================
+# Email and SMS Integration Routes
+# ============================================================================
+
+@legal_router.post("/email/setup")
+def setup_email(data: dict, _: None = Depends(require_auth)):
+    """Set up email configuration."""
     try:
-        data = request.get_json()
-        required = ['document_path', 'recipient_email']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
+        required = ["smtp_server", "smtp_port", "email", "password"]
+        if not all(key in data for key in required):
+            return json_response({"error": f"Missing required fields: {required}"}, 400)
+        doc_writer.setup_email(data["smtp_server"], data["smtp_port"], data["email"], data["password"])
+        return json_response({"status": "success", "message": "Email configured"})
+    except Exception:
+        return internal_error()
+
+
+@legal_router.post("/email/send", status_code=201)
+def email_document(data: dict, _: None = Depends(require_auth)):
+    """Send a generated document by email."""
+    try:
+        if "document_path" not in data or "recipient_email" not in data:
+            return json_response({"error": "Missing required fields: ['document_path', 'recipient_email']"}, 400)
         if not doc_writer.email_integration:
-            return jsonify({"error": "Email not configured"}), 400
-
-        document_name = secure_filename(Path(data['document_path']).name)
+            return json_response({"error": "Email not configured"}, 400)
+        document_name = secure_filename(Path(data["document_path"]).name)
         if not document_name:
-            return jsonify({"error": "Invalid document path"}), 400
-
+            return json_response({"error": "Invalid document path"}, 400)
         result = doc_writer.email_document(
             document_name,
-            data['recipient_email'],
-            data.get('subject', 'Legal Document'),
-            data.get('message', '')
+            data["recipient_email"],
+            data.get("subject", "Legal Document"),
+            data.get("message", ""),
         )
-        
-        if result['status'] == 'success':
-            return jsonify({
+        if result["status"] == "success":
+            return json_response({
                 "status": "success",
                 "recipient": result["recipient"],
                 "document": result["document"],
-            }), 201
-        else:
-            return jsonify({"error": "Unable to send document"}), 400
+            }, 201)
+        return json_response({"error": "Unable to send document"}, 400)
     except Exception:
         return internal_error()
 
 
-# ============================================================================
-# SMS Integration Routes
-# ============================================================================
-
-@legal_bp.route('/sms/setup', methods=['POST'])
-@require_auth
-def setup_sms():
-    """Setup SMS configuration."""
+@legal_router.post("/sms/setup")
+def setup_sms(data: dict, _: None = Depends(require_auth)):
+    """Set up SMS configuration."""
     try:
-        data = request.get_json()
-        required = ['twilio_account_sid', 'twilio_auth_token', 'from_number']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
-        doc_writer.setup_sms(
-            data['twilio_account_sid'],
-            data['twilio_auth_token'],
-            data['from_number']
-        )
-        
-        return jsonify({"status": "success", "message": "SMS configured"}), 200
+        required = ["twilio_account_sid", "twilio_auth_token", "from_number"]
+        if not all(key in data for key in required):
+            return json_response({"error": f"Missing required fields: {required}"}, 400)
+        doc_writer.setup_sms(data["twilio_account_sid"], data["twilio_auth_token"], data["from_number"])
+        return json_response({"status": "success", "message": "SMS configured"})
     except Exception:
         return internal_error()
 
 
-@legal_bp.route('/sms/send', methods=['POST'])
-@require_auth
-def sms_document():
-    """Send document via SMS."""
+@legal_router.post("/sms/send", status_code=201)
+def sms_document(data: dict, _: None = Depends(require_auth)):
+    """Send a generated document by SMS."""
     try:
-        data = request.get_json()
-        required = ['document_path', 'recipient_number']
-        if not data or not all(k in data for k in required):
-            return jsonify({"error": f"Missing required fields: {required}"}), 400
-        
+        if "document_path" not in data or "recipient_number" not in data:
+            return json_response({"error": "Missing required fields: ['document_path', 'recipient_number']"}, 400)
         if not doc_writer.sms_integration:
-            return jsonify({"error": "SMS not configured"}), 400
-
-        document_name = secure_filename(Path(data['document_path']).name)
+            return json_response({"error": "SMS not configured"}, 400)
+        document_name = secure_filename(Path(data["document_path"]).name)
         if not document_name:
-            return jsonify({"error": "Invalid document path"}), 400
-
-        result = doc_writer.sms_document(
-            document_name,
-            data['recipient_number']
-        )
-        
-        if result['status'] == 'success':
-            return jsonify({
+            return json_response({"error": "Invalid document path"}, 400)
+        result = doc_writer.sms_document(document_name, data["recipient_number"])
+        if result["status"] == "success":
+            return json_response({
                 "status": "success",
                 "message_ids": result["message_ids"],
                 "chunks_sent": result["chunks_sent"],
-            }), 201
-        else:
-            return jsonify({"error": "Unable to send document"}), 400
+            }, 201)
+        return json_response({"error": "Unable to send document"}, 400)
     except Exception:
         return internal_error()
 
@@ -482,28 +430,18 @@ def sms_document():
 # File Upload Routes
 # ============================================================================
 
-@legal_bp.route('/upload', methods=['POST'])
-@require_auth
-def upload_document():
+@legal_router.post("/upload", status_code=201)
+def upload_document(file: UploadFile = File(...), _: None = Depends(require_auth)):
     """Upload a document file."""
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['file']
-        if not allowed_file(file.filename):
-            return jsonify({"error": "File type not allowed"}), 400
-        
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, f"{datetime.now().timestamp()}_{filename}")
-        file.save(filepath)
-        
-        return jsonify({
+        filepath = save_upload(file)
+        return json_response({
             "status": "success",
-            "filename": os.path.basename(filepath),
-            "path": filepath,
-            "size": os.path.getsize(filepath)
-        }), 201
+            "document_id": filepath.name,
+            "size": filepath.stat().st_size,
+        }, 201)
+    except ValueError as exc:
+        return json_response({"error": str(exc)}, 400)
     except Exception:
         return internal_error()
 
@@ -512,14 +450,14 @@ def upload_document():
 # Health Check
 # ============================================================================
 
-@legal_bp.route('/health', methods=['GET'])
+@legal_router.get("/health")
 def health_check():
     """Health check endpoint."""
-    return jsonify({
+    return json_response({
         "status": "healthy",
         "service": "Legal Document Writer",
         "pdf_support": bool(doc_writer.pdf_handler),
         "form_support": bool(doc_writer.form_handler),
         "email_configured": bool(doc_writer.email_integration),
-        "sms_configured": bool(doc_writer.sms_integration)
-    }), 200
+        "sms_configured": bool(doc_writer.sms_integration),
+    })

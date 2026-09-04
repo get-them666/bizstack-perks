@@ -20,7 +20,8 @@ Complete guide for integrating the legal document system with bizstack-perks
 3. Copy HTML template:
    - templates/legal_documents.html
 
-4. Create environment file (.env) with settings from legal_config.py
+4. Create environment file (.env) with settings from legal_config.py and a
+   LEGAL_API_TOKEN value for protected legal API endpoints.
 """
 
 
@@ -44,22 +45,22 @@ session = Session()
 """
 
 
-# STEP 3: Flask Integration
+# STEP 3: FastAPI Integration
 # =======================
 
 """
-# In your main Flask application (main.py):
+# In your main FastAPI application (main.py):
 
-from flask import Flask
-from legal_routes import legal_bp
+from fastapi import FastAPI
+from legal_routes import legal_router
 from legal_models import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-app = Flask(__name__)
+app = FastAPI()
 
-# Register legal document blueprint
-app.register_blueprint(legal_bp)
+# Register legal document router
+app.include_router(legal_router)
 
 # Setup database
 engine = create_engine(os.getenv('DATABASE_URL'))

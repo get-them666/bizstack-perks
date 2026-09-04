@@ -485,7 +485,12 @@ class LegalDocumentWriter:
         if not safe_filename:
             raise ValueError("A valid document filename is required")
 
-        resolved_path = self.documents_dir / safe_filename
+        resolved_path = (self.documents_dir / safe_filename).resolve()
+        try:
+            resolved_path.relative_to(self.documents_dir)
+        except ValueError as exc:
+            raise ValueError("Document path must be inside managed document storage") from exc
+
         if require_exists and not resolved_path.is_file():
             raise FileNotFoundError("Document not found")
 
@@ -523,6 +528,19 @@ class LegalDocumentWriter:
             template = self.library.get_template(template_id)
 
             format = str(format).lower()
+            if format not in self.SUPPORTED_OUTPUT_FORMATS:
+                return {"status": "error", "message": "Unsupported document format"}
+            if format == "docx" and not DOCX_SUPPORT:
+                return {
+                    "status": "error",
+                    "message": "DOCX output is unavailable because python-docx is not installed",
+                }
+            if format == "pdf" and not self.pdf_handler:
+                return {
+                    "status": "error",
+                    "message": "PDF output is unavailable because PDF support is not installed",
+                }
+
             if filename is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{template_id}_{timestamp}"
@@ -536,10 +554,11 @@ class LegalDocumentWriter:
                 self._write_docx(content, output_path)
             elif format == "pdf" and self.pdf_handler:
                 self.pdf_handler.write_pdf(content, str(output_path), title=template["name"])
-            else:
-                # Default to text
+            elif format == "txt":
                 with open(output_path, 'w') as f:
                     f.write(content)
+            else:
+                raise ValueError("Unsupported document format")
             
             return {
                 "status": "success",
