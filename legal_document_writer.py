@@ -7,7 +7,6 @@ email/SMS integration for uploads and downloads.
 import os
 import json
 import smtplib
-import base64
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -433,37 +432,6 @@ class SMSIntegration:
             logger.exception("Error sending document SMS")
             return {"status": "error", "message": "Unable to send document"}
     
-    def send_document_base64(self, recipient_number: str, document_path: str) -> Dict:
-        """Send document as base64-encoded SMS (for smaller files)."""
-        try:
-            with open(document_path, 'rb') as f:
-                document_data = base64.b64encode(f.read()).decode('utf-8')
-            
-            # Split into SMS-compatible chunks if needed
-            chunk_size = 140
-            chunks = [document_data[i:i+chunk_size] for i in range(0, len(document_data), chunk_size)]
-            
-            message_ids = []
-            for chunk in chunks[:3]:  # Limit to 3 SMS to avoid excessive charges
-                if self.sms_support:
-                    message_obj = self.client.messages.create(
-                        body=chunk,
-                        from_=self.from_number,
-                        to=recipient_number
-                    )
-                    message_ids.append(message_obj.sid)
-            
-            return {
-                "status": "success",
-                "message_ids": message_ids,
-                "chunks_sent": len(message_ids),
-                "note": "Document sent as encoded data. Recipient can decode with: base64 -d"
-            }
-        except Exception:
-            logger.exception("Error sending document SMS")
-            return {"status": "error", "message": "Unable to send document"}
-
-
 class LegalDocumentWriter:
     """Main class for legal document generation and management."""
 
@@ -622,12 +590,15 @@ class LegalDocumentWriter:
         )
     
     def sms_document(self, file_path: str, recipient_number: str) -> Dict:
-        """Send document via SMS."""
+        """Reject document-content delivery until secure links are configured."""
         if not self.sms_integration:
             return {"status": "error", "message": "SMS not configured"}
-        
-        document_path = self.resolve_document_path(file_path)
-        return self.sms_integration.send_document_base64(recipient_number, str(document_path))
+
+        self.resolve_document_path(file_path)
+        return {
+            "status": "error",
+            "message": "SMS document delivery requires a secure download link; document contents are not sent by SMS",
+        }
     
     def list_generated_documents(self) -> List[Dict]:
         """List all generated documents."""

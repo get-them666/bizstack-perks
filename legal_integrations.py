@@ -67,15 +67,14 @@ class LegalEmailService:
                         bcc=bcc
                     )
                 else:
+                    if document_path:
+                        raise AttributeError(
+                            "Email notifier does not support document attachments"
+                        )
                     send_email = getattr(self.email_notifier, "send_email", None)
                     if not callable(send_email):
                         raise AttributeError(
                             "Email notifier does not provide a supported send method"
-                        )
-                    if document_path:
-                        logger.warning(
-                            "Email notifier does not support attachments; "
-                            "sending document notification without attachment"
                         )
                     result = send_email(recipient_email, subject, message)
 
@@ -187,13 +186,38 @@ class LegalSMSService:
         """
         try:
             default_message = "Your legal document is ready for download"
-            sms_body = f"{message or default_message}\n\n{document_url}"
+            sms_body = message or default_message
+            if document_url:
+                sms_body = f"{sms_body}\n\n{document_url}"
             
             if self.sms_manager:
-                result = self.sms_manager.send_sms(
-                    to=recipient_phone,
-                    message=sms_body
+                is_twilio_manager = (
+                    hasattr(self.sms_manager, "client")
+                    and hasattr(self.sms_manager, "from_number")
                 )
+                if is_twilio_manager:
+                    if not self.sms_manager.is_configured():
+                        return {
+                            "status": "error",
+                            "message": "Twilio SMS service is not configured",
+                        }
+                    sent_message = self.sms_manager.client.messages.create(
+                        body=sms_body,
+                        from_=self.sms_manager.from_number,
+                        to=recipient_phone,
+                    )
+                    result = {
+                        "status": "success",
+                        "message_sid": sent_message.sid,
+                        "phone": recipient_phone,
+                    }
+                else:
+                    result = self.sms_manager.send_sms(
+                        to=recipient_phone,
+                        message=sms_body
+                    )
+                    if isinstance(result, dict) and result.get("status") == "sent":
+                        result = {**result, "status": "success"}
                 logger.info(f"Document link sent to {recipient_phone}")
                 return result
             else:
@@ -217,7 +241,7 @@ class LegalSMSService:
         Returns:
             Send result
         """
-        message = f"{sender_name}: Document '{document_name}' is ready. Download: {download_url}"
+        message = f"{sender_name}: Document '{document_name}' is ready."
         return self.send_document_link(recipient_phone, download_url, message)
 
 
