@@ -689,15 +689,31 @@
                 const templates = data.templates || [];
                 const grid = document.getElementById('templateGrid');
                 const select = document.getElementById('templateSelect');
-                grid.innerHTML = templates.map(t => `
-                    <div class="template-card" onclick="selectTemplate('${getTemplateId(t)}')">
-                        <h3>${t.name}</h3>
-                        <span class="category">${t.category}</span>
-                        <p>${t.description}</p>
-                    </div>
-                `).join('');
-                select.innerHTML = '<option value="">Choose a template...</option>' +
-                    templates.map(t => `<option value="${getTemplateId(t)}">${t.name}</option>`).join('');
+                grid.replaceChildren(...templates.map(template => {
+                    const templateId = getTemplateId(template);
+                    const card = document.createElement('div');
+                    const name = document.createElement('h3');
+                    const category = document.createElement('span');
+                    const description = document.createElement('p');
+
+                    card.className = 'template-card';
+                    card.addEventListener('click', () => selectTemplate(templateId));
+                    name.textContent = template.name;
+                    category.className = 'category';
+                    category.textContent = template.category;
+                    description.textContent = template.description;
+                    card.append(name, category, description);
+                    return card;
+                }));
+
+                const defaultOption = new Option('Choose a template...', '');
+                const templateOptions = templates.map(template => {
+                    const option = new Option();
+                    option.value = getTemplateId(template);
+                    option.textContent = template.name;
+                    return option;
+                });
+                select.replaceChildren(defaultOption, ...templateOptions);
             } catch (error) {
                 showAlert('Error loading templates: ' + error.message, 'error');
             }
