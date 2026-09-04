@@ -11,6 +11,7 @@ from typing import Optional, List
 from urllib.parse import quote
 
 import stripe
+import httpx
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -1107,31 +1108,49 @@ async def scan_registered_banks(
     if not is_authenticated(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     
-    try:
-        # Get all registered sources
-        sources = conn.execute("""
-            SELECT id, bank_name, source_url, product_name, region
-            FROM public_bank_rate_sources
-            ORDER BY added_at DESC
-        """).fetchall()
-        
-        if not sources:
-            return {"scanned": 0, "updated": 0, "message": "No registered sources to scan"}
-        
-        # Update all to "Checked"
+    sources = conn.execute("""
+        SELECT id, bank_name, source_url, product_name, region
+        FROM public_bank_rate_sources
+        ORDER BY added_at DESC
+    """).fetchall()
+    
+    if not sources:
+        return {"scanned": 0, "updated": 0, "message": "No registered sources to scan"}
+    
+    checked = 0
+    failed = 0
+    
+    async with httpx.AsyncClient(timeout=15) as client:
         for source in sources:
-            conn.execute("""
-                UPDATE public_bank_rate_sources
-                SET last_checked_at = CURRENT_TIMESTAMP,
-                    last_check_status = 'Checked'
-                WHERE id = ?
-            """, (source["id"],))
-        
-        conn.commit()
-        return {"scanned": len(sources), "updated": len(sources), "message": f"Scanned {len(sources)} sources. All marked as Checked."}
-    except Exception as e:
-        logger.error(f"Registered bank scan failed: {e}")
-        raise HTTPException(status_code=502, detail="Scan failed") from e
+            try:
+                response = await client.get(source["source_url"], follow_redirects=True)
+                # Mark as Checked if we got a response
+                conn.execute("""
+                    UPDATE public_bank_rate_sources
+                    SET last_checked_at = CURRENT_TIMESTAMP,
+                        last_check_status = 'Checked'
+                    WHERE id = ?
+                """, (source["id"],))
+                checked += 1
+                logger.info(f"Scanned {source['bank_name']}: {response.status_code}")
+            except Exception as e:
+                # Mark as Failed if error
+                conn.execute("""
+                    UPDATE public_bank_rate_sources
+                    SET last_checked_at = CURRENT_TIMESTAMP,
+                        last_check_status = 'Failed'
+                    WHERE id = ?
+                """, (source["id"],))
+                failed += 1
+                logger.warning(f"Failed to scan {source['bank_name']}: {e}")
+    
+    conn.commit()
+    return {
+        "scanned": len(sources),
+        "checked": checked,
+        "failed": failed,
+        "message": f"Scanned {len(sources)} sources: {checked} checked, {failed} failed"
+    }
 
 
 @app.post("/api/automation/run")
