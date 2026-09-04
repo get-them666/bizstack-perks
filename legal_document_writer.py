@@ -219,7 +219,7 @@ class PDFHandler:
             raise IOError("Unable to merge PDFs") from exc
     
     def split_pdf(self, pdf_path: str, output_dir: str, pages: Optional[List[int]] = None) -> Dict:
-        """Split PDF into individual pages or extract specific pages."""
+        """Split PDF into individual pages or extract specific 1-based page numbers."""
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             with open(pdf_path, 'rb') as f:
@@ -227,14 +227,14 @@ class PDFHandler:
                 total_pages = len(reader.pages)
                 
                 if pages is None:
-                    pages = list(range(total_pages))
+                    pages = list(range(1, total_pages + 1))
                 
                 output_files = []
                 for page_num in pages:
-                    if 0 <= page_num < total_pages:
+                    if 1 <= page_num <= total_pages:
                         writer = PdfWriter()
-                        writer.add_page(reader.pages[page_num])
-                        output_file = Path(output_dir) / f"page_{page_num + 1}.pdf"
+                        writer.add_page(reader.pages[page_num - 1])
+                        output_file = Path(output_dir) / f"page_{page_num}.pdf"
                         with open(output_file, 'wb') as out:
                             writer.write(out)
                         output_files.append(str(output_file))
@@ -336,11 +336,14 @@ class FormHandler:
 class EmailIntegration:
     """Handles email sending and receiving with attachments."""
     
-    def __init__(self, smtp_server: str, smtp_port: int, email: str, password: str):
+    def __init__(
+        self, smtp_server: str, smtp_port: int, email: str, password: str, enable_tls: bool = True
+    ):
         self.smtp_server = smtp_server
         self.smtp_port = smtp_port
         self.email = email
         self.password = password
+        self.enable_tls = enable_tls
     
     def send_document(self, recipient_email: str, document_path: str, 
                      subject: str = "Legal Document", message: str = "") -> Dict:
@@ -361,9 +364,15 @@ class EmailIntegration:
                 part.add_header('Content-Disposition', f'attachment; filename= {Path(document_path).name}')
                 msg.attach(part)
             
-            # Send email
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
+            # SMTP port 465 uses implicit TLS; other ports can upgrade with STARTTLS.
+            smtp_class = smtplib.SMTP_SSL if self.smtp_port == 465 else smtplib.SMTP
+            with smtp_class(self.smtp_server, self.smtp_port) as server:
+                if self.smtp_port != 465 and self.enable_tls:
+                    server.ehlo()
+                    if not server.has_extn("starttls"):
+                        return {"status": "error", "message": "SMTP server does not support STARTTLS"}
+                    server.starttls()
+                    server.ehlo()
                 server.login(self.email, self.password)
                 server.send_message(msg)
             
@@ -481,9 +490,13 @@ class LegalDocumentWriter:
             require_exists=False,
         )
 
-    def setup_email(self, smtp_server: str, smtp_port: int, email: str, password: str):
+    def setup_email(
+        self, smtp_server: str, smtp_port: int, email: str, password: str, enable_tls: bool = True
+    ):
         """Setup email integration."""
-        self.email_integration = EmailIntegration(smtp_server, smtp_port, email, password)
+        self.email_integration = EmailIntegration(
+            smtp_server, smtp_port, email, password, enable_tls
+        )
     
     def setup_sms(self, twilio_account_sid: str, twilio_auth_token: str, from_number: str):
         """Setup SMS integration."""

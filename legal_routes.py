@@ -421,7 +421,13 @@ def setup_email(data: dict, _: None = Depends(require_auth)):
         required = ["smtp_server", "smtp_port", "email", "password"]
         if not all(key in data for key in required):
             return json_response({"error": f"Missing required fields: {required}"}, 400)
-        doc_writer.setup_email(data["smtp_server"], data["smtp_port"], data["email"], data["password"])
+        doc_writer.setup_email(
+            data["smtp_server"],
+            data["smtp_port"],
+            data["email"],
+            data["password"],
+            data.get("enable_tls", True),
+        )
         return json_response({"status": "success", "message": "Email configured"})
     except Exception:
         return internal_error()

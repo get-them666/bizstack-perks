@@ -193,13 +193,17 @@ requests.post('http://localhost:5000/api/legal/sms/send',
 """
 # Add this route to serve the web interface:
 
-from flask import render_template
+from fastapi import Request
 
-@app.route('/legal')
-def legal_documents_page():
-    return render_template('legal_documents.html')
+@app.get('/legal')
+def legal_documents_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name='legal_documents.html',
+        context={},
+    )
 
-# Access at: http://localhost:5000/legal
+# Access at: http://localhost:8000/legal
 """
 
 
