@@ -37,6 +37,25 @@ def json_response(content: dict, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content=jsonable_encoder(content), status_code=status_code)
 
 
+def public_file_name(file_reference: str) -> str:
+    """Return a managed filename without exposing its server-side path."""
+    return secure_filename(str(file_reference).replace("\\", "/").rsplit("/", 1)[-1])
+
+
+def public_file_result(result: dict) -> dict:
+    """Replace file-system paths in document operation results with filenames."""
+    public_result = result.copy()
+    for field in ("file", "output"):
+        if field in public_result:
+            public_result[field] = public_file_name(public_result[field])
+    if "output_files" in public_result:
+        public_result["output_files"] = [
+            public_file_name(file_reference)
+            for file_reference in public_result["output_files"]
+        ]
+    return public_result
+
+
 def internal_error() -> JSONResponse:
     """Log implementation details without returning them to API consumers."""
     logger.exception("Legal document request failed")
@@ -170,7 +189,7 @@ def generate_document(data: dict, _: None = Depends(require_auth)):
         return json_response({
             "status": "success",
             "template": result["template"],
-            "file": result["file"],
+            "file": public_file_name(result["file"]),
             "format": result["format"],
             "size": result["size"],
         }, 201)
@@ -182,7 +201,10 @@ def generate_document(data: dict, _: None = Depends(require_auth)):
 def list_generated_documents(_: None = Depends(require_auth)):
     """List all generated documents."""
     try:
-        documents = doc_writer.list_generated_documents()
+        documents = [
+            {key: value for key, value in document.items() if key != "path"}
+            for document in doc_writer.list_generated_documents()
+        ]
         return json_response({
             "status": "success",
             "count": len(documents),
@@ -252,7 +274,10 @@ def merge_pdfs(data: dict, _: None = Depends(require_auth)):
         output_path = str(doc_writer.create_output_path(output_filename, "pdf"))
         if not doc_writer.pdf_handler:
             return json_response({"error": "PDF support not available"}, 501)
-        return json_response(doc_writer.pdf_handler.merge_pdfs(pdf_paths, output_path), 201)
+        return json_response(
+            public_file_result(doc_writer.pdf_handler.merge_pdfs(pdf_paths, output_path)),
+            201,
+        )
     except (ValueError, FileNotFoundError):
         return json_response({"error": "PDF not found"}, 404)
     except Exception:
@@ -270,7 +295,9 @@ def split_pdf(data: dict, _: None = Depends(require_auth)):
         if not doc_writer.pdf_handler:
             return json_response({"error": "PDF support not available"}, 501)
         return json_response(
-            doc_writer.pdf_handler.split_pdf(pdf_path, output_dir, data.get("pages")),
+            public_file_result(
+                doc_writer.pdf_handler.split_pdf(pdf_path, output_dir, data.get("pages"))
+            ),
             201,
         )
     except ValueError:
@@ -293,7 +320,11 @@ def add_watermark(data: dict, _: None = Depends(require_auth)):
         if not doc_writer.pdf_handler:
             return json_response({"error": "PDF support not available"}, 501)
         return json_response(
-            doc_writer.pdf_handler.add_watermark(pdf_path, data["watermark_text"], output_path),
+            public_file_result(
+                doc_writer.pdf_handler.add_watermark(
+                    pdf_path, data["watermark_text"], output_path
+                )
+            ),
             201,
         )
     except ValueError:
@@ -315,7 +346,9 @@ def read_form_fields(file: UploadFile = File(...), _: None = Depends(require_aut
         filepath = save_upload(file, pdf_only=True)
         if not doc_writer.form_handler:
             return json_response({"error": "Form support not available"}, 501)
-        return json_response(doc_writer.form_handler.read_form_fields(str(filepath)))
+        return json_response(
+            public_file_result(doc_writer.form_handler.read_form_fields(str(filepath)))
+        )
     except ValueError as exc:
         return json_response({"error": str(exc)}, 400)
     except Exception:

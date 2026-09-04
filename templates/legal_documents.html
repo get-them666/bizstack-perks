@@ -471,28 +471,28 @@
             <div class="sidebar">
                 <div class="sidebar-section">
                     <h3>📄 Documents</h3>
-                    <a class="sidebar-link active" onclick="showSection('templates')">Templates</a>
-                    <a class="sidebar-link" onclick="showSection('generate')">Generate</a>
-                    <a class="sidebar-link" onclick="showSection('documents')">My Documents</a>
+                    <a class="sidebar-link active" href="#templates" onclick="showSection('templates'); return false;">Templates</a>
+                    <a class="sidebar-link" href="#generate" onclick="showSection('generate'); return false;">Generate</a>
+                    <a class="sidebar-link" href="#documents" onclick="showSection('documents'); return false;">My Documents</a>
                 </div>
 
                 <div class="sidebar-section">
                     <h3>🔧 Tools</h3>
-                    <a class="sidebar-link" onclick="showSection('pdf-tools')">PDF Tools</a>
-                    <a class="sidebar-link" onclick="showSection('form-tools')">Forms</a>
-                    <a class="sidebar-link" onclick="showSection('upload')">Upload</a>
+                    <a class="sidebar-link" href="#pdf-tools" onclick="showSection('pdf-tools'); return false;">PDF Tools</a>
+                    <a class="sidebar-link" href="#form-tools" onclick="showSection('form-tools'); return false;">Forms</a>
+                    <a class="sidebar-link" href="#upload" onclick="showSection('upload'); return false;">Upload</a>
                 </div>
 
                 <div class="sidebar-section">
                     <h3>📧 Share</h3>
-                    <a class="sidebar-link" onclick="showSection('email')">Email</a>
-                    <a class="sidebar-link" onclick="showSection('sms')">SMS</a>
+                    <a class="sidebar-link" href="#email" onclick="showSection('email'); return false;">Email</a>
+                    <a class="sidebar-link" href="#sms" onclick="showSection('sms'); return false;">SMS</a>
                 </div>
 
                 <div class="sidebar-section">
                     <h3>⚙️ Settings</h3>
-                    <a class="sidebar-link" onclick="showSection('settings')">Settings</a>
-                    <a class="sidebar-link" onclick="showSection('help')">Help</a>
+                    <a class="sidebar-link" href="#settings" onclick="showSection('settings'); return false;">Settings</a>
+                    <a class="sidebar-link" href="#help" onclick="showSection('help'); return false;">Help</a>
                 </div>
             </div>
 
@@ -658,8 +658,7 @@
         // Show/Hide Sections
         function showSection(sectionId) {
             const section = document.getElementById(sectionId);
-            const activeLink = Array.from(document.querySelectorAll('.sidebar-link'))
-                .find(link => link.getAttribute('onclick') === `showSection('${sectionId}')`);
+            const activeLink = document.querySelector(`.sidebar-link[href="#${sectionId}"]`);
 
             if (!section) {
                 showAlert('This section is not available yet.', 'error');
@@ -855,7 +854,7 @@
                     method: 'POST',
                     body: formData
                 });
-                return data.path || data.filename;
+                return data.document_id;
             }));
         }
 

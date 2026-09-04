@@ -25,11 +25,12 @@ def check_dependencies():
     print_header("CHECKING DEPENDENCIES")
     
     dependencies = {
-        'flask': 'Flask',
+        'fastapi': 'FastAPI',
         'sqlalchemy': 'SQLAlchemy',
         'PyPDF2': 'PyPDF2',
         'docx': 'python-docx',
         'dotenv': 'python-dotenv',
+        'werkzeug': 'Werkzeug',
     }
     
     missing = []
@@ -171,8 +172,8 @@ def test_api_endpoints():
     try:
         import requests
         
-        # Note: This assumes the Flask app is running
-        base_url = "http://localhost:5000/api/legal"
+        # Note: This assumes the FastAPI app is running.
+        base_url = "http://localhost:8000/api/legal"
         
         print(f"  Testing {base_url}")
         
@@ -187,8 +188,8 @@ def test_api_endpoints():
             else:
                 print(f"  ✗ Health check failed: {response.status_code}")
         except requests.exceptions.ConnectionError:
-            print("  ⚠️  API server not running (http://localhost:5000)")
-            print("     Start your Flask app to enable API testing")
+            print("  ⚠️  API server not running (http://localhost:8000)")
+            print("     Start the FastAPI app to enable API testing")
         
     except ImportError:
         print("  ⚠️  requests library not installed")
@@ -253,9 +254,9 @@ def print_summary(results):
     
     print("\nNext steps:")
     print("  1. Update .env file with your configuration")
-    print("  2. Start your Flask application")
-    print("  3. Access the web interface at: http://localhost:5000/legal")
-    print("  4. API available at: http://localhost:5000/api/legal")
+    print("  2. Start the FastAPI application: uvicorn main:app --reload --port 8000")
+    print("  3. Access the web interface at: http://localhost:8000/legal")
+    print("  4. API available at: http://localhost:8000/api/legal")
     
     print("\nUseful commands:")
     print("  - Generate document: python legal_document_writer.py")
@@ -264,7 +265,7 @@ def print_summary(results):
     print("\nDocumentation:")
     print("  - Setup Guide: LEGAL_SETUP_GUIDE.py")
     print("  - README: LEGAL_DOCUMENTS_README.md")
-    print("  - API Docs: /api/legal/health")
+    print("  - API Docs: http://localhost:8000/docs")
 
 def main():
     """Run initialization."""
