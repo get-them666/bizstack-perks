@@ -8,6 +8,7 @@ import os
 import json
 import smtplib
 import base64
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
@@ -16,6 +17,9 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 from abc import ABC, abstractmethod
+from werkzeug.utils import secure_filename
+
+logger = logging.getLogger(__name__)
 
 try:
     import PyPDF2
@@ -165,8 +169,9 @@ class PDFHandler:
                     })
                 
                 return metadata
-        except Exception as e:
-            raise IOError(f"Error reading PDF: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error reading PDF")
+            raise IOError("Unable to read PDF") from exc
     
     def write_pdf(self, content: str, output_path: str, title: str = "Document"):
         """Create a new PDF from text content."""
@@ -192,8 +197,9 @@ class PDFHandler:
             
             c.save()
             return {"status": "success", "path": output_path}
-        except Exception as e:
-            raise IOError(f"Error writing PDF: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error writing PDF")
+            raise IOError("Unable to write PDF") from exc
     
     def merge_pdfs(self, pdf_paths: List[str], output_path: str) -> Dict:
         """Merge multiple PDFs into one."""
@@ -209,8 +215,9 @@ class PDFHandler:
                 writer.write(f)
             
             return {"status": "success", "output": output_path, "num_pdfs": len(pdf_paths)}
-        except Exception as e:
-            raise IOError(f"Error merging PDFs: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error merging PDFs")
+            raise IOError("Unable to merge PDFs") from exc
     
     def split_pdf(self, pdf_path: str, output_dir: str, pages: Optional[List[int]] = None) -> Dict:
         """Split PDF into individual pages or extract specific pages."""
@@ -234,8 +241,9 @@ class PDFHandler:
                         output_files.append(str(output_file))
                 
                 return {"status": "success", "output_files": output_files}
-        except Exception as e:
-            raise IOError(f"Error splitting PDF: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error splitting PDF")
+            raise IOError("Unable to split PDF") from exc
     
     def add_watermark(self, pdf_path: str, watermark_text: str, output_path: str) -> Dict:
         """Add watermark to PDF."""
@@ -269,8 +277,9 @@ class PDFHandler:
                     writer.write(out)
             
             return {"status": "success", "output": output_path}
-        except Exception as e:
-            raise IOError(f"Error adding watermark: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error adding PDF watermark")
+            raise IOError("Unable to add watermark") from exc
 
 
 class FormHandler:
@@ -290,8 +299,9 @@ class FormHandler:
                 "fields": fields,
                 "num_fields": len(fields)
             }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error reading PDF form fields")
+            return {"status": "error", "message": "Unable to read form fields"}
     
     def fill_form(self, pdf_path: str, form_data: Dict, output_path: str) -> Dict:
         """Fill form fields with data."""
@@ -299,8 +309,9 @@ class FormHandler:
             filled_pdf = pypdfform.fill_form(pdf_path, form_data)
             filled_pdf.write(output_path)
             return {"status": "success", "output": output_path, "fields_filled": len(form_data)}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error filling PDF form")
+            return {"status": "error", "message": "Unable to fill form"}
     
     def create_form_template(self, fields: List[str], output_path: str) -> Dict:
         """Create a new form template with specified fields."""
@@ -318,8 +329,9 @@ class FormHandler:
                 json.dump(template, f, indent=2)
             
             return {"status": "success", "template": template}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error creating form template")
+            return {"status": "error", "message": "Unable to create form template"}
 
 
 class EmailIntegration:
@@ -357,8 +369,9 @@ class EmailIntegration:
                 server.send_message(msg)
             
             return {"status": "success", "recipient": recipient_email, "document": Path(document_path).name}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error sending document email")
+            return {"status": "error", "message": "Unable to send document"}
     
     def send_multiple_documents(self, recipients: List[str], document_paths: List[str],
                                subject: str = "Legal Documents", message: str = "") -> Dict:
@@ -416,8 +429,9 @@ class SMSIntegration:
                 "message_id": message_obj.sid,
                 "recipient": recipient_number
             }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error sending document SMS")
+            return {"status": "error", "message": "Unable to send document"}
     
     def send_document_base64(self, recipient_number: str, document_path: str) -> Dict:
         """Send document as base64-encoded SMS (for smaller files)."""
@@ -445,13 +459,16 @@ class SMSIntegration:
                 "chunks_sent": len(message_ids),
                 "note": "Document sent as encoded data. Recipient can decode with: base64 -d"
             }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error sending document SMS")
+            return {"status": "error", "message": "Unable to send document"}
 
 
 class LegalDocumentWriter:
     """Main class for legal document generation and management."""
-    
+
+    SUPPORTED_OUTPUT_FORMATS = {"docx", "pdf", "txt"}
+
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         self.library = LegalDocumentLibrary(self.config.get("library_path", "./legal_templates"))
@@ -459,9 +476,38 @@ class LegalDocumentWriter:
         self.form_handler = FormHandler() if FORM_SUPPORT else None
         self.email_integration = None
         self.sms_integration = None
-        self.documents_dir = Path(self.config.get("documents_dir", "./generated_documents"))
-        self.documents_dir.mkdir(exist_ok=True)
-    
+        self.documents_dir = Path(self.config.get("documents_dir", "./generated_documents")).resolve()
+        self.documents_dir.mkdir(parents=True, exist_ok=True)
+
+    def resolve_document_path(self, file_path: str, require_exists: bool = True) -> Path:
+        """Return a file path only when it remains inside managed document storage."""
+        candidate = Path(file_path)
+        if not candidate.is_absolute():
+            candidate = self.documents_dir / candidate
+        resolved_path = candidate.resolve()
+
+        if self.documents_dir not in resolved_path.parents:
+            raise ValueError("Document path must be inside the managed documents directory")
+        if require_exists and not resolved_path.is_file():
+            raise FileNotFoundError("Document not found")
+
+        return resolved_path
+
+    def create_output_path(self, filename: str, format_type: str) -> Path:
+        """Create a sanitized path for a generated document."""
+        normalized_format = str(format_type).lower()
+        if normalized_format not in self.SUPPORTED_OUTPUT_FORMATS:
+            raise ValueError("Unsupported document format")
+
+        safe_filename = secure_filename(Path(str(filename)).stem)
+        if not safe_filename:
+            raise ValueError("A valid document filename is required")
+
+        return self.resolve_document_path(
+            f"{safe_filename}.{normalized_format}",
+            require_exists=False,
+        )
+
     def setup_email(self, smtp_server: str, smtp_port: int, email: str, password: str):
         """Setup email integration."""
         self.email_integration = EmailIntegration(smtp_server, smtp_port, email, password)
@@ -470,17 +516,18 @@ class LegalDocumentWriter:
         """Setup SMS integration."""
         self.sms_integration = SMSIntegration(twilio_account_sid, twilio_auth_token, from_number)
     
-    def generate_document(self, template_id: str, data: Dict, 
+    def generate_document(self, template_id: str, data: Dict,
                          format: str = "docx", filename: Optional[str] = None) -> Dict:
         """Generate a document from a template with provided data."""
         try:
             template = self.library.get_template(template_id)
-            
+
+            format = str(format).lower()
             if filename is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{template_id}_{timestamp}"
             
-            output_path = self.documents_dir / f"{filename}.{format}"
+            output_path = self.create_output_path(filename, format)
             
             # Generate document content
             content = self._render_template(template, data)
@@ -501,8 +548,9 @@ class LegalDocumentWriter:
                 "format": format,
                 "size": output_path.stat().st_size
             }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error generating document")
+            return {"status": "error", "message": "Unable to generate document"}
     
     def _render_template(self, template: Dict, data: Dict) -> str:
         """Render template with data."""
@@ -529,11 +577,8 @@ class LegalDocumentWriter:
     def export_document(self, file_path: str, format: str = "pdf") -> Dict:
         """Export document to different format."""
         try:
-            source_path = Path(file_path)
-            if not source_path.exists():
-                raise FileNotFoundError(f"Document not found: {file_path}")
-            
-            output_path = source_path.parent / f"{source_path.stem}.{format}"
+            source_path = self.resolve_document_path(file_path)
+            output_path = self.create_output_path(source_path.stem, format)
             # Conversion logic would go here
             
             return {
@@ -542,8 +587,9 @@ class LegalDocumentWriter:
                 "converted": str(output_path),
                 "format": format
             }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Error exporting document")
+            return {"status": "error", "message": "Unable to export document"}
     
     def email_document(self, file_path: str, recipient: str, subject: str = "Document",
                       message: str = "") -> Dict:
@@ -551,14 +597,18 @@ class LegalDocumentWriter:
         if not self.email_integration:
             return {"status": "error", "message": "Email not configured"}
         
-        return self.email_integration.send_document(recipient, file_path, subject, message)
+        document_path = self.resolve_document_path(file_path)
+        return self.email_integration.send_document(
+            recipient, str(document_path), subject, message
+        )
     
     def sms_document(self, file_path: str, recipient_number: str) -> Dict:
         """Send document via SMS."""
         if not self.sms_integration:
             return {"status": "error", "message": "SMS not configured"}
         
-        return self.sms_integration.send_document_base64(recipient_number, file_path)
+        document_path = self.resolve_document_path(file_path)
+        return self.sms_integration.send_document_base64(recipient_number, str(document_path))
     
     def list_generated_documents(self) -> List[Dict]:
         """List all generated documents."""
