@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combined reports - BizStack Perks</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        header h1 { font-size: 1.3rem; margin: 0; }
+        header a { color: #4fd1ff; text-decoration: none; }
+        main { margin: auto; max-width: 1000px; padding: 24px; }
+        .intro { color: #9db1d1; font-size: 0.9rem; margin-bottom: 24px; }
+        .card { background: #101934; border: 1px solid #27426f; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .card h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 6px; color: #4fd1ff; }
+        .card .subtitle { color: #9db1d1; font-size: 0.85rem; margin-bottom: 18px; }
+        label { display: block; font-weight: bold; font-size: 0.85rem; color: #9db1d1; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+        .field { margin-bottom: 16px; }
+        .row { display: flex; gap: 16px; flex-wrap: wrap; }
+        .row .field { flex: 1; min-width: 160px; }
+        input {
+            width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #27426f;
+            background: #0d1730; color: #f5f7fb; font-size: 0.95rem;
+        }
+        input:focus { outline: none; border-color: #4fd1ff; }
+        .hint { color: #7288a8; font-size: 0.8rem; margin-top: 4px; }
+        .big-button {
+            background: linear-gradient(135deg, #4fd1ff, #1198ff); border: 0; border-radius: 10px;
+            color: #03111d; cursor: pointer; font-weight: bold; padding: 16px 24px; font-size: 1.05rem;
+            width: 100%; margin-top: 8px;
+        }
+        .big-button:hover { transform: translateY(-1px); }
+        .big-button:disabled { background: #2a4258; color: #7288a8; cursor: not-allowed; }
+        .error {
+            background: rgba(255, 91, 91, 0.12); border: 1px solid rgba(255, 91, 91, 0.3);
+            color: #ffb3b3; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 0.9rem;
+        }
+        .loading { color: #9db1d1; font-size: 0.9rem; margin-top: 12px; }
+        .result-card { display: none; margin-top: 20px; }
+        .result-card.visible { display: block; }
+        pre.report-output {
+            background: #0d1730; border: 1px solid #27426f; border-radius: 8px; padding: 20px;
+            white-space: pre-wrap; word-wrap: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.82rem; line-height: 1.5; color: #e6edf7; max-height: 600px; overflow-y: auto;
+        }
+        .result-actions { display: flex; gap: 10px; margin-top: 14px; }
+        .result-actions button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .result-actions button:hover { background: #30363d; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Combined reports</h1>
+        <nav>
+            <a href="/dashboard">Dashboard</a> ·
+            <a href="/admin">Admin workspace</a> ·
+            <a href="/logout">Log out</a>
+        </nav>
+    </header>
+    <main>
+        <p class="intro">
+            One-click reports that pull together output from multiple backend tools into a single
+            document &mdash; one button for a prospective client, one button for a banker/lender contact.
+        </p>
+
+        <!-- Client Report -->
+        <div class="card">
+            <h2>Client Report</h2>
+            <p class="subtitle">Market opportunity write-up + discovered business signals + a ready-to-send outreach draft, all in one document.</p>
+            <div id="client-error" class="error" style="display:none;"></div>
+            <form id="client-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="client-state">State (2-letter)</label>
+                        <input type="text" id="client-state" name="state" placeholder="VA" maxlength="2" required>
+                    </div>
+                    <div class="field">
+                        <label for="client-county">County FIPS (optional)</label>
+                        <input type="text" id="client-county" name="county_fips" placeholder="550">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="client-category">Service category</label>
+                    <input type="text" id="client-category" name="service_category" placeholder="business loans" required>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="client-business">Business name (optional)</label>
+                        <input type="text" id="client-business" name="business_name" placeholder="Coastal Contracting LLC">
+                    </div>
+                    <div class="field">
+                        <label for="client-location">Signal search location (optional)</label>
+                        <input type="text" id="client-location" name="location_for_signals" placeholder="Chesapeake, VA">
+                        <p class="hint">Leave blank to use the area name from the write-up.</p>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="client-sender">Your name (for outreach draft)</label>
+                    <input type="text" id="client-sender" name="sender_name" placeholder="Alex Rivera">
+                </div>
+                <button type="submit" class="big-button" id="client-btn">Generate Client Report</button>
+            </form>
+            <div id="client-loading" class="loading" style="display:none;">Generating client report&hellip; this pulls demographic data, economic data, and scans for live business signals, so it may take a few seconds.</div>
+            <div id="client-result" class="result-card">
+                <pre class="report-output" id="client-output"></pre>
+                <div class="result-actions">
+                    <button type="button" id="client-copy-btn">Copy to clipboard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Banker Report -->
+        <div class="card">
+            <h2>Banker Report</h2>
+            <p class="subtitle">Local bank rate comparison + national lending/economic climate, suited for a banker or lender contact.</p>
+            <div id="banker-error" class="error" style="display:none;"></div>
+            <form id="banker-form">
+                <div class="row">
+                    <div class="field">
+                        <label for="banker-state">State (2-letter)</label>
+                        <input type="text" id="banker-state" name="state" placeholder="VA" maxlength="2" required>
+                    </div>
+                    <div class="field">
+                        <label for="banker-loan-type">Loan type (optional)</label>
+                        <input type="text" id="banker-loan-type" name="loan_type" placeholder="business_term_loan">
+                    </div>
+                </div>
+                <button type="submit" class="big-button" id="banker-btn">Generate Banker Report</button>
+            </form>
+            <div id="banker-loading" class="loading" style="display:none;">Generating banker report&hellip;</div>
+            <div id="banker-result" class="result-card">
+                <pre class="report-output" id="banker-output"></pre>
+                <div class="result-actions">
+                    <button type="button" id="banker-copy-btn">Copy to clipboard</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function wireReportForm(formId, endpoint, errorId, loadingId, resultId, outputId, copyBtnId, btnId) {
+            const form = document.getElementById(formId);
+            const errorBox = document.getElementById(errorId);
+            const loading = document.getElementById(loadingId);
+            const resultCard = document.getElementById(resultId);
+            const output = document.getElementById(outputId);
+            const copyBtn = document.getElementById(copyBtnId);
+            const btn = document.getElementById(btnId);
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                errorBox.style.display = "none";
+                resultCard.classList.remove("visible");
+                loading.style.display = "block";
+                btn.disabled = true;
+
+                try {
+                    const formData = new FormData(form);
+                    const response = await fetch(endpoint, { method: "POST", body: formData, credentials: "same-origin" });
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({ detail: "Request failed" }));
+                        throw new Error(err.detail || `Request failed (${response.status})`);
+                    }
+                    const data = await response.json();
+                    output.textContent = data.report_text;
+                    resultCard.classList.add("visible");
+                } catch (err) {
+                    errorBox.textContent = err.message || "Something went wrong generating the report.";
+                    errorBox.style.display = "block";
+                } finally {
+                    loading.style.display = "none";
+                    btn.disabled = false;
+                }
+            });
+
+            copyBtn.addEventListener("click", () => {
+                navigator.clipboard.writeText(output.textContent).then(() => {
+                    copyBtn.textContent = "Copied!";
+                    setTimeout(() => { copyBtn.textContent = "Copy to clipboard"; }, 1500);
+                });
+            });
+        }
+
+        wireReportForm("client-form", "/api/reports/client", "client-error", "client-loading", "client-result", "client-output", "client-copy-btn", "client-btn");
+        wireReportForm("banker-form", "/api/reports/banker", "banker-error", "banker-loading", "banker-result", "banker-output", "banker-copy-btn", "banker-btn");
+    </script>
+</body>
+</html>

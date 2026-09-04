@@ -1046,6 +1046,96 @@ async def estimate_taxes(
     return result
 
 
+@app.get("/admin/reports", response_class=HTMLResponse)
+async def combined_reports_page(request: Request):
+    """
+    One-click combined reports: a Client Report (market write-up + business
+    signals + outreach draft) and a Banker Report (bank rate comparison +
+    lending climate), each assembled from multiple existing backend tools
+    into a single document. Login-protected, same pattern as the other
+    backend tools.
+    """
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    return templates.TemplateResponse(request=request, name="combined_reports.html", context={})
+
+
+@app.post("/api/reports/client")
+async def create_client_report(
+    state: str = Form(...),
+    service_category: str = Form(...),
+    county_fips: Optional[str] = Form(default=None),
+    business_name: Optional[str] = Form(default=None),
+    location_for_signals: Optional[str] = Form(default=None),
+    sender_name: Optional[str] = Form(default=None),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """One-click Client Report: write-up + business signals + outreach draft."""
+    require_api_key_or_session(request, x_api_key)
+
+    if not CENSUS_API_KEY:
+        raise HTTPException(status_code=503, detail="CENSUS_API_KEY is not configured")
+    if not FRED_API_KEY:
+        raise HTTPException(status_code=503, detail="FRED_API_KEY is not configured")
+
+    from combined_reports import generate_client_report
+
+    base_url = normalize_base_url(request)
+    unsubscribe_url = None
+    if business_name:
+        unsubscribe_url = f"{base_url}/unsubscribe?business={business_name.replace(chr(32), chr(45)).lower()}"
+
+    try:
+        report = await generate_client_report(
+            state=state,
+            service_category=service_category,
+            census_api_key=CENSUS_API_KEY,
+            fred_api_key=FRED_API_KEY,
+            county_fips=county_fips,
+            business_name=business_name,
+            location_for_signals=location_for_signals,
+            sender_name=sender_name or SENDER_COMPANY_NAME,
+            sender_company=SENDER_COMPANY_NAME,
+            sender_physical_address=SENDER_PHYSICAL_ADDRESS or None,
+            unsubscribe_url=unsubscribe_url,
+        )
+    except Exception as e:
+        logger.error(f"Client report generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Unable to generate client report right now") from e
+
+    return report
+
+
+@app.post("/api/reports/banker")
+async def create_banker_report(
+    state: str = Form(...),
+    loan_type: Optional[str] = Form(default=None),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """One-click Banker Report: bank rate comparison + national lending climate."""
+    require_api_key_or_session(request, x_api_key)
+
+    if not FRED_API_KEY:
+        raise HTTPException(status_code=503, detail="FRED_API_KEY is not configured")
+
+    from combined_reports import generate_banker_report
+
+    try:
+        report = await generate_banker_report(
+            state=state,
+            fred_api_key=FRED_API_KEY,
+            loan_type=loan_type,
+        )
+    except Exception as e:
+        logger.error(f"Banker report generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Unable to generate banker report right now") from e
+
+    return report
+
+
 @app.get("/admin/bank-rate-sources", response_class=HTMLResponse)
 async def public_bank_rate_sources_page(request: Request, conn=Depends(get_db)):
     if not is_authenticated(request):
