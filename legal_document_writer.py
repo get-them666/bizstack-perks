@@ -481,13 +481,11 @@ class LegalDocumentWriter:
 
     def resolve_document_path(self, file_path: str, require_exists: bool = True) -> Path:
         """Return a file path only when it remains inside managed document storage."""
-        candidate = Path(file_path)
-        if not candidate.is_absolute():
-            candidate = self.documents_dir / candidate
-        resolved_path = candidate.resolve()
+        safe_filename = secure_filename(os.path.basename(str(file_path)))
+        if not safe_filename:
+            raise ValueError("A valid document filename is required")
 
-        if self.documents_dir not in resolved_path.parents:
-            raise ValueError("Document path must be inside the managed documents directory")
+        resolved_path = self.documents_dir / safe_filename
         if require_exists and not resolved_path.is_file():
             raise FileNotFoundError("Document not found")
 
@@ -499,7 +497,9 @@ class LegalDocumentWriter:
         if normalized_format not in self.SUPPORTED_OUTPUT_FORMATS:
             raise ValueError("Unsupported document format")
 
-        safe_filename = secure_filename(Path(str(filename)).stem)
+        safe_filename = secure_filename(
+            os.path.splitext(os.path.basename(str(filename)))[0]
+        )
         if not safe_filename:
             raise ValueError("A valid document filename is required")
 

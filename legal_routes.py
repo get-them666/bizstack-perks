@@ -36,15 +36,17 @@ def internal_error():
 
 def resolve_stored_file(file_path):
     """Only allow PDF operations on files managed by this application."""
-    resolved_path = Path(file_path).resolve()
+    safe_filename = secure_filename(os.path.basename(str(file_path)))
+    if not safe_filename:
+        raise ValueError("A valid filename is required")
+
     managed_directories = (Path(UPLOAD_FOLDER).resolve(), doc_writer.documents_dir)
-    if not any(
-        resolved_path.is_relative_to(directory) for directory in managed_directories
-    ):
-        raise ValueError("File must be in managed document storage")
-    if not resolved_path.is_file():
-        raise FileNotFoundError("File not found")
-    return resolved_path
+    for directory in managed_directories:
+        candidate = directory / safe_filename
+        if candidate.is_file():
+            return candidate
+
+    raise FileNotFoundError("File not found")
 
 
 def allowed_file(filename):
