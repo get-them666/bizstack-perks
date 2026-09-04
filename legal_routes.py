@@ -483,10 +483,13 @@ def sms_document(data: dict, _: None = Depends(require_auth)):
         if result["status"] == "success":
             return json_response({
                 "status": "success",
-                "message_ids": result["message_ids"],
-                "chunks_sent": result["chunks_sent"],
+                "message_ids": result.get("message_ids", []),
+                "chunks_sent": result.get("chunks_sent", 0),
             }, 201)
-        return json_response({"error": "Unable to send document"}, 400)
+        return json_response(
+            {"error": result.get("message", "Unable to send document")},
+            400,
+        )
     except Exception:
         return internal_error()
 

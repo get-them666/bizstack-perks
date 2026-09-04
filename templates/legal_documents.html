@@ -822,12 +822,25 @@
             try {
                 const { data } = await apiRequest(`/api/legal/templates/${encodeURIComponent(templateId)}`);
                 const fields = data.template?.fields || [];
-                formFields.innerHTML = fields.map(field => `
-                    <div class="form-group">
-                        <label for="field-${field}">${field.replace(/_/g, ' ')}:</label>
-                        <input type="text" id="field-${field}" name="${field}">
-                    </div>
-                `).join('');
+                formFields.replaceChildren(...fields.map((field, index) => {
+                    const fieldName = String(field);
+                    const inputName = fieldName.replace(/[^A-Za-z0-9_-]/g, '_') || `field_${index}`;
+                    const inputId = `field-${index}-${inputName}`;
+                    const group = document.createElement('div');
+                    const label = document.createElement('label');
+                    const input = document.createElement('input');
+
+                    group.className = 'form-group';
+                    label.htmlFor = inputId;
+                    label.textContent = `${fieldName.replace(/_/g, ' ')}:`;
+                    input.type = 'text';
+                    input.id = inputId;
+                    input.name = inputName;
+                    input.dataset.fieldName = fieldName;
+
+                    group.append(label, input);
+                    return group;
+                }));
             } catch (error) {
                 showAlert('Error loading template fields: ' + error.message, 'error');
             }
@@ -840,7 +853,9 @@
                 return;
             }
             const formData = Object.fromEntries(
-                Array.from(document.querySelectorAll('#formFields input')).map(input => [input.name, input.value])
+                Array.from(document.querySelectorAll('#formFields input')).map(
+                    input => [input.dataset.fieldName || input.name, input.value]
+                )
             );
 
             try {
