@@ -58,6 +58,7 @@
             <button class="tab" data-panel="documents" type="button">My documents</button>
             <button class="tab" data-panel="pdf" type="button">PDF tools</button>
             <button class="tab" data-panel="email" type="button">Email document</button>
+            <button class="tab" data-panel="sms" type="button">Text document</button>
         </div>
 
         <section id="templates" class="panel active">
@@ -107,6 +108,18 @@
                 </div>
                 <div class="field" style="margin-top:16px"><label for="emailMessage">Message</label><textarea id="emailMessage" rows="4" placeholder="Add an optional message."></textarea></div>
                 <div class="actions"><button id="sendEmail" class="primary" type="button">Send email</button></div>
+            </div>
+        </section>
+
+        <section id="sms" class="panel">
+            <div class="card">
+                <h3>Text a secure document link</h3>
+                <p id="smsStatus" class="muted" style="margin:8px 0 20px">Loading text-message status...</p>
+                <div class="form-grid">
+                    <div class="field"><label for="smsDocument">Document</label><select id="smsDocument"></select></div>
+                    <div class="field"><label for="recipientPhone">Recipient phone</label><input id="recipientPhone" type="tel" placeholder="+15551234567"></div>
+                </div>
+                <div class="actions"><button id="sendSms" class="primary" type="button">Send secure link</button></div>
             </div>
         </section>
     </main>
@@ -218,8 +231,13 @@
             list.replaceChildren();
             const documents = data.documents || [];
             const emailSelect = document.getElementById("emailDocument");
+            const smsSelect = document.getElementById("smsDocument");
             emailSelect.replaceChildren(new Option("Choose a document", ""));
-            for (const document of documents) emailSelect.append(new Option(document.name, document.name));
+            smsSelect.replaceChildren(new Option("Choose a document", ""));
+            for (const document of documents) {
+                emailSelect.append(new Option(document.name, document.name));
+                smsSelect.append(new Option(document.name, document.name));
+            }
             if (!documents.length) {
                 const row = document.createElement("tr");
                 row.innerHTML = '<td class="empty" colspan="4">No documents have been generated yet.</td>';
@@ -301,10 +319,24 @@
             showNotice(`Sent ${documentName} to ${recipient}.`);
         }
 
+        async function sendSms() {
+            const documentName = document.getElementById("smsDocument").value;
+            const recipient = document.getElementById("recipientPhone").value.trim();
+            if (!documentName || !recipient) return showNotice("Choose a document and enter a recipient phone number.", "error");
+            const { data } = await request("/api/legal/sms/send", {
+                method: "POST",
+                body: JSON.stringify({
+                    document_path: documentName,
+                    recipient_number: recipient
+                })
+            });
+            showNotice(`Sent a secure document link to ${data.recipient}.`);
+        }
+
         function showPanel(id) {
             document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === id));
             document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === id));
-            if (id === "documents" || id === "email") loadDocuments().catch(error => showNotice(error.message, "error"));
+            if (id === "documents" || id === "email" || id === "sms") loadDocuments().catch(error => showNotice(error.message, "error"));
         }
 
         document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => showPanel(tab.dataset.panel)));
@@ -316,6 +348,7 @@
         document.getElementById("splitPdf").addEventListener("click", () => runPdfTool("split"));
         document.getElementById("watermarkPdf").addEventListener("click", () => runPdfTool("watermark"));
         document.getElementById("sendEmail").addEventListener("click", () => sendEmail().catch(error => showNotice(error.message, "error")));
+        document.getElementById("sendSms").addEventListener("click", () => sendSms().catch(error => showNotice(error.message, "error")));
 
         request("/api/legal/health").then(({ data }) => {
             document.getElementById("healthDot").classList.toggle("ready", data.status === "healthy");
@@ -324,6 +357,10 @@
                 ? "Email is ready to send from hello@bizstackperks.com."
                 : "Email needs the SMTP_PASSWORD environment variable before it can send documents.";
             document.getElementById("sendEmail").disabled = !data.email_configured;
+            document.getElementById("smsStatus").textContent = data.sms_configured
+                ? "Texts include a secure link that expires after 24 hours."
+                : "Text delivery needs the existing phone service and secure-link settings.";
+            document.getElementById("sendSms").disabled = !data.sms_configured;
         }).catch(() => { document.getElementById("healthText").textContent = "Unable to reach the legal document service."; });
         loadTemplates().catch(error => showNotice(error.message, "error"));
     </script>

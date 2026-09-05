@@ -602,16 +602,15 @@ class LegalDocumentWriter:
             recipient, str(document_path), subject, message
         )
     
-    def sms_document(self, file_path: str, recipient_number: str) -> Dict:
-        """Reject document-content delivery until secure links are configured."""
+    def sms_document(
+        self, file_path: str, recipient_number: str, document_url: str
+    ) -> Dict:
+        """Send an SMS containing a secure document-download link."""
         if not self.sms_integration:
             return {"status": "error", "message": "SMS not configured"}
 
         self.resolve_document_path(file_path)
-        return {
-            "status": "error",
-            "message": "SMS document delivery requires a secure download link; document contents are not sent by SMS",
-        }
+        return self.sms_integration.send_document_link(recipient_number, document_url)
     
     def list_generated_documents(self) -> List[Dict]:
         """List all generated documents."""

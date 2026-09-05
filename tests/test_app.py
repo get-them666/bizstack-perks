@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from urllib.parse import urlsplit
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
@@ -22,8 +23,12 @@ class BizStackPerksAppTests(unittest.TestCase):
                 "PUBLIC_BASE_URL": "https://example.com",
                 "BOT_API_TOKEN": "test-api-token",
                 "LEGAL_API_TOKEN": "test-legal-token",
+                "LEGAL_LINK_SECRET": "test-legal-link-secret",
                 "LEGAL_DOCUMENTS_DIR": os.path.join(self.tempdir.name, "legal-documents"),
                 "LEGAL_UPLOAD_DIR": os.path.join(self.tempdir.name, "legal-uploads"),
+                "TWILIO_ACCOUNT_SID": "AC123456789",
+                "TWILIO_AUTH_TOKEN": "auth-token",
+                "TWILIO_PHONE_NUMBER": "+15550000000",
                 "SMTP_HOST": "mail.example.com",
                 "SMTP_PORT": "587",
                 "SMTP_USERNAME": "hello@example.com",
@@ -34,9 +39,6 @@ class BizStackPerksAppTests(unittest.TestCase):
                 "STRIPE_PUBLISHABLE_KEY": "pk_test_123",
                 "STRIPE_WEBHOOK_SECRET": "whsec_test_123",
                 "PRICE_ID": "price_test_123",
-                "TWILIO_ACCOUNT_SID": "AC123456789",
-                "TWILIO_AUTH_TOKEN": "auth-token",
-                "TWILIO_PHONE_NUMBER": "+15550000000",
             },
             clear=False,
         )
@@ -87,6 +89,7 @@ class BizStackPerksAppTests(unittest.TestCase):
     def test_legal_document_api_requires_token_and_generates_text_document(self):
         health = self.client.get("/api/legal/health")
         self.assertTrue(health.json()["email_configured"])
+        self.assertTrue(health.json()["sms_configured"])
 
         unauthorized = self.client.post(
             "/api/legal/generate",
@@ -125,6 +128,7 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Create document", page.text)
         self.assertIn("PDF tools", page.text)
         self.assertIn("Email document", page.text)
+        self.assertIn("Text document", page.text)
 
         response = self.client.post(
             "/api/legal/generate",
@@ -137,6 +141,31 @@ class BizStackPerksAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["file"], "session-nda.txt")
+
+        import legal_routes
+
+        legal_routes.doc_writer.sms_integration.send_document_link = Mock(
+            return_value={
+                "status": "success",
+                "message_id": "SM_test_123",
+                "recipient": "+15551234567",
+            }
+        )
+        sms = self.client.post(
+            "/api/legal/sms/send",
+            json={
+                "document_path": "session-nda.txt",
+                "recipient_number": "+15551234567",
+            },
+        )
+        self.assertEqual(sms.status_code, 201)
+        self.assertEqual(sms.json()["message_id"], "SM_test_123")
+
+        shared_url = legal_routes.doc_writer.sms_integration.send_document_link.call_args.args[1]
+        shared_document = self.client.get(
+            f"{urlsplit(shared_url).path}?{urlsplit(shared_url).query}"
+        )
+        self.assertEqual(shared_document.status_code, 200)
 
     def test_legacy_profiles_schema_is_migrated_without_data_loss(self):
         legacy_path = os.path.join(self.tempdir.name, "legacy.db")

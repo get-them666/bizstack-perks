@@ -5,9 +5,11 @@ FastAPI routes for Legal Document Business Writer.
 import hmac
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
@@ -41,11 +43,20 @@ if SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM_EMAIL:
         SMTP_USE_TLS,
     )
 
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", os.getenv("TWILIO_NUMBER", ""))
+if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER:
+    doc_writer.setup_sms(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
+
 ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
 UPLOAD_FOLDER = Path(os.getenv("LEGAL_UPLOAD_DIR", "./uploaded_documents")).resolve()
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 LEGAL_API_TOKEN = os.getenv("LEGAL_API_TOKEN", "")
 SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+LEGAL_LINK_SECRET = os.getenv("LEGAL_LINK_SECRET", "")
+LEGAL_LINK_TTL_SECONDS = int(os.getenv("LEGAL_LINK_TTL_SECONDS", "86400"))
 MAX_UPLOAD_SIZE = int(os.getenv("LEGAL_MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -77,6 +88,30 @@ def internal_error() -> JSONResponse:
     """Log implementation details without returning them to API consumers."""
     logger.exception("Legal document request failed")
     return json_response({"error": "Internal server error"}, 500)
+
+
+def signed_download_url(document_name: str) -> str:
+    if not PUBLIC_BASE_URL or not LEGAL_LINK_SECRET:
+        raise ValueError("Secure SMS document links are not configured")
+
+    safe_name = secure_filename(document_name)
+    if not safe_name:
+        raise ValueError("A valid document name is required")
+    expires = int(time.time()) + LEGAL_LINK_TTL_SECONDS
+    payload = f"{safe_name}:{expires}".encode()
+    signature = hmac.new(LEGAL_LINK_SECRET.encode(), payload, "sha256").hexdigest()
+    return (
+        f"{PUBLIC_BASE_URL}/api/legal/share/{quote(safe_name)}"
+        f"?expires={expires}&token={signature}"
+    )
+
+
+def valid_download_signature(document_name: str, expires: int, token: str) -> bool:
+    if not LEGAL_LINK_SECRET or expires < int(time.time()):
+        return False
+    payload = f"{document_name}:{expires}".encode()
+    expected = hmac.new(LEGAL_LINK_SECRET.encode(), payload, "sha256").hexdigest()
+    return hmac.compare_digest(token, expected)
 
 
 def resolve_stored_file(file_reference: str) -> Path:
@@ -260,6 +295,18 @@ def download_document(document_name: str, _: None = Depends(require_auth)):
         return FileResponse(file_path, filename=safe_name)
     except Exception:
         return internal_error()
+
+
+@legal_router.get("/share/{document_name}")
+def download_shared_document(document_name: str, expires: int, token: str):
+    """Download a document through a time-limited, signed URL."""
+    safe_name = secure_filename(document_name)
+    if not safe_name or not valid_download_signature(safe_name, expires, token):
+        raise HTTPException(status_code=403, detail="Invalid or expired download link")
+    file_path = doc_writer.resolve_document_path(safe_name, require_exists=False)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(file_path, filename=safe_name)
 
 
 @legal_router.delete("/delete/{document_name}")
@@ -508,12 +555,16 @@ def sms_document(data: dict, _: None = Depends(require_auth)):
         document_name = secure_filename(Path(data["document_path"]).name)
         if not document_name:
             return json_response({"error": "Invalid document path"}, 400)
-        result = doc_writer.sms_document(document_name, data["recipient_number"])
+        result = doc_writer.sms_document(
+            document_name,
+            data["recipient_number"],
+            signed_download_url(document_name),
+        )
         if result["status"] == "success":
             return json_response({
                 "status": "success",
-                "message_ids": result.get("message_ids", []),
-                "chunks_sent": result.get("chunks_sent", 0),
+                "message_id": result["message_id"],
+                "recipient": result["recipient"],
             }, 201)
         return json_response(
             {"error": result.get("message", "Unable to send document")},
@@ -556,5 +607,7 @@ def health_check():
         "pdf_support": bool(doc_writer.pdf_handler),
         "form_support": bool(doc_writer.form_handler),
         "email_configured": bool(doc_writer.email_integration),
-        "sms_configured": bool(doc_writer.sms_integration),
+        "sms_configured": bool(
+            doc_writer.sms_integration and PUBLIC_BASE_URL and LEGAL_LINK_SECRET
+        ),
     })
