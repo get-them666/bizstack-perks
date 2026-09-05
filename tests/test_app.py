@@ -104,6 +104,28 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["file"], "acme-nda.txt")
 
+    def test_legal_document_workspace_requires_login_and_uses_admin_session(self):
+        unauthorized = self.client.get("/admin/legal-documents", follow_redirects=False)
+        self.assertEqual(unauthorized.status_code, 303)
+        self.assertIn("/login?error=Authentication+Required", unauthorized.headers["location"])
+
+        self.client.cookies.set("session_token", self.main.SESSION_SECRET)
+        page = self.client.get("/admin/legal-documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Legal Document Business Writer", page.text)
+
+        response = self.client.post(
+            "/api/legal/generate",
+            json={
+                "template_id": "nda",
+                "form_data": {"party_name": "Acme"},
+                "format": "txt",
+                "filename": "session-nda",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["file"], "session-nda.txt")
+
     def test_legacy_profiles_schema_is_migrated_without_data_loss(self):
         legacy_path = os.path.join(self.tempdir.name, "legacy.db")
         with sqlite3.connect(legacy_path) as conn:

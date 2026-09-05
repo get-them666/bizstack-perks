@@ -939,6 +939,18 @@ async def admin_workspace(request: Request, conn=Depends(get_db)):
     )
 
 
+@app.get("/admin/legal-documents", response_class=HTMLResponse)
+async def legal_documents_workspace(request: Request):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login?error=Authentication+Required", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="legal_documents.html",
+        context={},
+    )
+
+
 @app.post("/api/customers/create-manual")
 async def create_customer_manual(
     email: Optional[str] = Form(default=None),

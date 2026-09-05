@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from werkzeug.utils import secure_filename
@@ -30,6 +30,7 @@ ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
 UPLOAD_FOLDER = Path(os.getenv("LEGAL_UPLOAD_DIR", "./uploaded_documents")).resolve()
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 LEGAL_API_TOKEN = os.getenv("LEGAL_API_TOKEN", "")
+SESSION_SECRET = os.getenv("SESSION_COOKIE_SECRET", "")
 MAX_UPLOAD_SIZE = int(os.getenv("LEGAL_MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -116,8 +117,15 @@ def save_upload(file: UploadFile, *, pdf_only: bool = False) -> Path:
     return destination
 
 
-def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
+def require_auth(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+) -> None:
     """Require a configured Bearer token for protected legal endpoints."""
+    session_token = request.cookies.get("session_token", "")
+    if SESSION_SECRET and session_token and hmac.compare_digest(session_token, SESSION_SECRET):
+        return
+
     scheme, _, token = (authorization or "").partition(" ")
     if (
         scheme != "Bearer"
