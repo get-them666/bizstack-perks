@@ -394,6 +394,23 @@ class BizStackPerksAppTests(unittest.TestCase):
             publish["MessageAttributes"]["AWS.SNS.SMS.SMSType"]["StringValue"],
             "Transactional",
         )
+
+    @patch("twilio.rest.Client")
+    def test_legal_document_sms_uses_signalwire_endpoint(self, mock_client_cls):
+        from legal_document_writer import SMSIntegration
+
+        client = Mock()
+        mock_client_cls.return_value = client
+        integration = SMSIntegration(
+            "signalwire-project-id",
+            "signalwire-api-token",
+            "+15551234567",
+            signalwire_space_url="example.signalwire.com/",
+        )
+
+        self.assertTrue(integration.sms_support)
+        self.assertEqual(client.api.base_url, "https://example.signalwire.com")
+
     def test_client_registry_is_available_to_authenticated_users(self):
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)
         response = self.client.get("/client")

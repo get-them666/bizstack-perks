@@ -409,10 +409,21 @@ class EmailIntegration:
 class SMSIntegration:
     """Handles SMS sending and receiving with document links."""
     
-    def __init__(self, twilio_account_sid: str, twilio_auth_token: str, from_number: str):
+    def __init__(
+        self,
+        twilio_account_sid: str,
+        twilio_auth_token: str,
+        from_number: str,
+        signalwire_space_url: Optional[str] = None,
+    ):
         try:
             from twilio.rest import Client
             self.client = Client(twilio_account_sid, twilio_auth_token)
+            if signalwire_space_url:
+                space_url = signalwire_space_url.strip().rstrip("/")
+                if not space_url.startswith("http"):
+                    space_url = f"https://{space_url}"
+                self.client.api.base_url = space_url
             self.from_number = from_number
             self.sms_support = True
         except ImportError:
@@ -498,9 +509,20 @@ class LegalDocumentWriter:
             smtp_server, smtp_port, email, password, enable_tls
         )
     
-    def setup_sms(self, twilio_account_sid: str, twilio_auth_token: str, from_number: str):
-        """Setup SMS integration."""
-        self.sms_integration = SMSIntegration(twilio_account_sid, twilio_auth_token, from_number)
+    def setup_sms(
+        self,
+        twilio_account_sid: str,
+        twilio_auth_token: str,
+        from_number: str,
+        signalwire_space_url: Optional[str] = None,
+    ):
+        """Set up Twilio or SignalWire document-link delivery."""
+        self.sms_integration = SMSIntegration(
+            twilio_account_sid,
+            twilio_auth_token,
+            from_number,
+            signalwire_space_url,
+        )
     
     def generate_document(self, template_id: str, data: Dict,
                          format: str = "docx", filename: Optional[str] = None) -> Dict:
