@@ -68,6 +68,8 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 FOLLOW_UP_HOURS = int(os.getenv("BOT_FOLLOW_UP_HOURS", "2"))
 MAX_FOLLOW_UPS  = int(os.getenv("BOT_MAX_FOLLOW_UPS", "2"))
 AUTO_SEND_EMAIL = os.getenv("BOT_AUTO_SEND_EMAIL", "false").lower() == "true"
+AUTOMATED_SMS_ENABLED = os.getenv("BOT_AUTOMATED_SMS_ENABLED", "false").lower() == "true"
+AUTOMATED_CALLS_ENABLED = os.getenv("BOT_AUTOMATED_CALLS_ENABLED", "false").lower() == "true"
 
 # Twilio / SignalWire
 ACCOUNT_SID  = os.getenv("SIGNALWIRE_PROJECT_ID") or os.getenv("TWILIO_ACCOUNT_SID", "")
@@ -140,6 +142,9 @@ async def task_follow_up_leads() -> int:
     yet, and send them a personalized follow-up text from Sam.
     Tracks follow-up count in message_events to avoid over-messaging.
     """
+    if not AUTOMATED_SMS_ENABLED:
+        logger.info("Automated SMS follow-ups are disabled — skipping lead follow-up task.")
+        return 0
     if not sms_ready():
         logger.info("SMS not configured — skipping lead follow-up task.")
         return 0
@@ -305,6 +310,9 @@ async def task_outbound_calls() -> int:
     Make outbound calls to high-priority leads that haven't been reached yet.
     Targets: leads marked 'new', no prior call attempt, created > 1 hour ago.
     """
+    if not AUTOMATED_CALLS_ENABLED:
+        logger.info("Automated outbound calls are disabled — skipping call task.")
+        return 0
     if not sms_ready():
         logger.info("Twilio not configured — skipping outbound calls.")
         return 0
@@ -405,6 +413,8 @@ async def task_status_summary() -> None:
     print(f"  Email (IMAP):      {'✓ configured' if imap_ready() else '✗ not configured'}")
     print(f"  OpenAI:            {'✓ configured' if OPENAI_KEY else '✗ not configured'}")
     print(f"  Auto-send emails:  {'ON' if AUTO_SEND_EMAIL else 'OFF (admin review mode)'}")
+    print(f"  Automated SMS:     {'ON' if AUTOMATED_SMS_ENABLED else 'OFF'}")
+    print(f"  Automated calls:   {'ON' if AUTOMATED_CALLS_ENABLED else 'OFF'}")
     print("-" * 55)
     sql_new_leads      = "SELECT COUNT(*) FROM leads WHERE status='new'"
     sql_pipe_pending   = "SELECT COUNT(*) FROM intake_pipeline WHERE status='pending'"
