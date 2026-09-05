@@ -38,12 +38,12 @@
             <p id="campaign-error" class="error" style="display:none;" role="alert"></p>
         </section>
         <section class="card">
-            <h2>State-wide public rate scan</h2>
-            <p class="hint">Disabled because an FDIC state list does not establish that a bank serves your markets. Add only official public rate pages from banks you approve below.</p>
+            <h2>Local public rate scan</h2>
+            <p class="hint">Finds FDIC-insured institutions with a physical branch in the selected market, then checks only their official public pages. A local branch does not guarantee a particular product is available.</p>
             <form id="live-rate-scan-form">
                 <input type="hidden" name="product_name" value="business loan">
-                <input type="hidden" name="region" value="VA">
-                <button id="live-rate-scan-button" type="submit" disabled>State-wide scanning disabled</button>
+                <div class="grid"><div><label for="live-rate-location">Market</label><select id="live-rate-location" name="location"><option value="Norfolk">Norfolk, VA</option><option value="Chesapeake" selected>Chesapeake, VA</option><option value="Virginia Beach">Virginia Beach, VA</option><option value="Portsmouth">Portsmouth, VA</option><option value="Suffolk">Suffolk, VA</option><option value="Richmond">Richmond, VA</option><option value="Currituck">Currituck, NC</option><option value="Elizabeth City">Elizabeth City, NC</option></select></div><div><label for="live-rate-region">State</label><select id="live-rate-region" name="region"><option value="VA" selected>Virginia</option><option value="NC">North Carolina</option></select></div></div>
+                <button id="live-rate-scan-button" type="submit">Find local business-loan sources</button>
             </form>
             <p id="live-rate-scan-status" class="hint" aria-live="polite"></p>
             <p id="live-rate-scan-error" class="error" style="display:none;" role="alert"></p>

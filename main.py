@@ -1198,6 +1198,7 @@ async def get_banks(
 async def scan_public_bank_rate_sources(
     product_name: str = Form(default="business loan"),
     region: str = Form(default="VA"),
+    location: Optional[str] = Form(default=None),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -1207,7 +1208,9 @@ async def scan_public_bank_rate_sources(
     if not product_name.strip() or not region.strip():
         raise HTTPException(status_code=422, detail="Product and region are required")
     try:
-        rates = await discover_live_public_bank_rates(product_name.strip(), region.strip())
+        rates = await discover_live_public_bank_rates(
+            product_name.strip(), region.strip(), location=location.strip() if location else None
+        )
     except Exception as error:
         logger.error("Live public bank-rate scan failed: %s", error)
         raise HTTPException(

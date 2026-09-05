@@ -11,6 +11,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 FDIC_INSTITUTIONS_URL = "https://api.fdic.gov/banks/institutions"
+FDIC_LOCATIONS_URL = "https://api.fdic.gov/banks/locations"
 RATE_PATTERN = re.compile(r"(?<!\d)(\d{1,2}(?:\.\d{1,3})?)\s*%\s*(APR|APY)\b", re.IGNORECASE)
 HREF_PATTERN = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.IGNORECASE)
 TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -141,10 +142,14 @@ def _rate_for_product(text: str, product_name: str):
 
 
 async def discover_live_public_bank_rates(
-    product_name: str, region: str, limit: int = 35
+    product_name: str, region: str, limit: int = 35, location: Optional[str] = None
 ) -> list[dict]:
     """Inspect public pages for FDIC-listed institutions without guessing rates."""
-    banks = await _fdic_banks(region, limit * 2)
+    banks = await (
+        _fdic_banks_near_location(location, region, limit * 2)
+        if location
+        else _fdic_banks(region, limit * 2)
+    )
     semaphore = asyncio.Semaphore(12)
     async with httpx.AsyncClient(
         follow_redirects=True,
@@ -165,6 +170,55 @@ async def discover_live_public_bank_rates(
             result["observed_rate"] if result["observed_rate"] is not None else 0,
         ),
     )
+
+
+async def _fdic_banks_near_location(location: str, region: str, limit: int) -> list[dict]:
+    """Find institutions with a physical FDIC-listed branch in the selected market."""
+    city = location.strip()
+    state = region.strip().upper()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        branches = await client.get(
+            FDIC_LOCATIONS_URL,
+            params={
+                "filters": f'CITY:"{city}" AND STALP:{state}',
+                "fields": "CERT",
+                "limit": 100,
+                "format": "json",
+            },
+        )
+        branches.raise_for_status()
+        certificates = {
+            str(item.get("data", {}).get("CERT"))
+            for item in branches.json().get("data", [])
+            if item.get("data", {}).get("CERT")
+        }
+        banks = []
+        seen_domains = set()
+        for certificate in certificates:
+            response = await client.get(
+                FDIC_INSTITUTIONS_URL,
+                params={
+                    "filters": f"CERT:{certificate}",
+                    "fields": "NAME,WEBADDR",
+                    "limit": 1,
+                    "format": "json",
+                },
+            )
+            response.raise_for_status()
+            records = response.json().get("data", [])
+            if not records:
+                continue
+            institution = records[0].get("data", {})
+            web_address = str(institution.get("WEBADDR") or "").strip()
+            base_url = web_address if web_address.startswith("https://") else f"https://{web_address}"
+            domain = urlparse(base_url).netloc.lower()
+            if not domain or domain in seen_domains:
+                continue
+            seen_domains.add(domain)
+            banks.append({"name": institution.get("NAME", "FDIC-listed institution"), "url": base_url})
+            if len(banks) == limit:
+                break
+    return banks
 
 
 async def _fdic_banks(region: str, limit: int) -> list[dict]:
