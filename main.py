@@ -103,6 +103,7 @@ from inbound_email import (
     imap_configured,
     process_inbound_and_draft_reply,
 )
+from legal_routes import legal_router
 
 try:
     from financial_super_agent import UnifiedFinancialDatabase, execute_super_agent_extraction, IntegratedMarketRecord
@@ -619,6 +620,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(legal_router)
 
 # Initialize lead source managers
 places_source = GooglePlacesLeadSource(GOOGLE_PLACES_API_KEY) if GOOGLE_PLACES_API_KEY else None

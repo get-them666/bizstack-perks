@@ -21,6 +21,9 @@ class BizStackPerksAppTests(unittest.TestCase):
                 "SESSION_COOKIE_SECRET": "test-session-secret",
                 "PUBLIC_BASE_URL": "https://example.com",
                 "BOT_API_TOKEN": "test-api-token",
+                "LEGAL_API_TOKEN": "test-legal-token",
+                "LEGAL_DOCUMENTS_DIR": os.path.join(self.tempdir.name, "legal-documents"),
+                "LEGAL_UPLOAD_DIR": os.path.join(self.tempdir.name, "legal-uploads"),
                 "STRIPE_SECRET_KEY": "sk_test_123",
                 "STRIPE_PUBLISHABLE_KEY": "pk_test_123",
                 "STRIPE_WEBHOOK_SECRET": "whsec_test_123",
@@ -33,8 +36,10 @@ class BizStackPerksAppTests(unittest.TestCase):
         )
         self.env_patch.start()
 
+        import legal_routes
         import main
 
+        importlib.reload(legal_routes)
         self.main = importlib.reload(main)
         self.client_manager = TestClient(self.main.app)
         self.client = self.client_manager.__enter__()
@@ -72,6 +77,32 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("/api/checkout/create", response.text)
         self.assertIn("Call or contact", response.text)
         self.assertIn("Frequently asked questions", response.text)
+
+    def test_legal_document_api_requires_token_and_generates_text_document(self):
+        unauthorized = self.client.post(
+            "/api/legal/generate",
+            json={
+                "template_id": "nda",
+                "form_data": {"party_name": "Acme"},
+                "format": "txt",
+                "filename": "acme-nda",
+            },
+        )
+        self.assertEqual(unauthorized.status_code, 401)
+
+        response = self.client.post(
+            "/api/legal/generate",
+            json={
+                "template_id": "nda",
+                "form_data": {"party_name": "Acme"},
+                "format": "txt",
+                "filename": "acme-nda",
+            },
+            headers={"Authorization": "Bearer test-legal-token"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["file"], "acme-nda.txt")
 
     def test_legacy_profiles_schema_is_migrated_without_data_loss(self):
         legacy_path = os.path.join(self.tempdir.name, "legacy.db")

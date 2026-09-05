@@ -22,13 +22,13 @@ legal_router = APIRouter(prefix="/api/legal", tags=["legal"])
 logger = logging.getLogger(__name__)
 
 doc_writer = LegalDocumentWriter({
-    "library_path": "./legal_templates",
-    "documents_dir": "./generated_documents",
+    "library_path": os.getenv("LEGAL_TEMPLATES_DIR", "./legal_templates"),
+    "documents_dir": os.getenv("LEGAL_DOCUMENTS_DIR", "./generated_documents"),
 })
 
 ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
-UPLOAD_FOLDER = Path("./uploaded_documents").resolve()
-UPLOAD_FOLDER.mkdir(exist_ok=True)
+UPLOAD_FOLDER = Path(os.getenv("LEGAL_UPLOAD_DIR", "./uploaded_documents")).resolve()
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 LEGAL_API_TOKEN = os.getenv("LEGAL_API_TOKEN", "")
 MAX_UPLOAD_SIZE = int(os.getenv("LEGAL_MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))
 UPLOAD_CHUNK_SIZE = 1024 * 1024
