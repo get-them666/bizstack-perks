@@ -540,6 +540,13 @@ def init_db() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    bot_task: Optional[asyncio.Task] = None
+
+    if os.getenv("BOT_AUTOMATION_ENABLED", "false").lower() == "true":
+        from bot_agent import run_daemon
+
+        bot_task = asyncio.create_task(run_daemon())
+        logger.warning("BizStack automation bot started in this service process")
 
     # Start background task for periodic bank scanning
     async def scan_banks_periodically():
@@ -603,7 +610,15 @@ async def lifespan(_: FastAPI):
                 await _asyncio.sleep(interval)
 
         _asyncio.create_task(scan_signals_periodically())
-    yield
+    try:
+        yield
+    finally:
+        if bot_task:
+            bot_task.cancel()
+            try:
+                await bot_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(
