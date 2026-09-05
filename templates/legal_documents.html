@@ -234,9 +234,9 @@
             const smsSelect = document.getElementById("smsDocument");
             emailSelect.replaceChildren(new Option("Choose a document", ""));
             smsSelect.replaceChildren(new Option("Choose a document", ""));
-            for (const document of documents) {
-                emailSelect.append(new Option(document.name, document.name));
-                smsSelect.append(new Option(document.name, document.name));
+            for (const file of documents) {
+                emailSelect.append(new Option(file.name, file.name));
+                smsSelect.append(new Option(file.name, file.name));
             }
             if (!documents.length) {
                 const row = document.createElement("tr");
@@ -244,7 +244,7 @@
                 list.append(row);
                 return;
             }
-            for (const document of documents) {
+            for (const file of documents) {
                 const row = document.createElement("tr");
                 const name = document.createElement("td");
                 const created = document.createElement("td");
@@ -252,20 +252,20 @@
                 const actions = document.createElement("td");
                 const download = document.createElement("button");
                 const remove = document.createElement("button");
-                name.textContent = document.name;
-                created.textContent = new Date(document.created).toLocaleString();
-                size.textContent = `${Math.max(1, Math.ceil(document.size / 1024))} KB`;
+                name.textContent = file.name;
+                created.textContent = new Date(file.created).toLocaleString();
+                size.textContent = `${Math.max(1, Math.ceil(file.size / 1024))} KB`;
                 download.className = "secondary";
                 download.type = "button";
                 download.textContent = "Download";
-                download.addEventListener("click", () => { window.location.href = `/api/legal/download/${encodeURIComponent(document.name)}`; });
+                download.addEventListener("click", () => { window.location.href = `/api/legal/download/${encodeURIComponent(file.name)}`; });
                 remove.className = "danger";
                 remove.type = "button";
                 remove.textContent = "Delete";
                 remove.addEventListener("click", async () => {
-                    if (!window.confirm(`Delete ${document.name}?`)) return;
-                    await request(`/api/legal/delete/${encodeURIComponent(document.name)}`, { method: "DELETE" });
-                    showNotice(`Deleted ${document.name}.`);
+                    if (!window.confirm(`Delete ${file.name}?`)) return;
+                    await request(`/api/legal/delete/${encodeURIComponent(file.name)}`, { method: "DELETE" });
+                    showNotice(`Deleted ${file.name}.`);
                     loadDocuments();
                 });
                 actions.append(download, " ", remove);
