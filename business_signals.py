@@ -22,7 +22,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-YOUCOM_MCP_URL = "https://api.you.com/mcp?profile=free"
+YOUCOM_MCP_URL = "https://api.you.com/mcp"
+YOUCOM_FREE_MCP_URL = f"{YOUCOM_MCP_URL}?profile=free"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 
 # Keywords that signal a business is expanding, growing, or seeking financing.
@@ -138,15 +139,29 @@ class YouComSignalScanner:
             "Content-Type": "application/json",
             "User-Agent": "BizStackPerksSignalBot/1.0",
         }
+        api_key = os.getenv("YOUCOM_API_KEY", "").strip()
+        if api_key:
+            headers["X-API-Key"] = api_key
         if session_id:
             headers["Mcp-Session-Id"] = session_id
         try:
-            response = await client.post(YOUCOM_MCP_URL, headers=headers, json=payload)
+            response = await client.post(
+                YOUCOM_MCP_URL if api_key else YOUCOM_FREE_MCP_URL,
+                headers=headers,
+                json=payload,
+            )
             response.raise_for_status()
             return (
                 self._parse_mcp_response(response.text),
                 response.headers.get("mcp-session-id") or session_id,
             )
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 402 and not api_key:
+                raise RuntimeError(
+                    "You.com free live-search quota is unavailable. Configure YOUCOM_API_KEY "
+                    "for the production signal scanner."
+                ) from error
+            raise RuntimeError(f"You.com live search failed: {error}") from error
         except (httpx.HTTPError, ValueError) as error:
             raise RuntimeError(f"You.com live search failed: {error}") from error
 
