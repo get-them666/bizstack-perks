@@ -31,19 +31,19 @@
     <header><h1>Public bank rate monitor</h1><nav><a href="/admin">Admin workspace</a> · <a href="/admin/outreach">Outreach</a> · <a href="/logout">Log out</a></nav></header>
     <main>
         <section class="card">
-            <h2>One-click business campaign</h2>
-            <p class="hint">Runs the live Virginia rate scan and Norfolk business-signal scan together, finds a publicly listed generic business contact, writes a source-linked commercial email, and sends it. It skips leads with no public contact, opt-outs, and delivery failures.</p>
-            <button id="campaign-button" type="button">Run live scan and send eligible outreach</button>
+            <h2>Local business campaign</h2>
+            <p class="hint">Automatic sending is unavailable here because the previous campaign was hard-coded to Norfolk and a state-wide bank list. Use the Outreach workspace to review signals and drafts for your configured markets before any delivery.</p>
+            <button id="campaign-button" type="button" disabled>Configure local sources before running a campaign</button>
             <p id="campaign-status" class="hint" aria-live="polite"></p>
             <p id="campaign-error" class="error" style="display:none;" role="alert"></p>
         </section>
         <section class="card">
-            <h2>One-click live public rate scan</h2>
-            <p class="hint">Click once to inspect up to 35 FDIC-listed Virginia bank public pages. Results show only an APR/APY displayed near the requested business-loan terms, alongside the source URL and scan timestamp. Pages without a comparable rate remain listed as sources, not made-up quotes.</p>
+            <h2>State-wide public rate scan</h2>
+            <p class="hint">Disabled because an FDIC state list does not establish that a bank serves your markets. Add only official public rate pages from banks you approve below.</p>
             <form id="live-rate-scan-form">
                 <input type="hidden" name="product_name" value="business loan">
                 <input type="hidden" name="region" value="VA">
-                <button id="live-rate-scan-button" type="submit">Find current Virginia business loan rates</button>
+                <button id="live-rate-scan-button" type="submit" disabled>State-wide scanning disabled</button>
             </form>
             <p id="live-rate-scan-status" class="hint" aria-live="polite"></p>
             <p id="live-rate-scan-error" class="error" style="display:none;" role="alert"></p>
@@ -51,63 +51,31 @@
         </section>
         <section class="card">
             <h2>Add an official public rate page</h2>
-            <p class="hint">Select a product type to auto-populate a list of Virginia banks. Click a bank to auto-fill its name and official rate page URL, then submit.</p>
+            <p class="hint">Enter a bank you have verified serves one of your markets: Norfolk, Chesapeake, Virginia Beach, Portsmouth, Suffolk, Richmond, Currituck, or Elizabeth City. Only official HTTPS rate pages are monitored.</p>
             
             <form method="post" action="/api/public-bank-rate-sources">
-                <!-- STEP 1: Product Type Selection -->
                 <div class="form-section">
-                    <div class="grid">
-                        <div>
-                            <label for="product_type_select">1. Product Type</label>
-                            <select id="product_type_select" onchange="fetchBanks()">
-                                <option value="">-- Select product type --</option>
-                                <option value="commercial_loan">Commercial Loan</option>
-                                <option value="sba_loan">SBA Loan</option>
-                                <option value="line_of_credit">Line of Credit</option>
-                                <option value="equipment_financing">Equipment Financing</option>
-                                <option value="term_loan">Term Loan</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- STEP 2: Bank Picker -->
-                <div class="form-section" id="bank-picker-section" style="display:none;">
-                    <p class="hint">2. Select a bank:</p>
-                    <div class="bank-picker" id="bank-picker"></div>
-                    <p id="bank-picker-status" class="hint" aria-live="polite"></p>
-                    <p id="bank-picker-error" class="error" style="display:none;" role="alert"></p>
-                </div>
-
-                <!-- STEP 3: Auto-filled Form -->
-                <div class="form-section">
-                    <p class="hint">3. Review and submit:</p>
                     <div class="grid">
                         <div>
                             <label for="bank_name">Bank</label>
-                            <input id="bank_name" name="bank_name" required maxlength="160" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                            <input id="bank_name" name="bank_name" required maxlength="160" placeholder="Verified local bank">
                         </div>
                         <div>
                             <label for="product_name">Product</label>
-                            <input id="product_name" name="product_name" required maxlength="120" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                            <input id="product_name" name="product_name" required maxlength="120" placeholder="Business loan">
                         </div>
                         <div>
-                            <label for="region">Region</label>
-                            <input id="region" name="region" value="VA" maxlength="20" readonly style="background:#1a2844; opacity:0.8;">
+                            <label for="region">Service market</label>
+                            <input id="region" name="region" value="Hampton Roads, VA" maxlength="20">
                         </div>
                     </div>
                     <div style="margin-top:14px">
                         <label for="source_url">Official public rate-page URL</label>
-                        <input id="source_url" name="source_url" type="url" required maxlength="2000" placeholder="(auto-filled)" readonly style="background:#1a2844; opacity:0.8;">
+                        <input id="source_url" name="source_url" type="url" required maxlength="2000" placeholder="https://bank.example/business-loans">
                     </div>
-                    <button type="submit" id="submit-btn" disabled>Add to monitor</button>
-                    <button type="button" class="secondary" onclick="resetForm()" style="display:none;" id="reset-btn">Reset</button>
+                    <button type="submit" id="submit-btn">Add to monitor</button>
                 </div>
             </form>
-
-            <div id="auto-fill-indicator" class="auto-fill" style="display:none;">
-                ✓ Bank and rate page auto-filled. Ready to submit.
-            </div>
         </section>
         <section class="card">
             <h2>Registered public sources ({{ sources|length }})</h2>

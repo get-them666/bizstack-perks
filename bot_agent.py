@@ -80,7 +80,7 @@ RATE_SCAN_INTERVAL_TICKS = max(
 )
 BANK_RATE_REGIONS = tuple(
     region.strip().upper()
-    for region in os.getenv("BOT_BANK_RATE_REGIONS", "VA,NC").split(",")
+    for region in os.getenv("BOT_BANK_RATE_REGIONS", "").split(",")
     if region.strip()
 )
 
@@ -413,6 +413,11 @@ async def task_refresh_bank_rates() -> int:
     """Refresh robots-permitted public business-loan sources for configured states."""
     if not MARKET_INTELLIGENCE_ENABLED:
         logger.info("Market intelligence is disabled — skipping bank-rate scan.")
+        return 0
+    if not BANK_RATE_REGIONS:
+        logger.info(
+            "No broad bank-rate regions are configured; use approved local official rate pages."
+        )
         return 0
 
     from public_rate_sources import (
