@@ -24,6 +24,12 @@ class BizStackPerksAppTests(unittest.TestCase):
                 "LEGAL_API_TOKEN": "test-legal-token",
                 "LEGAL_DOCUMENTS_DIR": os.path.join(self.tempdir.name, "legal-documents"),
                 "LEGAL_UPLOAD_DIR": os.path.join(self.tempdir.name, "legal-uploads"),
+                "SMTP_HOST": "mail.example.com",
+                "SMTP_PORT": "587",
+                "SMTP_USERNAME": "hello@example.com",
+                "SMTP_PASSWORD": "test-smtp-password",
+                "SMTP_FROM_EMAIL": "hello@example.com",
+                "SMTP_USE_TLS": "true",
                 "STRIPE_SECRET_KEY": "sk_test_123",
                 "STRIPE_PUBLISHABLE_KEY": "pk_test_123",
                 "STRIPE_WEBHOOK_SECRET": "whsec_test_123",
@@ -79,6 +85,9 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Frequently asked questions", response.text)
 
     def test_legal_document_api_requires_token_and_generates_text_document(self):
+        health = self.client.get("/api/legal/health")
+        self.assertTrue(health.json()["email_configured"])
+
         unauthorized = self.client.post(
             "/api/legal/generate",
             json={
@@ -115,6 +124,7 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertIn("Document workspace", page.text)
         self.assertIn("Create document", page.text)
         self.assertIn("PDF tools", page.text)
+        self.assertIn("Email document", page.text)
 
         response = self.client.post(
             "/api/legal/generate",

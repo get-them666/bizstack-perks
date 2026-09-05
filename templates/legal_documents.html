@@ -57,6 +57,7 @@
             <button class="tab" data-panel="create" type="button">Create document</button>
             <button class="tab" data-panel="documents" type="button">My documents</button>
             <button class="tab" data-panel="pdf" type="button">PDF tools</button>
+            <button class="tab" data-panel="email" type="button">Email document</button>
         </div>
 
         <section id="templates" class="panel active">
@@ -92,6 +93,20 @@
                 <div class="field" style="margin-top:16px"><label for="watermarkText">Watermark text</label><input id="watermarkText" type="text" value="CONFIDENTIAL"></div>
                 <div class="actions"><button id="mergePdfs" class="primary" type="button">Merge files</button><button id="splitPdf" class="secondary" type="button">Split one file</button><button id="watermarkPdf" class="secondary" type="button">Add watermark</button></div>
                 <p id="pdfResult" class="pdf-result"></p>
+            </div>
+        </section>
+
+        <section id="email" class="panel">
+            <div class="card">
+                <h3>Email a document</h3>
+                <p id="emailStatus" class="muted" style="margin:8px 0 20px">Loading email status...</p>
+                <div class="form-grid">
+                    <div class="field"><label for="emailDocument">Document</label><select id="emailDocument"></select></div>
+                    <div class="field"><label for="recipientEmail">Recipient email</label><input id="recipientEmail" type="email" placeholder="recipient@example.com"></div>
+                    <div class="field"><label for="emailSubject">Subject</label><input id="emailSubject" type="text" value="Legal Document"></div>
+                </div>
+                <div class="field" style="margin-top:16px"><label for="emailMessage">Message</label><textarea id="emailMessage" rows="4" placeholder="Add an optional message."></textarea></div>
+                <div class="actions"><button id="sendEmail" class="primary" type="button">Send email</button></div>
             </div>
         </section>
     </main>
@@ -202,6 +217,9 @@
             const list = document.getElementById("documentList");
             list.replaceChildren();
             const documents = data.documents || [];
+            const emailSelect = document.getElementById("emailDocument");
+            emailSelect.replaceChildren(new Option("Choose a document", ""));
+            for (const document of documents) emailSelect.append(new Option(document.name, document.name));
             if (!documents.length) {
                 const row = document.createElement("tr");
                 row.innerHTML = '<td class="empty" colspan="4">No documents have been generated yet.</td>';
@@ -267,10 +285,26 @@
             }
         }
 
+        async function sendEmail() {
+            const documentName = document.getElementById("emailDocument").value;
+            const recipient = document.getElementById("recipientEmail").value.trim();
+            if (!documentName || !recipient) return showNotice("Choose a document and enter a recipient email address.", "error");
+            await request("/api/legal/email/send", {
+                method: "POST",
+                body: JSON.stringify({
+                    document_path: documentName,
+                    recipient_email: recipient,
+                    subject: document.getElementById("emailSubject").value.trim(),
+                    message: document.getElementById("emailMessage").value.trim()
+                })
+            });
+            showNotice(`Sent ${documentName} to ${recipient}.`);
+        }
+
         function showPanel(id) {
             document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === id));
             document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === id));
-            if (id === "documents") loadDocuments().catch(error => showNotice(error.message, "error"));
+            if (id === "documents" || id === "email") loadDocuments().catch(error => showNotice(error.message, "error"));
         }
 
         document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => showPanel(tab.dataset.panel)));
@@ -281,10 +315,15 @@
         document.getElementById("mergePdfs").addEventListener("click", () => runPdfTool("merge"));
         document.getElementById("splitPdf").addEventListener("click", () => runPdfTool("split"));
         document.getElementById("watermarkPdf").addEventListener("click", () => runPdfTool("watermark"));
+        document.getElementById("sendEmail").addEventListener("click", () => sendEmail().catch(error => showNotice(error.message, "error")));
 
         request("/api/legal/health").then(({ data }) => {
             document.getElementById("healthDot").classList.toggle("ready", data.status === "healthy");
             document.getElementById("healthText").textContent = data.status === "healthy" ? "Legal document service is ready." : "Legal document service is unavailable.";
+            document.getElementById("emailStatus").textContent = data.email_configured
+                ? "Email is ready to send from hello@bizstackperks.com."
+                : "Email needs the SMTP_PASSWORD environment variable before it can send documents.";
+            document.getElementById("sendEmail").disabled = !data.email_configured;
         }).catch(() => { document.getElementById("healthText").textContent = "Unable to reach the legal document service."; });
         loadTemplates().catch(error => showNotice(error.message, "error"));
     </script>

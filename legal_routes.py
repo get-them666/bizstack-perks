@@ -26,6 +26,21 @@ doc_writer = LegalDocumentWriter({
     "documents_dir": os.getenv("LEGAL_DOCUMENTS_DIR", "./generated_documents"),
 })
 
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USERNAME)
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
+if SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM_EMAIL:
+    doc_writer.setup_email(
+        SMTP_HOST,
+        SMTP_PORT,
+        SMTP_FROM_EMAIL,
+        SMTP_PASSWORD,
+        SMTP_USE_TLS,
+    )
+
 ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "json"}
 UPLOAD_FOLDER = Path(os.getenv("LEGAL_UPLOAD_DIR", "./uploaded_documents")).resolve()
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
