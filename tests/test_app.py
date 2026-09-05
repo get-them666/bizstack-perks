@@ -112,7 +112,9 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)
         page = self.client.get("/admin/legal-documents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Legal Document Business Writer", page.text)
+        self.assertIn("Document workspace", page.text)
+        self.assertIn("Create document", page.text)
+        self.assertIn("PDF tools", page.text)
 
         response = self.client.post(
             "/api/legal/generate",
@@ -369,6 +371,7 @@ class BizStackPerksAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("admin workspace", response.text)
         self.assertIn("Opt-in lead requests", response.text)
+        self.assertIn("Legal Documents", response.text)
 
     def test_admin_can_register_an_official_public_rate_source(self):
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)

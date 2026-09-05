@@ -56,6 +56,11 @@
                     <span style="font-weight:700;font-size:.9rem">Client Registry</span>
                     <span style="color:#5e80a0;font-size:.78rem">All company profiles</span>
                 </a>
+                <a href="/admin/legal-documents" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;background:#101934;border:1px solid #27426f;border-radius:12px;padding:18px 24px;color:#f5f7fb;text-decoration:none;min-width:160px;text-align:center">
+                    <span style="font-size:1.6rem">📄</span>
+                    <span style="font-weight:700;font-size:.9rem">Legal Documents</span>
+                    <span style="color:#5e80a0;font-size:.78rem">Create and manage documents</span>
+                </a>
             </div>
         </section>
         <section><h2>Opt-in lead requests</h2><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Path</th><th>Interest</th><th>Amount</th><th>Source</th><th>Consent time</th><th>Status</th></tr></thead><tbody>{% for lead in leads %}<tr><td>{{ lead[0] }}</td><td>{{ lead[1] }}</td><td>{{ lead[2] }}</td><td>{{ lead[3] }}</td><td>{{ lead[4] }}</td><td>{{ lead[5] or "-" }}</td><td>{{ lead[6] }}</td><td>{{ lead[7] }}</td><td>{{ lead[8] }}</td></tr>{% else %}<tr><td class="empty" colspan="9">No opt-in lead requests yet.</td></tr>{% endfor %}</tbody></table></div></section>

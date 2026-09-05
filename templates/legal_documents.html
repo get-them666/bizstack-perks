@@ -1,1086 +1,292 @@
-<!-- Legal Document Business Writer - Web Interface Template -->
-<!-- Add to templates/legal_documents.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Legal Document Business Writer</title>
+    <title>Legal documents - BizStack Perks</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: radial-gradient(circle at top, #15254f 0%, #0b1020 55%);
-            color: #7fe6bc;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-        }
-        
-        .card {
-            radial-gradient(circle at top, #15254f 0%, #0b1020 55%)
-            border: 1px solid rgba(122, 195, 255, 0.18);
-            border-radius: 20px;
-            padding: 40px;
-            width: 100%;
-            max-width: 440px;
-        }
-
-        header {
-            background: radial-gradient(circle at top, #15254f 0%, #0b1020 55%);
-            color: #9db1d1;
-            padding: 30px;
-            text-align: center;
-        }
-
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 0;
-            min-height: 500px;
-        }
-
-        .sidebar {
-            background: radial-gradient(circle at top, #15254f 0%, #0b1020 55%);
-            border-right: 1px solid #dee2e6;
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        .sidebar h3 {
-            color: #9db1d1;
-            margin-bottom: 15px;
-            font-size: 1.1em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .sidebar-section {
-            margin-bottom: 25px;
-        }
-
-        .sidebar-link {
-            display: block;
-            padding: 10px 15px;
-            color: #9db1d1;
-            text-decoration: none;
-            border-radius: 5px;
-            margin-bottom: 5px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-
-        .sidebar-link:hover {
-            background: #e7e7ff;
-            color: #667eea;
-            padding-left: 20px;
-        }
-
-        .sidebar-link.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .content {
-            padding: 30px;
-            overflow-y: auto;
-        }
-
-        .section {
-            display: none;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        .section.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .section-title {
-            color: #9db1d1;
-            font-size: 1.8em;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .template-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .template-card {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            text-decoration: none;
-        }
-
-        .template-card:hover {
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
-            transform: translateY(-5px);
-            border-color: #667eea;
-        }
-
-        .template-card h3 {
-            color: #9db1d1;
-            margin-bottom: 10px;
-        }
-
-        .template-card .category {
-            display: inline-block;
-            background: #e7e7ff;
-            color: #7fe6bc;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            margin-bottom: 10px;
-        }
-
-        .template-card p {
-            color: #666;
-            font-size: 0.95em;
-            line-height: 1.5;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            font-size: 1em;
-            font-family: inherit;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        button {
-            width: 100%;
-            padding: 14px;
-            border-radius: 12px;
-            border: 0;
-            background: linear-gradient(135deg, #4fd1ff, #1198ff);
-            color: #03111d;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        button:hover { transform: translateY(-1px); }
-        .notice {
-            background: rgba(255, 91, 91, 0.12);
-            border: 1px solid rgba(255, 91, 91, 0.26);
-            color: #ffb3b3;
-            padding: 12px 16px;
-            border-radius: 12px;
-            margin-bottom: 18px;
-            font-size: 0.9rem;
-        }
-
-        .btn-secondary {
-            background: #e7e7ff;
-            color: #667eea;
-        }
-
-        .btn-secondary:hover {
-            background: #d4d4ff;
-        }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-        }
-
-        .document-list {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .document-item {
-            display: flex;
-            align-items: center;
-            padding: 15px 20px;
-            border-bottom: 1px solid #dee2e6;
-            transition: background 0.3s ease;
-        }
-
-        .document-item:hover {
-            background: #f8f9fa;
-        }
-
-        .document-item:last-child {
-            border-bottom: none;
-        }
-
-        .document-icon {
-            width: 40px;
-            height: 40px;
-            background: #e7e7ff;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-size: 1.5em;
-        }
-
-        .document-info {
-            flex: 1;
-        }
-
-        .document-name {
-            color: #333;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .document-meta {
-            color: #999;
-            font-size: 0.9em;
-        }
-
-        .document-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .document-actions button {
-            padding: 8px 12px;
-            font-size: 0.9em;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .alert.show {
-            display: block;
-        }
-
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal.show {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            max-width: 500px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        .modal-header h2 {
-            color: #667eea;
-            margin: 0;
-        }
-
-        .close {
-            font-size: 28px;
-            font-weight: bold;
-            color: #999;
-            cursor: pointer;
-            transition: color 0.3s ease;
-        }
-
-        .close:hover {
-            color: #333;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .stat-card .stat-value {
-            font-size: 2.5em;
-            color: #667eea;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .stat-card .stat-label {
-            color: #666;
-            font-size: 0.95em;
-        }
-
-        footer {
-            radial-gradient(circle at top, #15254f 0%, #0b1020 55%)
-            border-top: 1px solid #dee2e6;
-            padding: 20px;
-            text-align: center;
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                border-right: none;
-                border-bottom: 1px solid #dee2e6;
-                display: flex;
-                overflow-x: auto;
-                padding: 10px;
-            }
-
-            .sidebar-section {
-                margin-bottom: 0;
-                margin-right: 20px;
-                white-space: nowrap;
-            }
-
-            .template-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            header h1 {
-                font-size: 1.8em;
-            }
-        }
+        * { box-sizing: border-box; }
+        body { background: #0b1020; color: #f5f7fb; font-family: Arial, sans-serif; margin: 0; }
+        header { align-items: center; background: #101934; border-bottom: 1px solid #27426f; display: flex; gap: 16px; justify-content: space-between; padding: 18px 24px; }
+        h1 { font-size: 1.3rem; margin: 0; } h2 { font-size: 1.2rem; margin: 0; } h3 { margin: 0; }
+        a { color: #4fd1ff; } header a { text-decoration: none; }
+        main { margin: auto; max-width: 1200px; padding: 24px; }
+        .intro { color: #9db1d1; margin: 8px 0 20px; }
+        .tabs { border-bottom: 1px solid #27426f; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+        .tab { background: transparent; border: 0; border-bottom: 3px solid transparent; color: #9db1d1; cursor: pointer; font: inherit; font-weight: bold; padding: 12px 14px; }
+        .tab.active, .tab:hover { border-bottom-color: #4fd1ff; color: #f5f7fb; }
+        .panel { display: none; } .panel.active { display: block; }
+        .card { background: #101934; border: 1px solid #27426f; border-radius: 10px; padding: 20px; }
+        .template-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+        .template-card { background: #0d1730; border: 1px solid #27426f; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+        .template-card p, .muted { color: #9db1d1; line-height: 1.5; margin: 0; }
+        .badge { align-self: flex-start; background: #163455; border-radius: 999px; color: #8de4ff; font-size: .75rem; font-weight: bold; padding: 4px 9px; text-transform: uppercase; }
+        .form-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .field { display: flex; flex-direction: column; gap: 7px; } label { color: #c8d7ef; font-size: .9rem; font-weight: bold; text-transform: capitalize; }
+        input, select, textarea { background: #0b1020; border: 1px solid #35517f; border-radius: 6px; color: #f5f7fb; font: inherit; padding: 10px; width: 100%; }
+        input:focus, select:focus, textarea:focus { border-color: #4fd1ff; outline: 2px solid rgba(79, 209, 255, .2); }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+        button { border: 0; border-radius: 6px; cursor: pointer; font: inherit; font-weight: bold; padding: 10px 14px; }
+        .primary { background: #4fd1ff; color: #03111d; } .secondary { background: #213558; color: #f5f7fb; } .danger { background: #6d2636; color: #ffe8ec; }
+        button:disabled { cursor: not-allowed; opacity: .55; }
+        .notice { border: 1px solid #27426f; border-radius: 8px; display: none; margin: 0 0 18px; padding: 12px 14px; }
+        .notice.show { display: block; } .notice.success { background: #103525; border-color: #28734e; } .notice.error { background: #3c1720; border-color: #873247; }
+        .table-wrap { border: 1px solid #27426f; border-radius: 10px; overflow: auto; }
+        table { border-collapse: collapse; min-width: 680px; width: 100%; } th, td { border-bottom: 1px solid #223354; padding: 12px; text-align: left; vertical-align: middle; }
+        th { background: #162343; color: #9db1d1; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+        td { font-size: .9rem; } tr:last-child td { border-bottom: 0; }
+        .empty { color: #9db1d1; padding: 20px; text-align: center; }
+        .service { align-items: center; display: flex; gap: 8px; margin-bottom: 18px; } .dot { background: #9db1d1; border-radius: 50%; height: 9px; width: 9px; } .dot.ready { background: #55d895; }
+        .pdf-result { color: #9db1d1; margin-top: 14px; min-height: 22px; }
+        @media (max-width: 700px) { header { align-items: flex-start; flex-direction: column; padding: 16px; } main { padding: 16px; } .tab { padding: 10px 8px; } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📋 Legal Document Business Writer</h1>
-            <p>Professional legal document management system</p>
-        </header>
+    <header>
+        <h1>BizStack Perks legal documents</h1>
+        <nav><a href="/admin">Admin workspace</a> · <a href="/dashboard">Dashboard</a> · <a href="/logout">Log out</a></nav>
+    </header>
+    <main>
+        <h2>Document workspace</h2>
+        <p class="intro">Create business documents, manage generated files, and use PDF tools from your secure admin session.</p>
+        <div class="service"><span id="healthDot" class="dot"></span><span id="healthText" class="muted">Checking legal document service...</span></div>
+        <div id="notice" class="notice" role="alert"></div>
 
-        <div class="main-content">
-            <div class="sidebar">
-                <div class="sidebar-section">
-                    <h3>📄 Documents</h3>
-                    <a class="sidebar-link active" href="#templates" onclick="showSection('templates'); return false;">Templates</a>
-                    <a class="sidebar-link" href="#generate" onclick="showSection('generate'); return false;">Generate</a>
-                    <a class="sidebar-link" href="#documents" onclick="showSection('documents'); return false;">My Documents</a>
-                </div>
-
-                <div class="sidebar-section">
-                    <h3>🔧 Tools</h3>
-                    <a class="sidebar-link" href="#pdf-tools" onclick="showSection('pdf-tools'); return false;">PDF Tools</a>
-                    <a class="sidebar-link" href="#form-tools" onclick="showSection('form-tools'); return false;">Forms</a>
-                    <a class="sidebar-link" href="#upload" onclick="showSection('upload'); return false;">Upload</a>
-                </div>
-
-                <div class="sidebar-section">
-                    <h3>📧 Share</h3>
-                    <a class="sidebar-link" href="#email" onclick="showSection('email'); return false;">Email</a>
-                    <a class="sidebar-link" href="#sms" onclick="showSection('sms'); return false;">SMS</a>
-                </div>
-
-                <div class="sidebar-section">
-                    <h3>⚙️ Settings</h3>
-                    <a class="sidebar-link" href="#settings" onclick="showSection('settings'); return false;">Settings</a>
-                    <a class="sidebar-link" href="#help" onclick="showSection('help'); return false;">Help</a>
-                </div>
-            </div>
-
-            <div class="content">
-                <!-- Alert Messages -->
-                <div id="alert" class="alert"></div>
-
-                <!-- Templates Section -->
-                <div id="templates" class="section active">
-                    <h2 class="section-title">📋 Legal Document Templates</h2>
-                    <p>Choose from our collection of professional legal templates:</p>
-                    <div class="template-grid" id="templateGrid">
-                        <!-- Templates will be loaded here -->
-                    </div>
-                </div>
-
-                <!-- Generate Section -->
-                <div id="generate" class="section">
-                    <h2 class="section-title">✏️ Generate Document</h2>
-                    <div class="form-group">
-                        <label>Select Template:</label>
-                        <select id="templateSelect" onchange="loadTemplateFields()">
-                            <option value="">Choose a template...</option>
-                        </select>
-                    </div>
-                    <div id="formFields"></div>
-                    <div class="form-group">
-                        <label>Output Format:</label>
-                        <select id="format">
-                            <option value="docx">Word Document (.docx)</option>
-                            <option value="pdf">PDF Document (.pdf)</option>
-                            <option value="txt">Text File (.txt)</option>
-                        </select>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="generateDocument()">Generate Document</button>
-                        <button class="btn-secondary" onclick="resetForm()">Clear</button>
-                    </div>
-                </div>
-
-                <!-- Documents Section -->
-                <div id="documents" class="section">
-                    <h2 class="section-title">📂 My Documents</h2>
-                    <div class="stats-grid" id="statsGrid">
-                        <!-- Stats will be loaded here -->
-                    </div>
-                    <div class="document-list" id="documentList">
-                        <!-- Documents will be loaded here -->
-                    </div>
-                </div>
-
-                <!-- PDF Tools -->
-                <div id="pdf-tools" class="section">
-                    <h2 class="section-title">🔧 PDF Tools</h2>
-                    <div class="form-group">
-                        <label>Upload PDF:</label>
-                        <input type="file" accept=".pdf" id="pdfFile" multiple>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="mergePDFs()">Merge PDFs</button>
-                        <button class="btn-primary" onclick="splitPDF()">Split PDF</button>
-                        <button class="btn-primary" onclick="addWatermark()">Add Watermark</button>
-                    </div>
-                </div>
-
-                <!-- Email Section -->
-                <div id="email" class="section">
-                    <h2 class="section-title">📧 Send via Email</h2>
-                    <div class="form-group">
-                        <label>Recipient Email:</label>
-                        <input type="email" id="emailRecipient" placeholder="recipient@example.com">
-                    </div>
-                    <div class="form-group">
-                        <label>Document:</label>
-                        <select id="emailDocument"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Subject:</label>
-                        <input type="text" id="emailSubject" value="Legal Document">
-                    </div>
-                    <div class="form-group">
-                        <label>Message:</label>
-                        <textarea id="emailMessage" rows="4" placeholder="Add a message..."></textarea>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="sendEmail()">Send Email</button>
-                    </div>
-                </div>
-
-                <!-- SMS Section -->
-                <div id="sms" class="section">
-                    <h2 class="section-title">📱 Send via SMS</h2>
-                    <div class="form-group">
-                        <label>Recipient Phone:</label>
-                        <input type="tel" id="smsRecipient" placeholder="+1234567890">
-                    </div>
-                    <div class="form-group">
-                        <label>Document:</label>
-                        <select id="smsDocument"></select>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="sendSMS()">Send Link via SMS</button>
-                    </div>
-                </div>
-
-                <!-- Settings Section -->
-                <div id="settings" class="section">
-                    <h2 class="section-title">⚙️ Settings</h2>
-                    <div class="form-group">
-                        <label>Email Configuration:</label>
-                        <button class="btn-secondary" onclick="configureEmail()">Configure Email</button>
-                    </div>
-                    <div class="form-group">
-                        <label>SMS Configuration:</label>
-                        <button class="btn-secondary" onclick="configureSMS()">Configure SMS</button>
-                    </div>
-                </div>
-
-                <!-- Help Section -->
-                <div id="help" class="section">
-                    <h2 class="section-title">❓ Help & Support</h2>
-                    <h3>Getting Started</h3>
-                    <ol>
-                        <li>Select a template from the Templates section</li>
-                        <li>Click "Generate" and fill in the required fields</li>
-                        <li>Choose your preferred format (DOCX, PDF, or Text)</li>
-                        <li>Generate and download your document</li>
-                        <li>Share via Email or SMS if desired</li>
-                    </ol>
-
-                    <h3>Features</h3>
-                    <ul>
-                        <li><strong>Templates:</strong> 10+ professional legal templates</li>
-                        <li><strong>PDF Tools:</strong> Merge, split, and add watermarks</li>
-                        <li><strong>Email:</strong> Send documents with custom messages</li>
-                        <li><strong>SMS:</strong> Send document links via text message</li>
-                    </ul>
-
-                    <h3>API Documentation</h3>
-                    <p><a href="/api/legal/health" target="_blank">Check Service Status</a></p>
-                </div>
-            </div>
+        <div class="tabs" role="tablist">
+            <button class="tab active" data-panel="templates" type="button">Templates</button>
+            <button class="tab" data-panel="create" type="button">Create document</button>
+            <button class="tab" data-panel="documents" type="button">My documents</button>
+            <button class="tab" data-panel="pdf" type="button">PDF tools</button>
         </div>
 
-        <footer>
-            <p>&copy; 2024 BizStack Perks - Legal Document Business Writer v1.0</p>
-            <p>All documents are encrypted and securely stored</p>
-        </footer>
-    </div>
+        <section id="templates" class="panel active">
+            <div id="templateGrid" class="template-grid"></div>
+        </section>
 
-    <!-- Configuration Modal -->
-    <div id="configModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="configTitle">Configure Service</h2>
-                <span class="close" onclick="closeModal()">&times;</span>
+        <section id="create" class="panel">
+            <div class="card">
+                <h3>Create a document</h3>
+                <p class="muted" style="margin:8px 0 20px">Select a template, complete its fields, then generate a file.</p>
+                <div class="form-grid">
+                    <div class="field"><label for="templateSelect">Template</label><select id="templateSelect"></select></div>
+                    <div class="field"><label for="formatSelect">File format</label><select id="formatSelect"><option value="docx">Word document (.docx)</option><option value="pdf">PDF (.pdf)</option><option value="txt">Text (.txt)</option></select></div>
+                    <div class="field"><label for="filename">File name (optional)</label><input id="filename" type="text" placeholder="example-nda"></div>
+                </div>
+                <div id="documentFields" class="form-grid" style="margin-top:16px"></div>
+                <div class="actions"><button id="generateButton" class="primary" type="button">Generate document</button><button id="clearButton" class="secondary" type="button">Clear</button></div>
             </div>
-            <div id="configForm"></div>
-        </div>
-    </div>
+        </section>
 
+        <section id="documents" class="panel">
+            <div class="card">
+                <div class="actions" style="justify-content:space-between;margin-top:0"><h3>Generated documents</h3><button id="refreshDocuments" class="secondary" type="button">Refresh</button></div>
+                <div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Name</th><th>Created</th><th>Size</th><th>Actions</th></tr></thead><tbody id="documentList"></tbody></table></div>
+            </div>
+        </section>
+
+        <section id="pdf" class="panel">
+            <div class="card">
+                <h3>PDF tools</h3>
+                <p class="muted" style="margin:8px 0 20px">Upload one or more PDFs, then merge, split, or watermark the uploaded files.</p>
+                <div class="field"><label for="pdfFiles">PDF files</label><input id="pdfFiles" type="file" accept="application/pdf,.pdf" multiple></div>
+                <div class="field" style="margin-top:16px"><label for="watermarkText">Watermark text</label><input id="watermarkText" type="text" value="CONFIDENTIAL"></div>
+                <div class="actions"><button id="mergePdfs" class="primary" type="button">Merge files</button><button id="splitPdf" class="secondary" type="button">Split one file</button><button id="watermarkPdf" class="secondary" type="button">Add watermark</button></div>
+                <p id="pdfResult" class="pdf-result"></p>
+            </div>
+        </section>
+    </main>
     <script>
-        // Show/Hide Sections
-        function showSection(sectionId) {
-            const section = document.getElementById(sectionId);
-            const activeLink = document.querySelector(`.sidebar-link[href="#${sectionId}"]`);
+        const state = { templates: [] };
+        const notice = document.getElementById("notice");
 
-            if (!section) {
-                showAlert('This section is not available yet.', 'error');
-                return;
-            }
-
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-            
-            section.classList.add('active');
-            if (activeLink) activeLink.classList.add('active');
-            
-            // Load data for specific sections
-            if (sectionId === 'documents') loadDocuments();
-            if (sectionId === 'templates') loadTemplates();
-            if (sectionId === 'email' || sectionId === 'sms') loadDocuments();
+        function showNotice(message, type = "success") {
+            notice.textContent = message;
+            notice.className = `notice show ${type}`;
         }
 
-        // Load Templates
-        async function loadTemplates() {
-            try {
-                const response = await fetch('/api/legal/templates', {
-                    headers: { 'Authorization': `Bearer ${getToken()}` }
-                });
-                if (!response.ok) throw new Error(`Request failed (${response.status})`);
-                const data = await response.json();
-                const templates = data.templates || [];
-                const grid = document.getElementById('templateGrid');
-                const select = document.getElementById('templateSelect');
-                grid.replaceChildren(...templates.map(template => {
-                    const templateId = getTemplateId(template);
-                    const card = document.createElement('div');
-                    const name = document.createElement('h3');
-                    const category = document.createElement('span');
-                    const description = document.createElement('p');
-
-                    card.className = 'template-card';
-                    card.addEventListener('click', () => selectTemplate(templateId));
-                    name.textContent = template.name;
-                    category.className = 'category';
-                    category.textContent = template.category;
-                    description.textContent = template.description;
-                    card.append(name, category, description);
-                    return card;
-                }));
-
-                const defaultOption = new Option('Choose a template...', '');
-                const templateOptions = templates.map(template => {
-                    const option = new Option();
-                    option.value = getTemplateId(template);
-                    option.textContent = template.name;
-                    return option;
-                });
-                select.replaceChildren(defaultOption, ...templateOptions);
-            } catch (error) {
-                showAlert('Error loading templates: ' + error.message, 'error');
-            }
-        }
-
-        // Load Documents
-        async function loadDocuments() {
-            try {
-                const response = await fetch('/api/legal/documents', {
-                    headers: { 'Authorization': `Bearer ${getToken()}` }
-                });
-                if (!response.ok) throw new Error(`Request failed (${response.status})`);
-                const data = await response.json();
-                const documents = data.documents || [];
-                const list = document.getElementById('documentList');
-                list.replaceChildren(...documents.map(d => {
-                    const item = document.createElement('div');
-                    const icon = document.createElement('div');
-                    const info = document.createElement('div');
-                    const name = document.createElement('div');
-                    const meta = document.createElement('div');
-                    const actions = document.createElement('div');
-                    const download = document.createElement('button');
-                    const share = document.createElement('button');
-                    const remove = document.createElement('button');
-
-                    item.className = 'document-item';
-                    icon.className = 'document-icon';
-                    icon.textContent = '📄';
-                    info.className = 'document-info';
-                    name.className = 'document-name';
-                    name.textContent = d.name;
-                    meta.className = 'document-meta';
-                    meta.textContent = `${new Date(d.created).toLocaleDateString()} • ${(d.size / 1024).toFixed(2)} KB`;
-                    actions.className = 'document-actions';
-
-                    download.className = 'btn-secondary';
-                    download.textContent = 'Download';
-                    download.addEventListener('click', () => downloadDocument(d.name));
-                    share.className = 'btn-secondary';
-                    share.textContent = 'Share';
-                    share.addEventListener('click', () => shareDocument(d.name));
-                    remove.className = 'btn-danger';
-                    remove.textContent = 'Delete';
-                    remove.addEventListener('click', () => deleteDocument(d.name));
-
-                    info.append(name, meta);
-                    actions.append(download, share, remove);
-                    item.append(icon, info, actions);
-                    return item;
-                }));
-                populateDocumentSelects(documents);
-            } catch (error) {
-                showAlert('Error loading documents: ' + error.message, 'error');
-            }
-        }
-
-        // Helper Functions
-        function getToken() {
-            return localStorage.getItem('auth_token') || 'demo-token';
-        }
-
-        function getTemplateId(template) {
-            if (template.id) return template.id;
-            const filename = String(template.file_path || '').split(/[\\/]/).pop() || '';
-            return filename.replace(/_template\.[^.]+$/, '');
-        }
-
-        async function apiRequest(url, options = {}) {
-            const headers = {
-                'Authorization': `Bearer ${getToken()}`,
-                ...options.headers
-            };
-            if (options.body && !(options.body instanceof FormData)) {
-                headers['Content-Type'] = 'application/json';
-            }
-
+        async function request(url, options = {}) {
+            const headers = { ...options.headers };
+            if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
             const response = await fetch(url, { ...options, headers });
-            const contentType = response.headers.get('content-type') || '';
-            const data = contentType.includes('application/json') ? await response.json() : null;
-            if (!response.ok) {
-                throw new Error(data?.error || `Request failed (${response.status})`);
-            }
+            const isJson = (response.headers.get("content-type") || "").includes("application/json");
+            const data = isJson ? await response.json() : null;
+            if (!response.ok) throw new Error(data?.error || data?.detail || `Request failed (${response.status})`);
             return { response, data };
         }
 
-        function populateDocumentSelects(documents) {
-            ['emailDocument', 'smsDocument'].forEach(selectId => {
-                const select = document.getElementById(selectId);
-                const options = documents.map(document => new Option(document.name, document.name));
-                select.replaceChildren(new Option('Choose a document...', ''), ...options);
-            });
+        function templateId(template) {
+            const fileName = String(template.file_path || "").split(/[\\/]/).pop() || "";
+            return fileName.replace(/_template\.[^.]+$/, "");
         }
 
-        async function selectTemplate(templateId) {
-            document.getElementById('templateSelect').value = templateId;
-            showSection('generate');
-            await loadTemplateFields();
+        function selectTemplate(id) {
+            document.getElementById("templateSelect").value = id;
+            renderFields();
+            showPanel("create");
         }
 
-        async function loadTemplateFields() {
-            const templateId = document.getElementById('templateSelect').value;
-            const formFields = document.getElementById('formFields');
-            formFields.innerHTML = '';
-            if (!templateId) return;
+        function renderFields() {
+            const selected = state.templates.find(template => templateId(template) === document.getElementById("templateSelect").value);
+            const container = document.getElementById("documentFields");
+            container.replaceChildren();
+            for (const fieldName of selected?.fields || []) {
+                const field = document.createElement("div");
+                const label = document.createElement("label");
+                const input = document.createElement("input");
+                input.type = "text";
+                input.name = fieldName;
+                input.required = true;
+                label.htmlFor = `field-${fieldName}`;
+                label.textContent = fieldName.replace(/_/g, " ");
+                input.id = `field-${fieldName}`;
+                field.className = "field";
+                field.append(label, input);
+                container.append(field);
+            }
+        }
 
-            try {
-                const { data } = await apiRequest(`/api/legal/templates/${encodeURIComponent(templateId)}`);
-                const fields = data.template?.fields || [];
-                formFields.replaceChildren(...fields.map((field, index) => {
-                    const fieldName = String(field);
-                    const inputName = fieldName.replace(/[^A-Za-z0-9_-]/g, '_') || `field_${index}`;
-                    const inputId = `field-${index}-${inputName}`;
-                    const group = document.createElement('div');
-                    const label = document.createElement('label');
-                    const input = document.createElement('input');
-
-                    group.className = 'form-group';
-                    label.htmlFor = inputId;
-                    label.textContent = `${fieldName.replace(/_/g, ' ')}:`;
-                    input.type = 'text';
-                    input.id = inputId;
-                    input.name = inputName;
-                    input.dataset.fieldName = fieldName;
-
-                    group.append(label, input);
-                    return group;
-                }));
-            } catch (error) {
-                showAlert('Error loading template fields: ' + error.message, 'error');
+        async function loadTemplates() {
+            const { data } = await request("/api/legal/templates");
+            state.templates = data.templates || [];
+            const grid = document.getElementById("templateGrid");
+            const select = document.getElementById("templateSelect");
+            grid.replaceChildren();
+            select.replaceChildren(new Option("Choose a template", ""));
+            for (const template of state.templates) {
+                const id = templateId(template);
+                const card = document.createElement("article");
+                const title = document.createElement("h3");
+                const category = document.createElement("span");
+                const description = document.createElement("p");
+                const button = document.createElement("button");
+                card.className = "template-card";
+                title.textContent = template.name;
+                category.className = "badge";
+                category.textContent = template.category;
+                description.textContent = template.description;
+                button.className = "secondary";
+                button.type = "button";
+                button.textContent = "Use template";
+                button.addEventListener("click", () => selectTemplate(id));
+                card.append(title, category, description, button);
+                grid.append(card);
+                select.append(new Option(template.name, id));
             }
         }
 
         async function generateDocument() {
-            const templateId = document.getElementById('templateSelect').value;
-            if (!templateId) {
-                showAlert('Choose a template before generating a document.', 'error');
+            const templateId = document.getElementById("templateSelect").value;
+            if (!templateId) return showNotice("Choose a template before generating a document.", "error");
+            const formData = {};
+            for (const input of document.querySelectorAll("#documentFields input")) {
+                if (!input.value.trim()) return showNotice(`Complete ${input.name.replace(/_/g, " ")}.`, "error");
+                formData[input.name] = input.value.trim();
+            }
+            const { data } = await request("/api/legal/generate", {
+                method: "POST",
+                body: JSON.stringify({
+                    template_id: templateId,
+                    form_data: formData,
+                    format: document.getElementById("formatSelect").value,
+                    filename: document.getElementById("filename").value.trim() || undefined
+                })
+            });
+            showNotice(`Created ${data.file}.`);
+            document.getElementById("filename").value = "";
+            loadDocuments();
+            showPanel("documents");
+        }
+
+        async function loadDocuments() {
+            const { data } = await request("/api/legal/documents");
+            const list = document.getElementById("documentList");
+            list.replaceChildren();
+            const documents = data.documents || [];
+            if (!documents.length) {
+                const row = document.createElement("tr");
+                row.innerHTML = '<td class="empty" colspan="4">No documents have been generated yet.</td>';
+                list.append(row);
                 return;
             }
-            const formData = Object.fromEntries(
-                Array.from(document.querySelectorAll('#formFields input')).map(
-                    input => [input.dataset.fieldName || input.name, input.value]
-                )
-            );
-
-            try {
-                const { data } = await apiRequest('/api/legal/generate', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        template_id: templateId,
-                        form_data: formData,
-                        format: document.getElementById('format').value
-                    })
+            for (const document of documents) {
+                const row = document.createElement("tr");
+                const name = document.createElement("td");
+                const created = document.createElement("td");
+                const size = document.createElement("td");
+                const actions = document.createElement("td");
+                const download = document.createElement("button");
+                const remove = document.createElement("button");
+                name.textContent = document.name;
+                created.textContent = new Date(document.created).toLocaleString();
+                size.textContent = `${Math.max(1, Math.ceil(document.size / 1024))} KB`;
+                download.className = "secondary";
+                download.type = "button";
+                download.textContent = "Download";
+                download.addEventListener("click", () => { window.location.href = `/api/legal/download/${encodeURIComponent(document.name)}`; });
+                remove.className = "danger";
+                remove.type = "button";
+                remove.textContent = "Delete";
+                remove.addEventListener("click", async () => {
+                    if (!window.confirm(`Delete ${document.name}?`)) return;
+                    await request(`/api/legal/delete/${encodeURIComponent(document.name)}`, { method: "DELETE" });
+                    showNotice(`Deleted ${document.name}.`);
+                    loadDocuments();
                 });
-                showAlert(`Document generated: ${data.file}`, 'success');
-                loadDocuments();
-            } catch (error) {
-                showAlert('Error generating document: ' + error.message, 'error');
+                actions.append(download, " ", remove);
+                row.append(name, created, size, actions);
+                list.append(row);
             }
         }
 
-        function resetForm() {
-            document.getElementById('templateSelect').value = '';
-            document.getElementById('formFields').innerHTML = '';
-            document.getElementById('format').value = 'docx';
-        }
-
-        async function uploadPdfFiles(requireSingle = false) {
-            const files = Array.from(document.getElementById('pdfFile').files);
-            if (!files.length || (requireSingle && files.length !== 1)) {
-                throw new Error(requireSingle ? 'Select exactly one PDF file.' : 'Select at least one PDF file.');
-            }
+        async function uploadPdfs(requireOne = false) {
+            const files = [...document.getElementById("pdfFiles").files];
+            if (!files.length || (requireOne && files.length !== 1)) throw new Error(requireOne ? "Select exactly one PDF file." : "Select one or more PDF files.");
             return Promise.all(files.map(async file => {
-                const formData = new FormData();
-                formData.append('file', file);
-                const { data } = await apiRequest('/api/legal/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                return data.document_id;
+                const form = new FormData();
+                form.append("file", file);
+                return (await request("/api/legal/upload", { method: "POST", body: form })).data.document_id;
             }));
         }
 
-        async function mergePDFs() {
+        async function runPdfTool(kind) {
+            const output = document.getElementById("pdfResult");
+            output.textContent = "Uploading PDF files...";
             try {
-                const pdfPaths = await uploadPdfFiles();
-                const { data } = await apiRequest('/api/legal/pdf/merge', {
-                    method: 'POST',
-                    body: JSON.stringify({ pdf_paths: pdfPaths })
-                });
-                showAlert(data.message || 'PDFs merged successfully.', 'success');
+                const files = await uploadPdfs(kind !== "merge");
+                let endpoint = "/api/legal/pdf/merge";
+                let body = { pdf_paths: files };
+                if (kind === "split") { endpoint = "/api/legal/pdf/split"; body = { pdf_path: files[0] }; }
+                if (kind === "watermark") { endpoint = "/api/legal/pdf/watermark"; body = { pdf_path: files[0], watermark_text: document.getElementById("watermarkText").value.trim() }; }
+                const { data } = await request(endpoint, { method: "POST", body: JSON.stringify(body) });
+                output.textContent = `PDF operation complete: ${data.output || (data.output_files || []).join(", ") || "see My documents"}.`;
+                showNotice("PDF operation completed.");
                 loadDocuments();
             } catch (error) {
-                showAlert('Error merging PDFs: ' + error.message, 'error');
+                output.textContent = "";
+                showNotice(error.message, "error");
             }
         }
 
-        async function splitPDF() {
-            try {
-                const [pdfPath] = await uploadPdfFiles(true);
-                const { data } = await apiRequest('/api/legal/pdf/split', {
-                    method: 'POST',
-                    body: JSON.stringify({ pdf_path: pdfPath })
-                });
-                showAlert(data.message || 'PDF split successfully.', 'success');
-                loadDocuments();
-            } catch (error) {
-                showAlert('Error splitting PDF: ' + error.message, 'error');
-            }
+        function showPanel(id) {
+            document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === id));
+            document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === id));
+            if (id === "documents") loadDocuments().catch(error => showNotice(error.message, "error"));
         }
 
-        async function addWatermark() {
-            const watermarkText = window.prompt('Watermark text:', 'CONFIDENTIAL');
-            if (!watermarkText) return;
+        document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => showPanel(tab.dataset.panel)));
+        document.getElementById("templateSelect").addEventListener("change", renderFields);
+        document.getElementById("generateButton").addEventListener("click", () => generateDocument().catch(error => showNotice(error.message, "error")));
+        document.getElementById("clearButton").addEventListener("click", () => { document.getElementById("templateSelect").value = ""; document.getElementById("filename").value = ""; renderFields(); });
+        document.getElementById("refreshDocuments").addEventListener("click", () => loadDocuments().catch(error => showNotice(error.message, "error")));
+        document.getElementById("mergePdfs").addEventListener("click", () => runPdfTool("merge"));
+        document.getElementById("splitPdf").addEventListener("click", () => runPdfTool("split"));
+        document.getElementById("watermarkPdf").addEventListener("click", () => runPdfTool("watermark"));
 
-            try {
-                const [pdfPath] = await uploadPdfFiles(true);
-                const { data } = await apiRequest('/api/legal/pdf/watermark', {
-                    method: 'POST',
-                    body: JSON.stringify({ pdf_path: pdfPath, watermark_text: watermarkText })
-                });
-                showAlert(data.message || 'Watermark added successfully.', 'success');
-                loadDocuments();
-            } catch (error) {
-                showAlert('Error adding watermark: ' + error.message, 'error');
-            }
-        }
-
-        async function sendEmail() {
-            const recipient = document.getElementById('emailRecipient').value;
-            const documentName = document.getElementById('emailDocument').value;
-            if (!recipient || !documentName) {
-                showAlert('Choose a document and enter a recipient email address.', 'error');
-                return;
-            }
-            try {
-                await apiRequest('/api/legal/email/send', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        document_path: documentName,
-                        recipient_email: recipient,
-                        subject: document.getElementById('emailSubject').value,
-                        message: document.getElementById('emailMessage').value
-                    })
-                });
-                showAlert('Email sent successfully.', 'success');
-            } catch (error) {
-                showAlert('Error sending email: ' + error.message, 'error');
-            }
-        }
-
-        async function sendSMS() {
-            const recipient = document.getElementById('smsRecipient').value;
-            const documentName = document.getElementById('smsDocument').value;
-            if (!recipient || !documentName) {
-                showAlert('Choose a document and enter a recipient phone number.', 'error');
-                return;
-            }
-            try {
-                await apiRequest('/api/legal/sms/send', {
-                    method: 'POST',
-                    body: JSON.stringify({ document_path: documentName, recipient_number: recipient })
-                });
-                showAlert('SMS sent successfully.', 'success');
-            } catch (error) {
-                showAlert('Error sending SMS: ' + error.message, 'error');
-            }
-        }
-
-        async function downloadDocument(documentName) {
-            try {
-                const { response } = await apiRequest(`/api/legal/download/${encodeURIComponent(documentName)}`);
-                const url = URL.createObjectURL(await response.blob());
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = documentName;
-                link.click();
-                URL.revokeObjectURL(url);
-            } catch (error) {
-                showAlert('Error downloading document: ' + error.message, 'error');
-            }
-        }
-
-        function shareDocument(documentName) {
-            showSection('email');
-            document.getElementById('emailDocument').value = documentName;
-            showAlert('Complete the email form to share this document.', 'info');
-        }
-
-        async function deleteDocument(documentName) {
-            if (!window.confirm(`Delete "${documentName}"?`)) return;
-
-            try {
-                await apiRequest(`/api/legal/delete/${encodeURIComponent(documentName)}`, { method: 'DELETE' });
-                showAlert('Document deleted successfully.', 'success');
-                loadDocuments();
-            } catch (error) {
-                showAlert('Error deleting document: ' + error.message, 'error');
-            }
-        }
-
-        function configureEmail() {
-            showConfigurationForm('Configure Email', `
-                <form>
-                    <div class="form-group"><label>SMTP Server:<input name="smtp_server" required></label></div>
-                    <div class="form-group"><label>SMTP Port:<input name="smtp_port" type="number" value="587" required></label></div>
-                    <div class="form-group"><label>Email:<input name="email" type="email" required></label></div>
-                    <div class="form-group"><label>Password:<input name="password" type="password" required></label></div>
-                    <button class="btn-primary" type="submit">Save</button>
-                </form>
-            `, '/api/legal/email/setup');
-        }
-
-        function configureSMS() {
-            showConfigurationForm('Configure SMS', `
-                <form>
-                    <div class="form-group"><label>Account SID:<input name="twilio_account_sid" required></label></div>
-                    <div class="form-group"><label>Auth Token:<input name="twilio_auth_token" type="password" required></label></div>
-                    <div class="form-group"><label>From Number:<input name="from_number" type="tel" required></label></div>
-                    <button class="btn-primary" type="submit">Save</button>
-                </form>
-            `, '/api/legal/sms/setup');
-        }
-
-        function showConfigurationForm(title, content, endpoint) {
-            document.getElementById('configTitle').textContent = title;
-            const container = document.getElementById('configForm');
-            container.innerHTML = content;
-            container.querySelector('form').addEventListener('submit', async event => {
-                event.preventDefault();
-                const values = Object.fromEntries(new FormData(event.currentTarget));
-                if (values.smtp_port) values.smtp_port = Number(values.smtp_port);
-
-                try {
-                    await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(values) });
-                    closeModal();
-                    showAlert(`${title} saved successfully.`, 'success');
-                } catch (error) {
-                    showAlert(`Error saving configuration: ${error.message}`, 'error');
-                }
-            });
-            document.getElementById('configModal').classList.add('show');
-        }
-
-        function showAlert(message, type = 'info') {
-            const alert = document.getElementById('alert');
-            alert.textContent = message;
-            alert.className = `alert show alert-${type}`;
-            setTimeout(() => alert.classList.remove('show'), 5000);
-        }
-
-        function closeModal() {
-            document.getElementById('configModal').classList.remove('show');
-        }
-
-        // Initialize
-        loadTemplates();
+        request("/api/legal/health").then(({ data }) => {
+            document.getElementById("healthDot").classList.toggle("ready", data.status === "healthy");
+            document.getElementById("healthText").textContent = data.status === "healthy" ? "Legal document service is ready." : "Legal document service is unavailable.";
+        }).catch(() => { document.getElementById("healthText").textContent = "Unable to reach the legal document service."; });
+        loadTemplates().catch(error => showNotice(error.message, "error"));
     </script>
 </body>
 </html>
