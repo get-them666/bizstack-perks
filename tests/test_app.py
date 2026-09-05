@@ -478,11 +478,9 @@ class BizStackPerksAppTests(unittest.TestCase):
 
     @patch("main.scan_public_signals")
     @patch("main.discover_live_public_bank_rates")
-    @patch("main.discover_public_business_contact", return_value="contact@growing.example")
     @patch("email_notifier.send_email")
-    @patch("email_notifier.email_configured", return_value=True)
-    def test_one_click_campaign_sends_to_matching_opted_in_business(
-        self, _mock_configured, mock_send, _mock_contact, mock_discover, mock_signals
+    def test_local_campaign_creates_review_drafts_without_sending(
+        self, mock_send, mock_discover, mock_signals
     ):
         from business_signals import BusinessSignal
 
@@ -495,14 +493,16 @@ class BizStackPerksAppTests(unittest.TestCase):
             source_name="Example News",
             location="Norfolk, VA",
         )]
-        mock_send.return_value = True
         self.client.cookies.set("session_token", self.main.SESSION_SECRET)
         self.main.SENDER_PHYSICAL_ADDRESS = "123 Main Street, Norfolk, VA 23510"
-        response = self.client.post("/api/automation/run")
+        response = self.client.post(
+            "/api/automation/run",
+            data={"location": "Norfolk", "region": "VA", "industry": "construction"},
+        )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["emails_sent"][0]["email"], "contact@growing.example")
-        mock_send.assert_called_once()
+        self.assertEqual(response.json()["drafts"][0]["subject"], "Saw the news about Growing Co — thought this might help")
+        mock_send.assert_not_called()
 
     def test_public_rate_monitor_extracts_labeled_rates_and_same_site_links(self):
         from public_rate_sources import _rate_for_product, _rate_from_text, _rate_page_links

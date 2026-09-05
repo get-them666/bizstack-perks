@@ -72,6 +72,13 @@
             real local bank rates, and generate personalized outreach emails &mdash; every email
             includes the required physical address and unsubscribe link (CAN-SPAM compliant).
         </p>
+        <div class="card">
+            <h2>Local business campaign</h2>
+            <p class="hint">Scan one service market and create source-linked drafts for review. This never sends email automatically.</p>
+            <div id="campaign-error" class="error" style="display:none;"></div>
+            <form id="campaign-form"><div class="row"><div class="field"><label for="campaign-location">Market</label><select id="campaign-location" name="location"><option value="Norfolk">Norfolk, VA</option><option value="Chesapeake" selected>Chesapeake, VA</option><option value="Virginia Beach">Virginia Beach, VA</option><option value="Portsmouth">Portsmouth, VA</option><option value="Suffolk">Suffolk, VA</option><option value="Richmond">Richmond, VA</option><option value="Currituck">Currituck, NC</option><option value="Elizabeth City">Elizabeth City, NC</option></select></div><div class="field"><label for="campaign-region">State</label><select id="campaign-region" name="region"><option value="VA" selected>Virginia</option><option value="NC">North Carolina</option></select></div><div class="field"><label for="campaign-industry">Industry</label><input id="campaign-industry" name="industry" placeholder="construction"></div></div><button type="submit">Scan and create review drafts</button></form>
+            <div id="campaign-loading" class="loading" style="display:none;">Scanning local sources and preparing drafts&hellip;</div><div id="campaign-results" style="display:none; margin-top:16px;"><pre id="campaign-output"></pre></div>
+        </div>
 
         <!-- Step 1: Scan for signals -->
         <div class="card">
@@ -161,6 +168,25 @@
     </main>
 
     <script>
+        document.getElementById("campaign-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const error = document.getElementById("campaign-error");
+            const loading = document.getElementById("campaign-loading");
+            const results = document.getElementById("campaign-results");
+            error.style.display = "none"; results.style.display = "none"; loading.style.display = "block";
+            try {
+                const response = await fetch("/api/automation/run", { method: "POST", body: new FormData(event.target), credentials: "same-origin" });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Campaign scan failed");
+                document.getElementById("campaign-output").textContent = data.drafts.length
+                    ? data.drafts.map((draft) => `Subject: ${draft.subject}\n\n${draft.body}`).join("\n\n" + "─".repeat(60) + "\n\n")
+                    : "No eligible current signals were returned for this market.";
+                results.style.display = "block";
+            } catch (campaignError) {
+                error.textContent = campaignError.message; error.style.display = "block";
+            } finally { loading.style.display = "none"; }
+        });
+
         // Step 1: Scan for signals
         document.getElementById("scan-form").addEventListener("submit", async (e) => {
             e.preventDefault();
