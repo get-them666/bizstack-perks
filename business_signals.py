@@ -263,7 +263,7 @@ def store_signals(conn, signals: List[BusinessSignal]) -> int:
     return inserted
 
 
-def signal_scan_targets() -> List[Dict[str, str]]:
+def signal_scan_targets() -> List[Dict[str, Any]]:
     """Read autonomous scan targets from a JSON environment variable."""
     try:
         targets = json.loads(os.getenv("SIGNAL_SCAN_TARGETS", "[]"))
@@ -281,14 +281,21 @@ async def run_autonomous_signal_scan(conn_factory: Callable[[], Any]) -> int:
     """Run one configured discovery sweep and retain the results."""
     total = 0
     for target in signal_scan_targets():
-        signals = await scan_public_signals(
-            target["location"], target.get("industry"), int(target.get("days_back", 30))
-        )
-        conn = conn_factory()
-        try:
-            total += store_signals(conn, signals)
-        finally:
-            conn.close()
+        industries = target.get("industries")
+        if not isinstance(industries, list):
+            industries = [target.get("industry")]
+        for industry in industries:
+            if industry is not None and not isinstance(industry, str):
+                logger.warning("Ignoring an invalid industry for %s", target["location"])
+                continue
+            signals = await scan_public_signals(
+                target["location"], industry, int(target.get("days_back", 30))
+            )
+            conn = conn_factory()
+            try:
+                total += store_signals(conn, signals)
+            finally:
+                conn.close()
     logger.info("Autonomous signal scan stored %d new signals", total)
     return total
 

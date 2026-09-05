@@ -46,6 +46,7 @@ import sqlite3
 import logging
 import argparse
 from datetime import datetime, timedelta
+from math import ceil
 from typing import Optional
 
 logging.basicConfig(
@@ -70,6 +71,18 @@ MAX_FOLLOW_UPS  = int(os.getenv("BOT_MAX_FOLLOW_UPS", "2"))
 AUTO_SEND_EMAIL = os.getenv("BOT_AUTO_SEND_EMAIL", "false").lower() == "true"
 AUTOMATED_SMS_ENABLED = os.getenv("BOT_AUTOMATED_SMS_ENABLED", "false").lower() == "true"
 AUTOMATED_CALLS_ENABLED = os.getenv("BOT_AUTOMATED_CALLS_ENABLED", "false").lower() == "true"
+MARKET_INTELLIGENCE_ENABLED = os.getenv("BOT_MARKET_INTELLIGENCE_ENABLED", "false").lower() == "true"
+SIGNAL_SCAN_INTERVAL_TICKS = max(
+    1, ceil(int(os.getenv("BOT_SIGNAL_SCAN_INTERVAL_SECONDS", "86400")) / 300)
+)
+RATE_SCAN_INTERVAL_TICKS = max(
+    1, ceil(int(os.getenv("BOT_RATE_SCAN_INTERVAL_SECONDS", "43200")) / 300)
+)
+BANK_RATE_REGIONS = tuple(
+    region.strip().upper()
+    for region in os.getenv("BOT_BANK_RATE_REGIONS", "VA,NC").split(",")
+    if region.strip()
+)
 
 # Twilio / SignalWire
 ACCOUNT_SID  = os.getenv("SIGNALWIRE_PROJECT_ID") or os.getenv("TWILIO_ACCOUNT_SID", "")
@@ -388,9 +401,37 @@ async def task_outbound_calls() -> int:
 
 async def task_scan_signals() -> int:
     """Find and persist public business-growth signals for configured markets."""
+    if not MARKET_INTELLIGENCE_ENABLED:
+        logger.info("Market intelligence is disabled — skipping business-signal scan.")
+        return 0
     from business_signals import run_autonomous_signal_scan
 
     return await run_autonomous_signal_scan(get_db)
+
+
+async def task_refresh_bank_rates() -> int:
+    """Refresh robots-permitted public business-loan sources for configured states."""
+    if not MARKET_INTELLIGENCE_ENABLED:
+        logger.info("Market intelligence is disabled — skipping bank-rate scan.")
+        return 0
+
+    from public_rate_sources import (
+        discover_live_public_bank_rates,
+        init_public_rate_source_table,
+        store_live_public_bank_rates,
+    )
+
+    conn = get_db()
+    try:
+        init_public_rate_source_table(conn)
+        stored = 0
+        for region in BANK_RATE_REGIONS:
+            rates = await discover_live_public_bank_rates("business loan", region, limit=10)
+            stored += store_live_public_bank_rates(conn, rates)
+        logger.info("Bank-rate scan stored %d updated public sources", stored)
+        return stored
+    finally:
+        conn.close()
 
 
 # ── Task: status summary ───────────────────────────────────────────────────────
@@ -439,6 +480,7 @@ async def run_once(task_name: Optional[str] = None) -> None:
         "pipeline-reminders": task_pipeline_reminders,
         "outbound-calls":     task_outbound_calls,
         "scan-signals":       task_scan_signals,
+        "refresh-bank-rates": task_refresh_bank_rates,
         "status":             task_status_summary,
     }
 
@@ -455,6 +497,7 @@ async def run_once(task_name: Optional[str] = None) -> None:
     await task_poll_email()
     await task_pipeline_reminders()
     await task_scan_signals()
+    await task_refresh_bank_rates()
     logger.info("Run-once complete.")
 
 
@@ -467,6 +510,8 @@ async def run_daemon() -> None:
       Every 5 min:  poll email, lead follow-ups
       Every 15 min: pipeline reminders, outbound calls
       Every hour:   status summary
+      Daily:        configured business-signal scans
+      Every 12 hr:  public bank-rate refreshes
     """
     logger.info("Bot agent daemon started.")
     await task_status_summary()
@@ -487,7 +532,13 @@ async def run_daemon() -> None:
             # Every hour (every 12th tick)
             if tick % 12 == 0:
                 await task_status_summary()
+
+            # Cadences default to 24 hours for signals and 12 hours for rates,
+            # keeping scans inside the public discovery provider's free-tier limit.
+            if tick % SIGNAL_SCAN_INTERVAL_TICKS == 0:
                 await task_scan_signals()
+            if tick % RATE_SCAN_INTERVAL_TICKS == 0:
+                await task_refresh_bank_rates()
 
         except Exception as e:
             logger.error("Daemon task error (continuing): %s", e)
