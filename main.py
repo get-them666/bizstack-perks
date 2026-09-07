@@ -43,7 +43,6 @@ from public_rate_sources import (
     list_public_rate_sources,
     store_live_public_bank_rates,
 )
-)
 from outreach_generator import (
     generate_live_rate_outreach_email,
     generate_outreach_email,
