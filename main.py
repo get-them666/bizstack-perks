@@ -3096,112 +3096,148 @@ async def admin_inbox_view(request: Request, conn=Depends(get_db)):
 # BIZSTACK DUAL-ENGINE SEARCH EXTENSIONS (APOLLO + SERPER)
 # ==============================================================================
 
-    import os, asyncio, requests
-    loc = payload.get("location") or payload.get("Market") or payload.get("market") or ""
-    ind = payload.get("industry") or payload.get("Industry") or payload.get("industry") or ""
+import os
+import asyncio
+from fastapi import FastAPI
+import httpx
 
-    async def fetch_apollo():
-        apollo_key = os.getenv("APOLLO_API_KEY")
-        if not apollo_key: return []
-        headers = {"Content-Type": "application/json", "X-Api-Key": apollo_key}
-        body = {"person_locations": [loc] if loc else [], "q_organization_keyword_tags": [ind] if ind else [], "per_page": 5}
-        try:
-            res = requests.post("https://apollo.io", json=body, headers=headers)
-            if res.status_code == 200:
-                return [{"company": p.get("organization", {}).get("name", "Local Business"), "contact_name": p.get("name", "Unknown"), "email": p.get("email", "Check Domain"), "source": "Apollo DB", "signal": "Verified Contact Record"} for p in res.json().get("people", [])]
-        except: pass
-        return []
+app = FastAPI()
 
-    async def fetch_serper():
-        serper_key = os.getenv("SERPER_API_KEY")
-        if not serper_key: return []
-        headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
-        body = {"q": f'"{loc}" "{ind or "business"}" expansion OR hiring', "num": 5}
-        try:
-            res = requests.post("https://serper.dev", json=body, headers=headers)
-            if res.status_code == 200:
-                return [{"company": n.get("source", "News Source"), "contact_name": "Review Article", "email": n.get("link"), "source": "Live Google News", "signal": n.get("title")} for n in res.json().get("news", [])]
-        except: pass
-        return []
-
-    apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
-    return {"status": "success", "count": len(apollo_res + serper_res), "data": [f"{p.get("company", p.get("title", "Local Lead"))} - {p.get("contact_name", p.get("email", "Check Domain"))}" if isinstance(p, dict) else str(p) for p in (apollo_res + serper_res)]}
-
-    import os, requests
-    market = payload.get("Market") or payload.get("location") or payload.get("market") or ""
-    industry = payload.get("Industry") or payload.get("industry") or ""
-    
-    apollo_key = os.getenv("APOLLO_API_KEY")
-    if not apollo_key:
-        return {"status": "error", "message": "APOLLO_API_KEY not configured"}
-        
-    headers = {"Content-Type": "application/json", "X-Api-Key": apollo_key}
-    body = {"person_locations": [market], "q_organization_keyword_tags": [industry] if industry else [], "per_page": 5}
-    
-    try:
-        res = requests.post("https://apollo.io", json=body, headers=headers)
-        if res.status_code == 200:
-            return {"status": "success", "message": "Source-linked drafts created for review.", "data": res.json().get("people", [])}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    return {"status": "success", "message": "Campaign scan completed with empty result backfill."}
+# -------------------------------------------------------------------------
+# Lead Finder and Google News Hybrid Search Pipeline
+# -------------------------------------------------------------------------
 @app.post("/api/signals/scan")
 async def handle_hybrid_scan(payload: dict):
-    import os, asyncio, requests
+    # Safely extract data location keys via fallback chaining
     loc = payload.get("location") or payload.get("Market") or payload.get("market") or ""
-    ind = payload.get("industry") or payload.get("Industry") or payload.get("industry") or ""
+    ind = payload.get("industry") or payload.get("Industry") or ""
 
-    async def fetch_apollo():
-        apollo_key = os.getenv("APOLLO_API_KEY")
-        if not apollo_key: return []
-        headers = {"Content-Type": "application/json", "X-Api-Key": apollo_key}
-        body = {"person_locations": [loc] if loc else [], "q_organization_keyword_tags": [ind] if ind else [], "per_page": 5}
-        try:
-            res = requests.post("https://apollo.io", json=body, headers=headers)
-            if res.status_code == 200:
-                res_data = res.json()
-                # Defensive check against list types
-                people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
-                return [{"company": p.get("organization", {}).get("name", "Local Business"), "contact_name": p.get("name", "Unknown"), "email": p.get("email", "Check Domain"), "source": "Apollo DB", "signal": "Verified Contact Record"} for p in people_list]
-        except: pass
-        return []
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        
+        # 1. Non-blocking call to Apollo Database
+        async def fetch_apollo():
+            apollo_key = os.getenv("APOLLO_API_KEY")
+            if not apollo_key:
+                return []
+            
+            # Target official people search routing endpoint
+            url = "https://apollo.io"
+            headers = {"Content-Type": "application/json"}
+            body = {
+                "api_key": apollo_key,
+                "person_locations": [loc] if loc else [],
+                "q_organization_keyword_tags": [ind] if ind else [],
+                "per_page": 5
+            }
+            try:
+                res = await client.post(url, json=body, headers=headers)
+                if res.status_code == 200:
+                    res_data = res.json()
+                    people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
+                    return [
+                        {
+                            "company": p.get("organization", {}).get("name", "Local Business"),
+                            "contact_name": p.get("name", "Unknown"),
+                            "email": p.get("email", "Check Domain"),
+                            "source": "Apollo DB",
+                            "signal": "Verified Contact Record"
+                        } 
+                        for p in people_list
+                    ]
+            except Exception:
+                pass
+            return []
 
-    async def fetch_serper():
-        serper_key = os.getenv("SERPER_API_KEY")
-        if not serper_key: return []
-        headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
-        body = {"q": f'"{loc}" "{ind or "business"}" expansion OR hiring', "num": 5}
-        try:
-            res = requests.post("https://serper.dev", json=body, headers=headers)
-            if res.status_code == 200:
-                res_data = res.json()
-                news_list = res_data.get("news", []) if isinstance(res_data, dict) else []
-                return [{"company": n.get("source", "News Source"), "contact_name": "Review Article", "email": n.get("link"), "source": "Live Google News", "signal": n.get("title")} for n in news_list]
-        except: pass
-        return []
+        # 2. Non-blocking call to Google News via Serper
+        async def fetch_serper():
+            serper_key = os.getenv("SERPER_API_KEY")
+            if not serper_key:
+                return []
 
-    apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
-    return {"status": "success", "count": len(apollo_res + serper_res), "data": [f"{p.get("company", p.get("title", "Local Lead"))} - {p.get("contact_name", p.get("email", "Check Domain"))}" if isinstance(p, dict) else str(p) for p in (apollo_res + serper_res)]}
+            # Target official serper news data engine path
+            url = "https://serper.dev"
+            headers = {
+                "X-API-KEY": serper_key,
+                "Content-Type": "application/json"
+            }
+            query_str = f'"{loc}" "{ind or "business"}" expansion OR hiring'.strip()
+            body = {
+                "q": query_str,
+                "num": 5
+            }
+            try:
+                res = await client.post(url, json=body, headers=headers)
+                if res.status_code == 200:
+                    res_data = res.json()
+                    news_list = res_data.get("news", []) if isinstance(res_data, dict) else []
+                    return [
+                        {
+                            "company": n.get("source", "News Source"),
+                            "contact_name": "Review Article",
+                            "email": n.get("link"),
+                            "source": "Live Google News",
+                            "signal": n.get("title")
+                        } 
+                        for n in news_list
+                    ]
+            except Exception:
+                pass
+            return []
 
+        # Execute concurrent networks over gathered tasks
+        apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
+        combined_results = apollo_res + serper_res
+
+    # Parse and safely compile the matched array string results
+    formatted_data = []
+    for p in combined_results:
+        if isinstance(p, dict):
+            company = p.get("company") or "Local Lead"
+            contact = p.get("contact_name") or "Check Domain"
+            formatted_data.append(f"{company} - {contact}")
+        else:
+            formatted_data.append(str(p))
+
+    return {
+        "status": "success",
+        "count": len(combined_results),
+        "data": formatted_data
+    }
+
+
+# -------------------------------------------------------------------------
+# Campaign Execution Engine Endpoint
+# -------------------------------------------------------------------------
 @app.post("/api/automation/run")
 async def run_one_click_campaign(payload: dict):
-    import os, requests
     market = payload.get("Market") or payload.get("location") or payload.get("market") or ""
     industry = payload.get("Industry") or payload.get("industry") or ""
     
     apollo_key = os.getenv("APOLLO_API_KEY")
     if not apollo_key:
         return {"status": "error", "message": "APOLLO_API_KEY not configured"}
-        
-    headers = {"Content-Type": "application/json", "X-Api-Key": apollo_key}
-    body = {"person_locations": [market], "q_organization_keyword_tags": [industry] if industry else [], "per_page": 5}
+
+    url = "https://apollo.io"
+    headers = {"Content-Type": "application/json"}
+    body = {
+        "api_key": apollo_key,
+        "person_locations": [market] if market else [],
+        "q_organization_keyword_tags": [industry] if industry else [],
+        "per_page": 5
+    }
     
     try:
-        res = requests.post("https://apollo.io", json=body, headers=headers)
-        if res.status_code == 200:
-            res_data = res.json()
-            people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
-            return {"status": "success", "message": "Source-linked drafts created for review.", "data": people_list}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(url, json=body, headers=headers)
+            if res.status_code == 200:
+                res_data = res.json()
+                people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
+                return {
+                    "status": "success",
+                    "message": "Source-linked drafts created for review.",
+                    "data": people_list
+                }
+            else:
+                return {"status": "error", "message": f"Apollo returned status code {res.status_code}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    return {"status": "success", "message": "Campaign scan completed with empty result backfill."}
