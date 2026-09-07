@@ -3103,24 +3103,21 @@ import httpx
 
 app = FastAPI()
 
-# -------------------------------------------------------------------------
-# Lead Finder and Google News Hybrid Search Pipeline
-# -------------------------------------------------------------------------
 @app.post("/api/signals/scan")
 async def handle_hybrid_scan(payload: dict):
-    # Safely extract data location keys via fallback chaining
+    # Extract keys safely with fallback chaining
     loc = payload.get("location") or payload.get("Market") or payload.get("market") or ""
     ind = payload.get("industry") or payload.get("Industry") or ""
 
+    # Shared Async Client context manager loop
     async with httpx.AsyncClient(timeout=10.0) as client:
-        
-        # 1. Non-blocking call to Apollo Database
+
+        # 1. Fetch from Apollo DB
         async def fetch_apollo():
             apollo_key = os.getenv("APOLLO_API_KEY")
             if not apollo_key:
                 return []
             
-            # Target official people search routing endpoint
             url = "https://apollo.io"
             headers = {"Content-Type": "application/json"}
             body = {
@@ -3134,27 +3131,23 @@ async def handle_hybrid_scan(payload: dict):
                 if res.status_code == 200:
                     res_data = res.json()
                     people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
-                    return [
-                        {
-                            "company": p.get("organization", {}).get("name", "Local Business"),
-                            "contact_name": p.get("name", "Unknown"),
-                            "email": p.get("email", "Check Domain"),
-                            "source": "Apollo DB",
-                            "signal": "Verified Contact Record"
-                        } 
-                        for p in people_list
-                    ]
+                    return [{
+                        "company": p.get("organization", {}).get("name", "Local Business"),
+                        "contact_name": p.get("name", "Unknown"),
+                        "email": p.get("email", "Check Domain"),
+                        "source": "Apollo DB",
+                        "signal": "Verified Contact Record"
+                    } for p in people_list]
             except Exception:
                 pass
             return []
 
-        # 2. Non-blocking call to Google News via Serper
+        # 2. Fetch from Serper Google News API
         async def fetch_serper():
             serper_key = os.getenv("SERPER_API_KEY")
             if not serper_key:
                 return []
 
-            # Target official serper news data engine path
             url = "https://serper.dev"
             headers = {
                 "X-API-KEY": serper_key,
@@ -3170,25 +3163,22 @@ async def handle_hybrid_scan(payload: dict):
                 if res.status_code == 200:
                     res_data = res.json()
                     news_list = res_data.get("news", []) if isinstance(res_data, dict) else []
-                    return [
-                        {
-                            "company": n.get("source", "News Source"),
-                            "contact_name": "Review Article",
-                            "email": n.get("link"),
-                            "source": "Live Google News",
-                            "signal": n.get("title")
-                        } 
-                        for n in news_list
-                    ]
+                    return [{
+                        "company": n.get("source", "News Source"),
+                        "contact_name": "Review Article",
+                        "email": n.get("link"),
+                        "source": "Live Google News",
+                        "signal": n.get("title")
+                    } for n in news_list]
             except Exception:
                 pass
             return []
 
-        # Execute concurrent networks over gathered tasks
+        # Execute network tasks concurrently via non-blocking channels
         apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
         combined_results = apollo_res + serper_res
 
-    # Parse and safely compile the matched array string results
+    # Format human-readable array elements securely
     formatted_data = []
     for p in combined_results:
         if isinstance(p, dict):
@@ -3205,9 +3195,6 @@ async def handle_hybrid_scan(payload: dict):
     }
 
 
-# -------------------------------------------------------------------------
-# Campaign Execution Engine Endpoint
-# -------------------------------------------------------------------------
 @app.post("/api/automation/run")
 async def run_one_click_campaign(payload: dict):
     market = payload.get("Market") or payload.get("location") or payload.get("market") or ""
