@@ -1473,16 +1473,6 @@ def build_checkout_session(
             return None
         print('🚨 STRIPE CONFIGURATION MISMATCH DETECTED - RAISING CLEAR EXCEPTION')
         raise exc
-        ]
-        try:
-            session = stripe_client.checkout.sessions.create(params=checkout_params)
-        except stripe.error.StripeError as fallback_error:
-            logger.warning(
-                "Stripe Checkout fallback failed: code=%s param=%s",
-                fallback_error.code,
-                fallback_error.param,
-            )
-            return None
     except stripe.error.StripeError as exc:
         logger.warning("Stripe Checkout failed: code=%s param=%s", exc.code, exc.param)
         return None
