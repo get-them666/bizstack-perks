@@ -22,7 +22,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import Gather, VoiceResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLeadNetwork, store_leads_to_db
+from lead_sources import GooglePlacesLeadSource, CensusLeadAnalyzer, AffiliateLeadNetwork, ApolloLeadSource, store_leads_to_db
 from sms_manager import TwilioSMSManager, SMSNotification, handle_inbound_sms, handle_inbound_sms_async
 from lead_analytics import LeadHotspotAnalyzer
 from writeup_generator import generate_targeting_writeup
@@ -160,6 +160,8 @@ else:
 
 # Lead source APIs
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 CENSUS_API_KEY = os.getenv("CENSUS_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
@@ -642,6 +644,7 @@ app.include_router(legal_router)
 
 # Initialize lead source managers
 places_source = GooglePlacesLeadSource(GOOGLE_PLACES_API_KEY) if GOOGLE_PLACES_API_KEY else None
+apollo_source = ApolloLeadSource(APOLLO_API_KEY) if APOLLO_API_KEY else None
 census_analyzer = CensusLeadAnalyzer(CENSUS_API_KEY) if CENSUS_API_KEY else None
 sms_manager = TwilioSMSManager(
     TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, signalwire_space_url=SIGNALWIRE_SPACE_URL or None
@@ -692,6 +695,8 @@ def get_feature_config():
         "email_otp": email_configured(),
         "aws_otp": aws_otp_configured(),
         "google_places": places_source is not None,
+        "apollo_leads": apollo_source is not None,
+        "serper_news": bool(SERPER_API_KEY),
         "census_analytics": census_analyzer is not None,
         "fred_banking_data": bool(FRED_API_KEY),
         "affiliate_network": affiliate_network is not None,
@@ -1278,16 +1283,17 @@ async def scan_registered_banks(
     }
 
 
-# async def run_one_click_business_campaign(
-#     request: Request,
-#     location: str = Form(...),
-#     region: str = Form(...),
-#     industry: Optional[str] = Form(default=None),
-#     conn=Depends(get_db),
-# ):
-#     """Build review-only outreach drafts from one selected local market."""
-#     if not is_authenticated(request):
-#         raise HTTPException(status_code=401, detail="Authentication required")
+@app.post("/api/automation/run")
+async def run_one_click_campaign(
+    request: Request,
+    location: str = Form(...),
+    region: str = Form(...),
+    industry: Optional[str] = Form(default=None),
+    conn=Depends(get_db),
+):
+    """Build review-only outreach drafts from one selected local market."""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
     if not SENDER_PHYSICAL_ADDRESS:
         raise HTTPException(
             status_code=503,
@@ -1449,7 +1455,8 @@ def build_checkout_session(
     if not stripe_ready():
         return None
 
-    import os; current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY); stripe_client = stripe.StripeClient(current_key)
+    current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY)
+    stripe_client = stripe.StripeClient(current_key)
     metadata = {}
     if business_name and business_name.strip():
         metadata["business_name"] = business_name.strip()[:120]
@@ -1465,26 +1472,16 @@ def build_checkout_session(
 
     try:
         session = stripe_client.checkout.sessions.create(params=checkout_params)
+    except stripe.StripeError as exc:
+        logger.warning(
+            "Stripe Checkout failed: code=%s param=%s message=%s",
+            getattr(exc, "code", None),
+            getattr(exc, "param", None),
+            str(exc),
+        )
+        return None
     except Exception as exc:
-        print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
-        print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
-        if not getattr(exc, "param", None) or not str(exc.param).startswith("line_items[0]"):
-            logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
-            return None
-        print('🚨 STRIPE CONFIGURATION MISMATCH DETECTED - RAISING CLEAR EXCEPTION')
-        raise exc
-        
-        try:
-            session = stripe_client.checkout.sessions.create(params=checkout_params)
-        except stripe.error.StripeError as fallback_error:
-            logger.warning(
-                "Stripe Checkout fallback failed: code=%s param=%s",
-                fallback_error.code,
-                fallback_error.param,
-            )
-            return None
-    except stripe.error.StripeError as exc:
-        logger.warning("Stripe Checkout failed: code=%s param=%s", exc.code, exc.param)
+        logger.warning("Unexpected error creating Stripe Checkout session: %s", exc)
         return None
 
     session_data = session.to_dict() if hasattr(session, "to_dict") else session
@@ -2089,6 +2086,46 @@ async def discover_leads_from_location(
     }
 
 
+@app.post("/api/leads/discover-apollo")
+async def discover_leads_from_apollo(
+    location: str = Form(...),
+    category: str = Form(...),
+    per_page: int = Form(default=10),
+    customer_id: Optional[int] = Form(default=None),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    conn=Depends(get_db),
+):
+    """Discover contact/lead records from Apollo.io by organization location + keyword.
+
+    If customer_id is provided, discovered leads are assigned to that paying
+    customer and will appear in their customer portal.
+    """
+    require_api_key_or_session(request, x_api_key)
+    if not apollo_source:
+        raise HTTPException(status_code=503, detail="Apollo is not configured (set APOLLO_API_KEY)")
+
+    try:
+        leads = await apollo_source.search_by_location_and_category(
+            location=location,
+            category=category,
+            per_page=per_page,
+        )
+    except Exception as e:
+        logger.error(f"Apollo lead discovery error: {e}")
+        raise HTTPException(status_code=500, detail="Apollo lead discovery failed") from e
+
+    count = store_leads_to_db(conn, leads, customer_id=customer_id)
+
+    return {
+        "location": location,
+        "category": category,
+        "leads_found": len(leads),
+        "leads_stored": count,
+        "leads": [l.dict() for l in leads[:10]],
+    }
+
+
 @app.get("/api/analytics/hotspots")
 async def get_lead_hotspots(
     days: int = 30,
@@ -2194,6 +2231,7 @@ async def create_targeting_writeup(
 # ============================================================================
 
 
+@app.post("/api/signals/scan")
 async def scan_business_signals(
     location: str = Form(...),
     industry: Optional[str] = Form(default=None),
@@ -2656,7 +2694,8 @@ async def portal_billing_redirect(request: Request, conn=Depends(get_db)):
         return RedirectResponse(url="/portal?error=Billing+portal+is+not+available+yet", status_code=303)
 
     try:
-        import os; current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY); stripe_client = stripe.StripeClient(current_key)
+        current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY)
+        stripe_client = stripe.StripeClient(current_key)
         stripe_customer_id = customer["stripe_customer_id"]
         if not stripe_customer_id:
             customer_params = {
@@ -3090,141 +3129,3 @@ async def admin_inbox_view(request: Request, conn=Depends(get_db)):
 </body>
 </html>"""
     return HTMLResponse(html)
-
-
-# ==============================================================================
-# BIZSTACK DUAL-ENGINE SEARCH EXTENSIONS (APOLLO + SERPER)
-# ==============================================================================
-
-import os
-import asyncio
-from fastapi import FastAPI
-import httpx
-
-app = FastAPI()
-
-@app.post("/api/signals/scan")
-async def handle_hybrid_scan(payload: dict):
-    # Extract keys safely with fallback chaining
-    loc = payload.get("location") or payload.get("Market") or payload.get("market") or ""
-    ind = payload.get("industry") or payload.get("Industry") or ""
-
-    # Shared Async Client context manager loop
-    async with httpx.AsyncClient(timeout=10.0) as client:
-
-        # 1. Fetch from Apollo DB
-        async def fetch_apollo():
-            apollo_key = os.getenv("APOLLO_API_KEY")
-            if not apollo_key:
-                return []
-            
-            url = "https://apollo.io"
-            headers = {"Content-Type": "application/json"}
-            body = {
-                "api_key": apollo_key,
-                "person_locations": [loc] if loc else [],
-                "q_organization_keyword_tags": [ind] if ind else [],
-                "per_page": 5
-            }
-            try:
-                res = await client.post(url, json=body, headers=headers)
-                if res.status_code == 200:
-                    res_data = res.json()
-                    people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
-                    return [{
-                        "company": p.get("organization", {}).get("name", "Local Business"),
-                        "contact_name": p.get("name", "Unknown"),
-                        "email": p.get("email", "Check Domain"),
-                        "source": "Apollo DB",
-                        "signal": "Verified Contact Record"
-                    } for p in people_list]
-            except Exception:
-                pass
-            return []
-
-        # 2. Fetch from Serper Google News API
-        async def fetch_serper():
-            serper_key = os.getenv("SERPER_API_KEY")
-            if not serper_key:
-                return []
-
-            url = "https://serper.dev"
-            headers = {
-                "X-API-KEY": serper_key,
-                "Content-Type": "application/json"
-            }
-            query_str = f'"{loc}" "{ind or "business"}" expansion OR hiring'.strip()
-            body = {
-                "q": query_str,
-                "num": 5
-            }
-            try:
-                res = await client.post(url, json=body, headers=headers)
-                if res.status_code == 200:
-                    res_data = res.json()
-                    news_list = res_data.get("news", []) if isinstance(res_data, dict) else []
-                    return [{
-                        "company": n.get("source", "News Source"),
-                        "contact_name": "Review Article",
-                        "email": n.get("link"),
-                        "source": "Live Google News",
-                        "signal": n.get("title")
-                    } for n in news_list]
-            except Exception:
-                pass
-            return []
-
-        # Execute network tasks concurrently via non-blocking channels
-        apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
-        combined_results = apollo_res + serper_res
-
-    # Format human-readable array elements securely
-    formatted_data = []
-    for p in combined_results:
-        if isinstance(p, dict):
-            company = p.get("company") or "Local Lead"
-            contact = p.get("contact_name") or "Check Domain"
-            formatted_data.append(f"{company} - {contact}")
-        else:
-            formatted_data.append(str(p))
-
-    return {
-        "status": "success",
-        "count": len(combined_results),
-        "data": formatted_data
-    }
-
-
-@app.post("/api/automation/run")
-async def run_one_click_campaign(payload: dict):
-    market = payload.get("Market") or payload.get("location") or payload.get("market") or ""
-    industry = payload.get("Industry") or payload.get("industry") or ""
-    
-    apollo_key = os.getenv("APOLLO_API_KEY")
-    if not apollo_key:
-        return {"status": "error", "message": "APOLLO_API_KEY not configured"}
-
-    url = "https://apollo.io"
-    headers = {"Content-Type": "application/json"}
-    body = {
-        "api_key": apollo_key,
-        "person_locations": [market] if market else [],
-        "q_organization_keyword_tags": [industry] if industry else [],
-        "per_page": 5
-    }
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.post(url, json=body, headers=headers)
-            if res.status_code == 200:
-                res_data = res.json()
-                people_list = res_data.get("people", []) if isinstance(res_data, dict) else []
-                return {
-                    "status": "success",
-                    "message": "Source-linked drafts created for review.",
-                    "data": people_list
-                }
-            else:
-                return {"status": "error", "message": f"Apollo returned status code {res.status_code}"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}

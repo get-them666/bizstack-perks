@@ -280,6 +280,72 @@ class CensusLeadAnalyzer:
         return fips_map.get(state.upper(), "06")  # Default to CA
 
 
+class ApolloLeadSource:
+    """Fetch business/contact leads from Apollo.io's People Search API.
+
+    Apollo.io has no official Python SDK -- this calls their REST API
+    directly with httpx. Docs: https://apolloio.github.io/apollo-api-docs/
+    """
+
+    BASE_URL = "https://api.apollo.io/v1/mixed_people/search"
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+
+    async def search_by_location_and_category(
+        self, location: str, category: str, per_page: int = 10
+    ) -> List[LeadSource]:
+        """
+        Search Apollo's contact database by organization location and a
+        keyword (job title, industry, or category). Returns LeadSource
+        objects compatible with the rest of the lead pipeline.
+        """
+        if not self.api_key:
+            logger.warning("Apollo API key not configured")
+            return []
+
+        headers = {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "X-Api-Key": self.api_key,
+        }
+        body = {
+            "q_organization_locations": [location] if location else [],
+            "q_keywords": category or "",
+            "page": 1,
+            "per_page": per_page,
+        }
+
+        leads: List[LeadSource] = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(self.BASE_URL, json=body, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+
+                for person in data.get("people", [])[:per_page]:
+                    org = person.get("organization") or {}
+                    leads.append(
+                        LeadSource(
+                            name=org.get("name") or person.get("name") or "Unknown",
+                            email=person.get("email") or f"{person.get('id', 'unknown')}@apollo-leads.local",
+                            phone=person.get("sanitized_phone") or person.get("phone") or "N/A",
+                            location=org.get("city") or location,
+                            service_category=category,
+                            source_type="apollo",
+                            source_name="Apollo.io",
+                            confidence_score=0.85,
+                            raw_data=person,
+                        )
+                    )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Apollo API error: {e.response.status_code} {e.response.text[:300]}")
+        except Exception as e:
+            logger.error(f"Apollo search error: {e}")
+
+        return leads
+
+
 class AffiliateLeadNetwork:
     """Fetch and manage leads from affiliate partner networks."""
 

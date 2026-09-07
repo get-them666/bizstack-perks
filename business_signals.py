@@ -166,24 +166,26 @@ class YouComSignalScanner:
         serper_key = os.getenv("SERPER_API_KEY")
         if not serper_key:
             raise RuntimeError("SERPER_API_KEY environment variable is missing.")
-        
+
         headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
         payload = {"q": query, "num": limit}
         try:
-            res = requests.post("https://serper.dev", json=payload, headers=headers)
+            res = requests.post("https://google.serper.dev/news", json=payload, headers=headers, timeout=15)
             if res.status_code == 200:
                 news_items = res.json().get("news", [])
                 formatted_signals = []
                 for n in news_items:
                     formatted_signals.append({
                         "title": n.get("title", "Expansion Activity"),
-                        "link": n.get("link", ""),
-                        "source": n.get("source", "Live News"),
-                        "snippet": n.get("snippet", "No preview available.")
+                        "url": n.get("link", ""),
+                        "description": n.get("snippet", "No preview available."),
+                        "snippets": n.get("snippet", ""),
+                        "page_age": n.get("date"),
                     })
                 return formatted_signals
+            logger.warning("Serper News API returned status %s: %s", res.status_code, res.text[:300])
         except Exception as e:
-            pass
+            logger.warning("Serper News API request failed: %s", e)
         return []
 
     async def scan_for_signals(
