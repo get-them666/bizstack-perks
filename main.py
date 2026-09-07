@@ -1468,7 +1468,7 @@ def build_checkout_session(
     except Exception as exc:
         print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
         print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
-        if not (exc.param or "").startswith("line_items[0]"):
+        if not getattr(exc, "param", None) or not str(exc.param).startswith("line_items[0]"):
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
             return None
 
