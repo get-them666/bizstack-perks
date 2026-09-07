@@ -1471,19 +1471,8 @@ def build_checkout_session(
         if not getattr(exc, "param", None) or not str(exc.param).startswith("line_items[0]"):
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
             return None
-
-        logger.warning("Configured Stripe Price ID cannot be used; using the configured $99 checkout item")
-        checkout_params["line_items"] = [
-            {
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {
-                        "name": f"BizStack Perks Entry Plan - {business_name or 'Client Portal'}",
-                    },
-                    "unit_amount": 9900,
-                },
-                "quantity": 1,
-            }
+        print('🚨 STRIPE CONFIGURATION MISMATCH DETECTED - RAISING CLEAR EXCEPTION')
+        raise exc
         ]
         try:
             session = stripe_client.checkout.sessions.create(params=checkout_params)
