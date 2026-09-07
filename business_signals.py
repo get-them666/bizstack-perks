@@ -91,15 +91,9 @@ class YouComSignalScanner:
     def _signals_from_results(
         results: Dict[str, Any], location: str
     ) -> List[BusinessSignal]:
-        articles = [
-            (article, "You.com live news")
-            # Handle list payload type responses gracefully
-    news_list = results if isinstance(results, list) else results.get("news", []) if isinstance(results, dict) else []
-    for article in news_list
-        ] + [
-            (article, "You.com live web")
-            for article in results.get("web", [])
-        ]
+        news_list = results if isinstance(results, list) else results.get("news", []) if isinstance(results, dict) else []
+        web_list = [] if isinstance(results, list) else results.get("web", []) if isinstance(results, dict) else []
+        articles = [(article, "You.com live news") for article in news_list] + [(article, "You.com live web") for article in web_list]
         location_terms = [term.strip().lower() for term in location.split(",") if term.strip()]
         signals = []
         for article, source_name in articles:
