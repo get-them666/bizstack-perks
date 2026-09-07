@@ -1522,8 +1522,16 @@ async def create_checkout_session(
     request: Request,
     email: Optional[str] = Form(default=None),
     business_name: Optional[str] = Form(default=None),
+    tier: Optional[str] = Form(default="49"), # Captures button clicks
     conn=Depends(get_db),
 ):
+    import os
+    # Dynamically pick the target Stripe Price ID based on form selection inputs
+    if str(tier).strip() == "99" or "pro" in str(tier).lower():
+        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_99", "price_YOUR_99_TEST_PRICE_ID_HERE")
+    else:
+        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_49", "price_1UCyL17FqkxpR5DtFAuRnXFI")
+
     print(f"DEBUG CHECKOUT PARAMS - Email: {email}, BizName: {business_name}")
     session_data = build_checkout_session(conn, normalize_base_url(request), email=email, business_name=business_name)
     if not session_data:
