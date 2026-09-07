@@ -38,6 +38,7 @@ from local_bank_rates import load_bank_rates, get_best_rates_for_region, format_
 from public_rate_sources import (
     add_public_rate_source,
     discover_public_business_contact,
+)
     discover_live_public_bank_rates,
     init_public_rate_source_table,
     list_public_rate_sources,
