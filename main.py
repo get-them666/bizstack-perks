@@ -318,7 +318,10 @@ def upsert_call_event(
 
 
 def stripe_ready() -> bool:
-    return bool(STRIPE_SECRET_KEY and PRICE_ID)
+    import os
+    sk = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY)
+    pid = os.environ.get("PRICE_ID", PRICE_ID)
+    return bool(sk and pid)
 
 
 def twilio_ready() -> bool:
@@ -1446,13 +1449,13 @@ def build_checkout_session(
     if not stripe_ready():
         return None
 
-    stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
+    import os; current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY); stripe_client = stripe.StripeClient(current_key)
     metadata = {}
     if business_name and business_name.strip():
         metadata["business_name"] = business_name.strip()[:120]
 
     checkout_params = {
-        "mode": "payment",
+        "mode": "subscription",
         "line_items": [{"price": PRICE_ID, "quantity": 1}],
         "customer_email": (email or "").strip() or None,
         "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
@@ -1462,7 +1465,9 @@ def build_checkout_session(
 
     try:
         session = stripe_client.checkout.sessions.create(params=checkout_params)
-    except stripe.InvalidRequestError as exc:
+    except Exception as exc:
+        print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
+        print(f"🚨 RAW STRIPE EXCEPTION LOGGED: {str(exc)}")
         if not (exc.param or "").startswith("line_items[0]"):
             logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
             return None
@@ -1519,6 +1524,7 @@ async def create_checkout_session(
     business_name: Optional[str] = Form(default=None),
     conn=Depends(get_db),
 ):
+    print(f"DEBUG CHECKOUT PARAMS - Email: {email}, BizName: {business_name}")
     session_data = build_checkout_session(conn, normalize_base_url(request), email=email, business_name=business_name)
     if not session_data:
         return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
@@ -2653,7 +2659,7 @@ async def portal_billing_redirect(request: Request, conn=Depends(get_db)):
         return RedirectResponse(url="/portal?error=Billing+portal+is+not+available+yet", status_code=303)
 
     try:
-        stripe_client = stripe.StripeClient(STRIPE_SECRET_KEY)
+        import os; current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY); stripe_client = stripe.StripeClient(current_key)
         stripe_customer_id = customer["stripe_customer_id"]
         if not stripe_customer_id:
             customer_params = {
