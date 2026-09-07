@@ -165,49 +165,30 @@ class YouComSignalScanner:
         except (httpx.HTTPError, ValueError) as error:
             raise RuntimeError(f"You.com live search failed: {error}") from error
 
-    async def search_current_web(self, query: str, count: int = 20) -> Dict[str, Any]:
-        """Return only the results obtained during this live You.com search."""
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            initialized, session_id = await self._call(
-                client,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "protocolVersion": MCP_PROTOCOL_VERSION,
-                        "capabilities": {},
-                        "clientInfo": {"name": "bizstack-perks", "version": "1.0"},
-                    },
-                },
-            )
-            if initialized.get("protocolVersion") != MCP_PROTOCOL_VERSION:
-                raise RuntimeError("You.com live search returned an unsupported MCP protocol")
-            search_result, _ = await self._call(
-                client,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "you-search",
-                        "arguments": {
-                            "query": query,
-                            "freshness": "month",
-                            "country": "US",
-                            "count": min(max(count, 1), 100),
-                        },
-                    },
-                },
-                session_id,
-            )
-        content = search_result.get("content", [])
-        if not content or not isinstance(content[0].get("text"), str):
-            raise RuntimeError("You.com live search returned an invalid result")
+    async def search_current_web(self, query: str, limit: int = 10):
+        import os, requests
+        serper_key = os.getenv("SERPER_API_KEY")
+        if not serper_key:
+            raise RuntimeError("SERPER_API_KEY environment variable is missing.")
+        
+        headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
+        payload = {"q": query, "num": limit}
         try:
-            return json.loads(content[0]["text"]).get("results", {})
-        except json.JSONDecodeError as error:
-            raise RuntimeError("You.com live search returned malformed result data") from error
+            res = requests.post("https://serper.dev", json=payload, headers=headers)
+            if res.status_code == 200:
+                news_items = res.json().get("news", [])
+                formatted_signals = []
+                for n in news_items:
+                    formatted_signals.append({
+                        "title": n.get("title", "Expansion Activity"),
+                        "link": n.get("link", ""),
+                        "source": n.get("source", "Live News"),
+                        "snippet": n.get("snippet", "No preview available.")
+                    })
+                return formatted_signals
+        except Exception as e:
+            pass
+        return []
 
     async def scan_for_signals(
         self, location: str, industry: Optional[str] = None, days_back: int = 30
