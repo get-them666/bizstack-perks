@@ -3136,7 +3136,7 @@ async def admin_inbox_view(request: Request, conn=Depends(get_db)):
         return []
 
     apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
-    return {"status": "success", "count": len(apollo_res + serper_res), "data": apollo_res + serper_res}
+    return {"status": "success", "count": len(apollo_res + serper_res), "data": [f"{p.get("company", p.get("title", "Local Lead"))} - {p.get("contact_name", p.get("email", "Check Domain"))}" if isinstance(p, dict) else str(p) for p in (apollo_res + serper_res)]}
 
     import os, requests
     market = payload.get("Market") or payload.get("location") or payload.get("market") or ""
@@ -3192,7 +3192,7 @@ async def handle_hybrid_scan(payload: dict):
         return []
 
     apollo_res, serper_res = await asyncio.gather(fetch_apollo(), fetch_serper())
-    return {"status": "success", "count": len(apollo_res + serper_res), "data": apollo_res + serper_res}
+    return {"status": "success", "count": len(apollo_res + serper_res), "data": [f"{p.get("company", p.get("title", "Local Lead"))} - {p.get("contact_name", p.get("email", "Check Domain"))}" if isinstance(p, dict) else str(p) for p in (apollo_res + serper_res)]}
 
 @app.post("/api/automation/run")
 async def run_one_click_campaign(payload: dict):
