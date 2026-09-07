@@ -1528,7 +1528,7 @@ async def create_checkout_session(
     import os
     # Dynamically pick the target Stripe Price ID based on form selection inputs
     if str(tier).strip() == "99" or "pro" in str(tier).lower():
-        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_99", "price_YOUR_99_TEST_PRICE_ID_HERE")
+        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_99", "") or os.environ.get("PRICE_ID_49", "price_1UCyL17FqkxpR5DtFAuRnXFI")
     else:
         os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_49", "price_1UCyL17FqkxpR5DtFAuRnXFI")
 
