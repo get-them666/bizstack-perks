@@ -1456,7 +1456,7 @@ def build_checkout_session(
 
     checkout_params = {
         "mode": "subscription",
-        "line_items": [{"price": PRICE_ID, "quantity": 1}],
+        "line_items": [{"price": os.environ.get("PRICE_ID", PRICE_ID), "quantity": 1}],
         "customer_email": (email or "").strip() or None,
         "success_url": f"{base_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
         "cancel_url": f"{base_url}/checkout/cancel",
