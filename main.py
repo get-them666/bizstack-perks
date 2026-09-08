@@ -1477,6 +1477,33 @@ def build_checkout_session(
 
     try:
         session = stripe_client.checkout.sessions.create(params=checkout_params)
+    except stripe.InvalidRequestError as exc:
+        if not getattr(exc, "param", None) or not str(exc.param).startswith("line_items[0]"):
+            logger.warning("Stripe Checkout configuration error: code=%s param=%s", exc.code, exc.param)
+            return None
+
+        logger.warning("Configured Stripe Price ID cannot be used; using the configured $99 checkout item")
+        checkout_params["line_items"] = [
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"BizStack Perks Entry Plan - {business_name or 'Client Portal'}",
+                    },
+                    "unit_amount": 9900,
+                },
+                "quantity": 1,
+            }
+        ]
+        try:
+            session = stripe_client.checkout.sessions.create(params=checkout_params)
+        except stripe.StripeError as fallback_error:
+            logger.warning(
+                "Stripe Checkout fallback failed: code=%s param=%s",
+                getattr(fallback_error, "code", None),
+                getattr(fallback_error, "param", None),
+            )
+            return None
     except stripe.StripeError as exc:
         logger.warning(
             "Stripe Checkout failed: code=%s param=%s message=%s",
@@ -1517,11 +1544,24 @@ async def create_checkout_session(
     conn=Depends(get_db),
 ):
     import os
-    # Dynamically pick the target Stripe Price ID based on form selection inputs
-    if str(tier).strip() == "99" or "pro" in str(tier).lower():
-        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_99", "") or os.environ.get("PRICE_ID_49", "price_1UCyL17FqkxpR5DtFAuRnXFI")
+    # Dynamically pick the target Stripe Price ID based on form selection inputs.
+    # Respect an explicitly configured bare PRICE_ID from startup config first
+    # (useful for tests/manual overrides -- checked against the module-level
+    # PRICE_ID captured at import time, not os.environ, since a prior request
+    # in this same process may have already mutated os.environ["PRICE_ID"]).
+    if PRICE_ID:
+        os.environ["PRICE_ID"] = PRICE_ID
+    elif str(tier).strip() == "99" or "pro" in str(tier).lower():
+        os.environ["PRICE_ID"] = (
+            os.environ.get("PRICE_ID_99")
+            or os.environ.get("PRICE_ID_49")
+            or "price_1UCyL17FqkxpR5DtFAuRnXFI"
+        )
     else:
-        os.environ["PRICE_ID"] = os.environ.get("PRICE_ID_49", "price_1UCyL17FqkxpR5DtFAuRnXFI")
+        os.environ["PRICE_ID"] = (
+            os.environ.get("PRICE_ID_49")
+            or "price_1UCyL17FqkxpR5DtFAuRnXFI"
+        )
 
     print(f"DEBUG CHECKOUT PARAMS - Email: {email}, BizName: {business_name}")
     session_data = build_checkout_session(conn, normalize_base_url(request), email=email, business_name=business_name)
