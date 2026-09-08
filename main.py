@@ -322,7 +322,12 @@ def upsert_call_event(
 def stripe_ready() -> bool:
     import os
     sk = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY)
-    pid = os.environ.get("PRICE_ID", PRICE_ID)
+    pid = (
+        os.environ.get("PRICE_ID")
+        or os.environ.get("PRICE_ID_49")
+        or os.environ.get("PRICE_ID_99")
+        or PRICE_ID
+    )
     return bool(sk and pid)
 
 
