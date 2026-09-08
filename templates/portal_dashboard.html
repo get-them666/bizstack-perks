@@ -77,6 +77,12 @@
             <span class="status-pill {% if customer.subscription_status == 'active' %}status-active{% else %}status-inactive{% endif %}">
                 {{ customer.subscription_status | upper }}
             </span>
+            <span class="status-pill" style="background: rgba(79, 209, 255, 0.12); color: #4fd1ff; border: 1px solid rgba(79, 209, 255, 0.35);">
+                {{ "PRO" if is_pro else "BASIC" }} PLAN
+            </span>
+            {% if not is_pro %}
+            <p class="muted" style="margin-top: 10px;">Upgrade to Pro to see a 0-100 creditworthiness score and risk rating for every lead. <a href="/#pricing" style="color: #4fd1ff;">View plans</a></p>
+            {% endif %}
         </div>
 
         <div class="card">
@@ -99,6 +105,7 @@
                         <th>Interest</th>
                         <th>Source</th>
                         <th>Status</th>
+                        {% if is_pro %}<th>Lead score</th>{% endif %}
                         <th>Received</th>
                     </tr>
                 </thead>
@@ -109,6 +116,16 @@
                         <td>{{ lead.requested_product }}</td>
                         <td>{{ lead.source }}</td>
                         <td><span class="lead-status">{{ lead.status }}</span></td>
+                        {% if is_pro %}
+                        <td>
+                            {% set score_data = lead_scores.get(lead.id) %}
+                            {% if score_data %}
+                            <span class="lead-status" style="background: rgba(53, 208, 143, 0.12); color: #7fe6bc;">{{ score_data.score }}/100 &middot; {{ score_data.rating }}</span>
+                            {% else %}
+                            <span class="muted">Not scored</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                         <td>{{ lead.created_at }}</td>
                     </tr>
                     {% endfor %}

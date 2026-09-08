@@ -283,12 +283,14 @@ def record_checkout_session(conn: sqlite3.Connection, session_data: dict, event_
         email = customer_details.get("email") or session_data.get("customer_email")
         metadata = session_data.get("metadata") or {}
         business_name = metadata.get("business_name") if isinstance(metadata, dict) else None
+        tier = metadata.get("tier") if isinstance(metadata, dict) else None
         provision_customer_from_checkout(
             conn,
             email=email,
             business_name=business_name,
             stripe_customer_id=session_data.get("customer"),
             stripe_subscription_id=session_data.get("subscription"),
+            subscription_tier=tier,
         )
 
 
@@ -1450,19 +1452,25 @@ def build_checkout_session(
     base_url: str,
     email: Optional[str] = None,
     business_name: Optional[str] = None,
+    tier: str = "basic",
 ) -> Optional[dict]:
     """
     Create a Stripe Checkout session and record it as a pending payment.
     Shared by the web checkout route and the voice bot's in-call closing flow.
     Returns the session_data dict (with a "url" to send the customer to), or
     None if Stripe isn't configured or the session couldn't be created.
+
+    `tier` ("basic" or "pro") is stamped into Stripe's session metadata so
+    record_checkout_session can provision the customer on the correct plan
+    once the webhook confirms payment.
     """
     if not stripe_ready():
         return None
 
     current_key = os.environ.get("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY)
     stripe_client = stripe.StripeClient(current_key)
-    metadata = {}
+    resolved_tier = "pro" if str(tier).strip().lower() == "pro" else "basic"
+    metadata = {"tier": resolved_tier}
     if business_name and business_name.strip():
         metadata["business_name"] = business_name.strip()[:120]
 
@@ -1563,8 +1571,11 @@ async def create_checkout_session(
             or "price_1UCyL17FqkxpR5DtFAuRnXFI"
         )
 
-    print(f"DEBUG CHECKOUT PARAMS - Email: {email}, BizName: {business_name}")
-    session_data = build_checkout_session(conn, normalize_base_url(request), email=email, business_name=business_name)
+    print(f"DEBUG CHECKOUT PARAMS - Email: {email}, BizName: {business_name}, Tier: {tier}")
+    resolved_tier = "pro" if str(tier).strip() == "99" or "pro" in str(tier).lower() else "basic"
+    session_data = build_checkout_session(
+        conn, normalize_base_url(request), email=email, business_name=business_name, tier=resolved_tier
+    )
     if not session_data:
         return RedirectResponse(url="/?error=Unable+to+start+checkout", status_code=303)
     return RedirectResponse(url=session_data["url"], status_code=303)
@@ -2744,10 +2755,30 @@ async def customer_portal(request: Request, conn=Depends(get_db)):
         return RedirectResponse(url="/portal/login", status_code=303)
 
     leads = get_customer_leads(conn, customer["id"])
+    is_pro = (customer["subscription_tier"] or "basic") == "pro"
+
+    lead_scores = {}
+    if is_pro:
+        for lead in leads:
+            existing_score = get_lead_score(conn, lead["id"])
+            if existing_score is None:
+                existing_score = score_lead(
+                    conn,
+                    lead["id"],
+                    business_name=lead["full_name"],
+                    request_amount=lead["requested_amount"],
+                )
+            lead_scores[lead["id"]] = existing_score
+
     return templates.TemplateResponse(
         request=request,
         name="portal_dashboard.html",
-        context={"customer": customer, "leads": leads},
+        context={
+            "customer": customer,
+            "leads": leads,
+            "is_pro": is_pro,
+            "lead_scores": lead_scores,
+        },
     )
 
 

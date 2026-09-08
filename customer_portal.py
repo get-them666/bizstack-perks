@@ -38,6 +38,7 @@ def init_customer_tables(conn: sqlite3.Connection) -> None:
             stripe_customer_id TEXT UNIQUE,
             stripe_subscription_id TEXT,
             subscription_status TEXT DEFAULT 'inactive',
+            subscription_tier TEXT DEFAULT 'basic',
             portal_session_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -53,6 +54,11 @@ def init_customer_tables(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE customers ADD COLUMN updated_at TIMESTAMP")
         cursor.execute(
             "UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"
+        )
+    if "subscription_tier" not in customer_columns:
+        cursor.execute("ALTER TABLE customers ADD COLUMN subscription_tier TEXT DEFAULT 'basic'")
+        cursor.execute(
+            "UPDATE customers SET subscription_tier = 'basic' WHERE subscription_tier IS NULL"
         )
     cursor.execute(
         """
@@ -80,6 +86,7 @@ def provision_customer_from_checkout(
     stripe_customer_id: Optional[str],
     stripe_subscription_id: Optional[str] = None,
     phone: Optional[str] = None,
+    subscription_tier: Optional[str] = None,
 ) -> Optional[int]:
     """
     Create or update a customer record after a successful Stripe checkout/payment,
@@ -104,6 +111,8 @@ def provision_customer_from_checkout(
     if not existing and phone:
         existing = conn.execute("SELECT id FROM customers WHERE phone = ?", (phone,)).fetchone()
 
+    resolved_tier = subscription_tier or "basic"
+
     if existing:
         customer_id = existing["id"]
         cursor.execute(
@@ -115,18 +124,19 @@ def provision_customer_from_checkout(
                 stripe_customer_id = COALESCE(?, stripe_customer_id),
                 stripe_subscription_id = COALESCE(?, stripe_subscription_id),
                 subscription_status = 'active',
+                subscription_tier = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (business_name, email, phone, stripe_customer_id, stripe_subscription_id, customer_id),
+            (business_name, email, phone, stripe_customer_id, stripe_subscription_id, resolved_tier, customer_id),
         )
     else:
         cursor.execute(
             """
-            INSERT INTO customers (business_name, email, phone, stripe_customer_id, stripe_subscription_id, subscription_status)
-            VALUES (?, ?, ?, ?, ?, 'active')
+            INSERT INTO customers (business_name, email, phone, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_tier)
+            VALUES (?, ?, ?, ?, ?, 'active', ?)
             """,
-            (business_name, email, phone, stripe_customer_id, stripe_subscription_id),
+            (business_name, email, phone, stripe_customer_id, stripe_subscription_id, resolved_tier),
         )
         customer_id = cursor.lastrowid
 
@@ -141,6 +151,17 @@ def mark_subscription_status(
     conn.execute(
         "UPDATE customers SET subscription_status = ?, updated_at = CURRENT_TIMESTAMP WHERE stripe_customer_id = ?",
         (status, stripe_customer_id),
+    )
+    conn.commit()
+
+
+def mark_subscription_tier(
+    conn: sqlite3.Connection, stripe_customer_id: str, tier: str
+) -> None:
+    """Update a customer's plan tier (e.g. after an upgrade/downgrade webhook)."""
+    conn.execute(
+        "UPDATE customers SET subscription_tier = ?, updated_at = CURRENT_TIMESTAMP WHERE stripe_customer_id = ?",
+        (tier, stripe_customer_id),
     )
     conn.commit()
 

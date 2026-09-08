@@ -410,9 +410,26 @@
 
         <section id="pricing">
             <h2>Pricing & Plans</h2>
-            <p style="color: var(--muted); margin-bottom: 24px;">Start free, upgrade anytime. Unlock lead quality scoring with Pro.</p>
+            <p style="color: var(--muted); margin-bottom: 24px;">Start free, upgrade anytime. Unlock lead credit scoring with Pro.</p>
             
             <div class="pricing-tiers">
+                <!-- Free Tier -->
+                <div class="price-card">
+                    <div class="tier-badge">Free</div>
+                    <h3>Free</h3>
+                    <div class="price">$0</div>
+                    <div class="price-period">no credit card required</div>
+                    <p class="price-description">Create a portal account and see how lead matching works before you pay anything.</p>
+
+                    <ul class="features">
+                        <li>Customer portal (phone/email login)</li>
+                        <li>Leads matched to your account</li>
+                        <li>Upgrade to Basic or Pro anytime</li>
+                    </ul>
+
+                    <a class="button button-secondary" href="/signup" style="width: 100%; text-align: center; box-sizing: border-box;">Sign up free</a>
+                </div>
+
                 <!-- Basic Tier -->
                 <div class="price-card">
                     <div class="tier-badge">Basic</div>
@@ -438,15 +455,13 @@
                     <h3>Pro</h3>
                     <div class="price">$99</div>
                     <div class="price-period">per month</div>
-                    <p class="price-description">Advanced lead scoring + quality insights to close better leads, faster.</p>
+                    <p class="price-description">Everything in Basic, plus lead credit scoring so you call your best leads first.</p>
                     
                     <ul class="features">
                         <li>Everything in Basic, plus:</li>
-                        <li>Creditworthiness scoring (0-100)</li>
-                        <li>Lead quality badges & ratings</li>
-                        <li>Risk assessment for each lead</li>
-                        <li>Advanced filtering & sorting</li>
-                        <li>Priority support</li>
+                        <li>Creditworthiness scoring (0-100) on every lead</li>
+                        <li>Risk rating: High Risk, Medium Risk, Good, or Excellent</li>
+                        <li>Score shown directly in your portal lead list</li>
                     </ul>
                     
                     <form method="post" action="/api/checkout/create">
@@ -477,7 +492,7 @@
 
             <details>
                 <summary>How does the AI phone assistant work?</summary>
-                <p>It answers your business line, understands speech or touch-tone input, can explain pricing and features, and if a prospect is interested, it texts them a secure payment link so they can sign up right then. No transferring to a sales rep—the bot handles the entire close live on the call. You always get a transcript and recording.</p>
+                <p>It answers your business line, understands speech or touch-tone input, can explain pricing and features, and if a prospect is interested, it texts them a secure payment link so they can sign up right then. No transferring to a sales rep—the bot handles the entire close live on the call. Every call and message is logged in your dashboard.</p>
             </details>
 
             <details>
