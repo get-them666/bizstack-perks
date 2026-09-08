@@ -32,10 +32,8 @@
     <main>
         <section class="card">
             <h2>Local business campaign</h2>
-            <p class="hint">Automatic sending is unavailable here because the previous campaign was hard-coded to Norfolk and a state-wide bank list. Use the Outreach workspace to review signals and drafts for your configured markets before any delivery.</p>
-            <button id="campaign-button" type="button" enabled>Configure local sources before running a campaign</button>
-            <p id="campaign-status" class="hint" aria-live="polite"></p>
-            <p id="campaign-error" class="error" style="display:none;" role="alert"></p>
+            <p class="hint">Business signal scanning and outreach drafts now live in the Outreach workspace, where you can pick your configured markets and review every draft before sending.</p>
+            <a href="/admin/outreach" style="display:inline-block; background:#4fd1ff; border-radius:8px; color:#03111d; font-weight:bold; margin-top:8px; padding:12px 18px; text-decoration:none;">Go to Outreach workspace</a>
         </section>
         <section class="card">
             <h2>Local public rate scan</h2>
@@ -218,31 +216,6 @@
             } catch (err) {
                 status.textContent = `Error: ${err.message}`;
                 status.style.color = "#ffb3b3";
-                button.disabled = false;
-            }
-        });
-
-        // Campaign button handler
-        document.getElementById("campaign-button").addEventListener("click", async () => {
-            const button = document.getElementById("campaign-button");
-            const status = document.getElementById("campaign-status");
-            const error = document.getElementById("campaign-error");
-            button.disabled = true;
-            status.textContent = "Scanning current rates and business signals, then sending eligible outreach…";
-            error.style.display = "none";
-            try {
-                const response = await fetch("/api/automation/run", {
-                    method: "POST",
-                    credentials: "same-origin",
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || "Campaign failed");
-                status.textContent = `${data.live_rate_sources} live rate sources and ${data.business_signals} business signals found. ${data.emails_sent.length} eligible emails sent; ${data.emails_skipped.length} skipped.`;
-            } catch (campaignError) {
-                error.textContent = campaignError.message;
-                error.style.display = "block";
-                status.textContent = "";
-            } finally {
                 button.disabled = false;
             }
         });
