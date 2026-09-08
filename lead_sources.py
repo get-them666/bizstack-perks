@@ -281,69 +281,83 @@ class CensusLeadAnalyzer:
 
 
 class ApolloLeadSource:
-    """Fetch business/contact leads from Apollo.io's People Search API.
+    """Enrich a known company using Apollo.io's Organization Enrichment API.
+
+    IMPORTANT: Apollo's *search* endpoints (mixed_people/search,
+    mixed_people/api_search, mixed_companies/search) and *person*
+    enrichment (people/match) all return 403 API_INACCESSIBLE on
+    standard trial/free plans -- confirmed against this account's live
+    key. Only Organization Enrichment (api/v1/organizations/enrich) is
+    included, and it costs 1 credit per lookup.
+
+    This means Apollo cannot discover new leads by location or keyword
+    on this plan. What it CAN do: take a company you already know about
+    (from Google Places, a business signal, or a web signup) and enrich
+    it with firmographic data -- employee count, revenue, industry,
+    funding history -- using the company's domain, website, or
+    LinkedIn URL.
 
     Apollo.io has no official Python SDK -- this calls their REST API
-    directly with httpx. Docs: https://apolloio.github.io/apollo-api-docs/
+    directly with httpx. Docs: https://docs.apollo.io/reference/organization-enrichment
     """
 
-    BASE_URL = "https://api.apollo.io/v1/mixed_people/search"
+    BASE_URL = "https://api.apollo.io/api/v1"
 
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    async def search_by_location_and_category(
-        self, location: str, category: str, per_page: int = 10
-    ) -> List[LeadSource]:
+    async def enrich_organization(
+        self,
+        *,
+        domain: Optional[str] = None,
+        website: Optional[str] = None,
+        linkedin_url: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
-        Search Apollo's contact database by organization location and a
-        keyword (job title, industry, or category). Returns LeadSource
-        objects compatible with the rest of the lead pipeline.
+        Enrich one company using its domain, website, or LinkedIn URL
+        (name alone is not sufficient per Apollo's docs -- it only
+        improves match accuracy when combined with one of the above).
+
+        Returns the raw Apollo organization dict (name, industry,
+        estimated_num_employees, annual_revenue, founded_year,
+        funding_events, etc.), or None if not found, not configured, or
+        the account is out of credits.
         """
         if not self.api_key:
             logger.warning("Apollo API key not configured")
-            return []
+            return None
+        if not (domain or website or linkedin_url):
+            logger.warning("Apollo organization enrichment requires a domain, website, or linkedin_url")
+            return None
 
-        headers = {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            "X-Api-Key": self.api_key,
-        }
-        body = {
-            "q_organization_locations": [location] if location else [],
-            "q_keywords": category or "",
-            "page": 1,
-            "per_page": per_page,
+        headers = {"x-api-key": self.api_key}
+        params = {
+            k: v
+            for k, v in {
+                "domain": domain,
+                "website": website,
+                "linkedin_url": linkedin_url,
+                "name": name,
+            }.items()
+            if v
         }
 
-        leads: List[LeadSource] = []
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(self.BASE_URL, json=body, headers=headers)
+                resp = await client.get(f"{self.BASE_URL}/organizations/enrich", params=params, headers=headers)
                 resp.raise_for_status()
                 data = resp.json()
-
-                for person in data.get("people", [])[:per_page]:
-                    org = person.get("organization") or {}
-                    leads.append(
-                        LeadSource(
-                            name=org.get("name") or person.get("name") or "Unknown",
-                            email=person.get("email") or f"{person.get('id', 'unknown')}@apollo-leads.local",
-                            phone=person.get("sanitized_phone") or person.get("phone") or "N/A",
-                            location=org.get("city") or location,
-                            service_category=category,
-                            source_type="apollo",
-                            source_name="Apollo.io",
-                            confidence_score=0.85,
-                            raw_data=person,
-                        )
-                    )
+                return data.get("organization")
         except httpx.HTTPStatusError as e:
-            logger.error(f"Apollo API error: {e.response.status_code} {e.response.text[:300]}")
+            body = e.response.text[:300]
+            if e.response.status_code == 422 and "CREDITS_EXHAUSTED" in body:
+                logger.warning("Apollo organization enrichment failed: out of credits for this billing cycle")
+            else:
+                logger.error(f"Apollo organization enrichment error: {e.response.status_code} {body}")
         except Exception as e:
-            logger.error(f"Apollo search error: {e}")
-
-        return leads
+            logger.error(f"Apollo organization enrichment error: {e}")
+        return None
 
 
 class AffiliateLeadNetwork:

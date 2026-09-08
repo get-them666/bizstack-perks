@@ -2131,43 +2131,68 @@ async def discover_leads_from_location(
     }
 
 
-@app.post("/api/leads/discover-apollo")
-async def discover_leads_from_apollo(
-    location: str = Form(...),
-    category: str = Form(...),
-    per_page: int = Form(default=10),
-    customer_id: Optional[int] = Form(default=None),
+@app.post("/api/leads/enrich-apollo")
+async def enrich_company_via_apollo(
+    domain: Optional[str] = Form(default=None),
+    website: Optional[str] = Form(default=None),
+    linkedin_url: Optional[str] = Form(default=None),
+    company_name: Optional[str] = Form(default=None),
     request: Request = None,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     conn=Depends(get_db),
 ):
-    """Discover contact/lead records from Apollo.io by organization location + keyword.
+    """Enrich a known company with Apollo.io firmographic data and save it
+    as a company profile.
 
-    If customer_id is provided, discovered leads are assigned to that paying
-    customer and will appear in their customer portal.
+    Apollo's *search* endpoints require a paid plan on this account, so
+    this cannot discover new leads by location/keyword -- it enriches a
+    company you already know about (from Google Places, a business
+    signal, or a web signup) using its domain, website, or LinkedIn URL.
+    Costs 1 Apollo credit per lookup.
     """
     require_api_key_or_session(request, x_api_key)
     if not apollo_source:
         raise HTTPException(status_code=503, detail="Apollo is not configured (set APOLLO_API_KEY)")
+    if not (domain or website or linkedin_url):
+        raise HTTPException(status_code=422, detail="Provide a domain, website, or linkedin_url to enrich")
 
-    try:
-        leads = await apollo_source.search_by_location_and_category(
-            location=location,
-            category=category,
-            per_page=per_page,
+    org = await apollo_source.enrich_organization(
+        domain=domain, website=website, linkedin_url=linkedin_url, name=company_name
+    )
+    if not org:
+        raise HTTPException(
+            status_code=502,
+            detail="Apollo could not enrich this company right now (not found, or out of credits until the next billing cycle)",
         )
-    except Exception as e:
-        logger.error(f"Apollo lead discovery error: {e}")
-        raise HTTPException(status_code=500, detail="Apollo lead discovery failed") from e
 
-    count = store_leads_to_db(conn, leads, customer_id=customer_id)
+    resolved_name = org.get("name") or company_name or domain or website
+    revenue = org.get("annual_revenue")
+    industry = org.get("industry")
+    employees = org.get("estimated_num_employees")
+    risk_rating = f"Apollo: {industry}" if industry else "Apollo: enriched"
+
+    conn.execute(
+        """
+        INSERT INTO profiles (company_name, credit_risk_rating, annual_revenue, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(company_name) DO UPDATE SET
+            credit_risk_rating = excluded.credit_risk_rating,
+            annual_revenue = excluded.annual_revenue
+        """,
+        (resolved_name, risk_rating, revenue),
+    )
+    conn.commit()
 
     return {
-        "location": location,
-        "category": category,
-        "leads_found": len(leads),
-        "leads_stored": count,
-        "leads": [l.dict() for l in leads[:10]],
+        "company_name": resolved_name,
+        "industry": industry,
+        "estimated_employees": employees,
+        "annual_revenue": revenue,
+        "founded_year": org.get("founded_year"),
+        "latest_funding_stage": org.get("latest_funding_stage"),
+        "website_url": org.get("website_url"),
+        "linkedin_url": org.get("linkedin_url"),
+        "saved_to_profiles": True,
     }
 
 
