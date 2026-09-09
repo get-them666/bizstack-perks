@@ -1,1 +1,39 @@
-[]
+{
+  "banks": [
+    {
+      "bank_name": "Example National Bank",
+      "national_default": {
+        "savings_apy": 4.00,
+        "cd_12mo_apy": 4.25
+      },
+      "states": {
+        "NY": {
+          "state_default": {
+            "savings_apy": 4.15,
+            "cd_12mo_apy": 4.40
+          },
+          "zip_overrides": {
+            "10001": {
+              "savings_apy": 4.35
+            },
+            "14201": {
+              "savings_apy": 3.95,
+              "cd_12mo_apy": 4.20
+            }
+          }
+        },
+        "CA": {
+          "state_default": {
+            "savings_apy": 4.10,
+            "cd_12mo_apy": 4.35
+          },
+          "zip_overrides": {
+            "90210": {
+              "cd_12mo_apy": 4.60
+            }
+          }
+        }
+      }
+    }
+  ]
+}
